@@ -2,6 +2,8 @@
 // Covers: Memories, Tasks, Reminders, Timers, Alarms, Expenses, Budgets, Subscriptions,
 // Habits, Recipes, Parcels, Birthdays, Calendar, Contacts, Meetings, Web Watches, Routines, QuietMode
 
+import { hostBridge } from './hostBridge.js';
+
 const STORAGE_KEY = 'jarvis2_datastore_v1';
 
 const INITIAL_DATA = {
@@ -113,6 +115,21 @@ class DataStore {
   constructor() {
     this.data = this._load();
     this.listeners = new Set();
+    this._initAsync();
+  }
+
+  async _initAsync() {
+    try {
+      const disk = await hostBridge.storageGet('datastore_v1', null);
+      if (disk && typeof disk === 'object') {
+        this.data = { ...INITIAL_DATA, ...this.data, ...disk };
+        for (const fn of this.listeners) {
+          try {
+            fn(this.data);
+          } catch {}
+        }
+      }
+    } catch {}
   }
 
   _load() {
@@ -134,6 +151,7 @@ class DataStore {
     } catch {
       // ignore
     }
+    hostBridge.storageSet('datastore_v1', this.data).catch(() => {});
     for (const fn of this.listeners) {
       try {
         fn(this.data);

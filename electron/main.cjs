@@ -66,7 +66,14 @@ function startEmbeddedAssetServer() {
         res.end(String(e));
       }
     });
-    server.listen(0, '127.0.0.1', () => {
+    server.on('error', () => {
+      server.listen(0, '127.0.0.1', () => {
+        localAssetServer = server;
+        const addr = server.address();
+        resolve(`http://127.0.0.1:${addr.port}`);
+      });
+    });
+    server.listen(17531, '127.0.0.1', () => {
       localAssetServer = server;
       const addr = server.address();
       resolve(`http://127.0.0.1:${addr.port}`);

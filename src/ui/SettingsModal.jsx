@@ -87,7 +87,12 @@ export default function SettingsModal({ onClose, onTestVoice }) {
                       <button
                         key={f.id}
                         className={`space-pill ${cfg.avatarFaceId === f.id ? 'active' : ''}`}
-                        onClick={() => update({ avatarFaceId: f.id })}
+                        onClick={() =>
+                          update({
+                            avatarFaceId: f.id,
+                            avatarMode: f.id === 'cartoon' ? 'cartoon' : '3d',
+                          })
+                        }
                       >
                         {f.character ? '🧑 ' : '🌐 '}
                         {f.label} ({f.gender === 'male' ? 'H' : 'F'})
@@ -95,9 +100,9 @@ export default function SettingsModal({ onClose, onTestVoice }) {
                     ))}
                   </div>
 
-                  {!cfg.avatarFaceId?.startsWith('char:') && (
+                  {!['adam', 'mei'].includes(cfg.avatarFaceId) && (
                     <>
-                      <h4>Style de Rendu 3D (Léa / Marc)</h4>
+                      <h4>Style de Rendu 3D (Léa / Marc / Classique)</h4>
                       <div className="settings-chip-row">
                         <button
                           className={`space-pill ${!cfg.avatarSkin ? 'active' : ''}`}
@@ -152,7 +157,14 @@ export default function SettingsModal({ onClose, onTestVoice }) {
               <div className="settings-inline-row">
                 <select
                   value={cfg.voiceName}
-                  onChange={(e) => update({ voiceName: e.target.value })}
+                  onChange={(e) => {
+                    const newVoice = e.target.value;
+                    update({ voiceName: newVoice });
+                    onTestVoice?.(
+                      `Bonjour ! Je suis Jarvis avec la voix ${newVoice}.`,
+                      newVoice
+                    );
+                  }}
                   style={{ flex: 1 }}
                 >
                   {ALL_VOICES.map((v) => (
@@ -165,7 +177,8 @@ export default function SettingsModal({ onClose, onTestVoice }) {
                   className="media-play-btn"
                   onClick={() =>
                     onTestVoice?.(
-                      `Bonjour ! Je suis Jarvis 2.0 sur votre PC, avec la voix ${cfg.voiceName}.`
+                      `Bonjour ! Je suis Jarvis 2.0 sur votre PC, avec la voix ${cfg.voiceName}.`,
+                      cfg.voiceName
                     )
                   }
                 >

@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { HeadMesh, HairStyle, CharacterMesh, HAIR_SHADES, recolourHair } from '../src/avatar/HeadMesh.js';
+import { HeadMesh, HairStyle, CharacterMesh, HAIR_SHADES, BUILT_IN_FACES, recolourHair } from '../src/avatar/HeadMesh.js';
 import { textToVisemes, VisemeStream, pcmVisemes, HoloAvatar } from '../src/avatar/Visemes.js';
 import {
   parseMapRings,
@@ -13,6 +13,7 @@ import {
   moonPhase,
 } from '../src/space/SpaceEngine.js';
 import { hostBridge } from '../src/core/hostBridge.js';
+import { configStore, ALL_VOICES, VOICE_PROFILES, normalizeFaceId } from '../src/core/ConfigStore.js';
 
 const ASSETS_DIR = path.resolve(process.cwd(), 'public/assets');
 
@@ -128,5 +129,30 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     const win = await hostBridge.windowControl({ action: 'list' });
     assert.equal(win.ok, true);
     assert.ok(Array.isArray(win.windows));
+  });
+
+  it('persists avatar face selection and defines distinct voice profiles for all 30 voices', async () => {
+    assert.equal(normalizeFaceId('female01'), 'lea');
+    assert.equal(normalizeFaceId('male02'), 'marc');
+    assert.equal(normalizeFaceId('char:adam'), 'adam');
+    assert.equal(normalizeFaceId('char:mei'), 'mei');
+
+    for (const face of BUILT_IN_FACES) {
+      assert.ok(face.id, 'face has id');
+      assert.ok(face.gender === 'female' || face.gender === 'male', `${face.id} has gender`);
+    }
+
+    assert.equal(ALL_VOICES.length, 30);
+    for (const v of ALL_VOICES) {
+      const prof = VOICE_PROFILES[v];
+      assert.ok(prof, `Voice ${v} has acoustic profile`);
+      assert.ok(prof.gender === 'female' || prof.gender === 'male');
+      assert.ok(typeof prof.pitch === 'number' && prof.pitch > 0.5 && prof.pitch < 1.5);
+      assert.ok(typeof prof.rate === 'number' && prof.rate > 0.7 && prof.rate < 1.4);
+    }
+
+    configStore.update({ avatarFaceId: 'marc', voiceName: 'Fenrir' });
+    assert.equal(configStore.get().avatarFaceId, 'marc');
+    assert.equal(configStore.get().voiceName, 'Fenrir');
   });
 });

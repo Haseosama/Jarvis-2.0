@@ -4,7 +4,7 @@
 // 2. Gemini REST generateContent with automatic ModelLadder fallback + 3-key rotation + tool loop
 // 3. Offline / Local Intent Engine that works immediately even without an API key
 
-import { configStore, REST_MODELS } from './ConfigStore.js';
+import { configStore, REST_MODELS, VOICE_PROFILES, DEFAULT_TTS_MODEL } from './ConfigStore.js';
 import { dataStore } from './DataStore.js';
 import { hostBridge } from './hostBridge.js';
 import { pluginEngine } from './PluginEngine.js';
@@ -128,23 +128,64 @@ export class JarvisEngine {
     }
   }
 
-  // ── Speech Synthesis + Real-Time 3D Viseme Lip-Sync ────────────────────────
+  // ── Speech Synthesis (Gemini 24kHz TTS + Local Voice Profiles) + 3D Lip-Sync ──
 
-  speakTextWithLipSync(text) {
+  async speakTextWithLipSync(text, voiceOverride = null) {
     this.stopSpeaking();
     const cleanForSpeech = String(text || '')
       .replace(/```[\s\S]*?```/g, 'Code affiché à l’écran.')
       .replace(/[*#_`~•]/g, ' ')
       .replace(/https?:\/\/\S+/g, 'lien web')
       .replace(/\s+/g, ' ')
-      .trim();
+      .trim()
+      .slice(0, 1800);
 
     if (!cleanForSpeech) {
       this._setState('IDLE', 'Prêt');
       return;
     }
 
-    this._setState('SPEAKING', 'Jarvis parle...');
+    const cfg = configStore.get();
+    const voiceName = voiceOverride || cfg.voiceName || 'Aoede';
+    const profile = VOICE_PROFILES[voiceName] || { gender: 'female', pitch: 1.0, rate: 1.05, idx: 0 };
+
+    // 1. If a Gemini API key is configured, try Gemini 24 kHz TTS (prebuiltVoiceConfig.voiceName)
+    const apiKey = configStore.getActiveApiKey();
+    if (apiKey && cfg.voiceMode !== 'offline') {
+      try {
+        this._setState('SPEAKING', `Synthèse vocale Gemini (${voiceName})...`);
+        const ttsModel = cfg.ttsModel || DEFAULT_TTS_MODEL;
+        const modelPath = ttsModel.startsWith('models/') ? ttsModel : `models/${ttsModel}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const body = {
+          contents: [{ role: 'user', parts: [{ text: cleanForSpeech }] }],
+          generationConfig: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName },
+              },
+            },
+          },
+        };
+        const res = await hostBridge.httpFetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          timeoutMs: 12000,
+        });
+        const inline = res.json?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData;
+        if (res.ok && inline?.data) {
+          this._playFullTtsPcm24k(inline.data, voiceName);
+          return;
+        }
+      } catch {
+        // Fall through to local PC voice synthesis with acoustic profile
+      }
+    }
+
+    // 2. Local PC Speech Synthesis with per-voice gender, pitch & rate profile
+    this._setState('SPEAKING', `Jarvis parle (${voiceName})...`);
     const pairs = textToVisemes(cleanForSpeech);
     const frames = [];
     for (const [vKey, dur] of pairs) {
@@ -160,9 +201,8 @@ export class JarvisEngine {
       }
     }
 
-    // Drive 60 FPS viseme animation synchronized with speech duration
     let idx = 0;
-    const stepMs = 70;
+    const stepMs = Math.round(70 / Math.max(0.75, profile.rate || 1.0));
     this.ttsTimer = setInterval(() => {
       if (idx < frames.length) {
         const v = frames[idx++];
@@ -178,12 +218,21 @@ export class JarvisEngine {
         window.speechSynthesis.cancel();
         const utter = new SpeechSynthesisUtterance(cleanForSpeech);
         utter.lang = 'fr-FR';
-        utter.rate = configStore.get().speechRate || 1.05;
-        const voices = window.speechSynthesis.getVoices();
-        const frVoice =
-          voices.find((v) => v.lang.startsWith('fr') && /natural|neural|google|microsoft/i.test(v.name)) ||
-          voices.find((v) => v.lang.startsWith('fr'));
-        if (frVoice) utter.voice = frVoice;
+        utter.pitch = profile.pitch;
+        utter.rate = Math.max(0.75, Math.min(1.45, profile.rate * (cfg.speechRate || 1.0)));
+
+        const allVoices = window.speechSynthesis.getVoices() || [];
+        const frVoices = allVoices.filter((v) => /^fr/i.test(v.lang));
+        if (frVoices.length > 0) {
+          const maleHint = /paul|henri|claude|thomas|mathieu|antoine|nicolas|male|homme|david|mark/i;
+          const femaleHint = /hortense|julie|denise|eloise|amelie|amélie|brigitte|celeste|female|femme|zira/i;
+          const genderPool = frVoices.filter((v) =>
+            profile.gender === 'male' ? maleHint.test(v.name) : femaleHint.test(v.name)
+          );
+          const pool = genderPool.length > 0 ? genderPool : frVoices;
+          utter.voice = pool[(profile.idx || 0) % pool.length];
+        }
+
         utter.onend = () => this.stopSpeaking();
         utter.onerror = () => this.stopSpeaking();
         window.speechSynthesis.speak(utter);
@@ -193,10 +242,55 @@ export class JarvisEngine {
     }
   }
 
+  _playFullTtsPcm24k(b64, voiceName = 'Aoede') {
+    try {
+      this.audioCtx = this.audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const pcm16 = new Int16Array(bytes.buffer);
+      const float32 = new Float32Array(pcm16.length);
+      for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768.0;
+
+      const visFrames = pcmVisemes(float32, 24000);
+      this._setState('SPEAKING', `Jarvis parle (${voiceName} • 24 kHz)...`);
+
+      let fIdx = 0;
+      this.ttsTimer = setInterval(() => {
+        if (fIdx < visFrames.length) {
+          const vf = visFrames[fIdx++];
+          this.cb.onViseme?.({ jaw: vf.open, open: vf.open, width: vf.wide, wide: vf.wide });
+          this.cb.onAudioLevel?.(Math.min(1, (vf.level || vf.open || 0.2) * 0.95));
+        } else {
+          this.stopSpeaking();
+        }
+      }, 20);
+
+      const audioBuffer = this.audioCtx.createBuffer(1, float32.length, 24000);
+      audioBuffer.getChannelData(0).set(float32);
+      const src = this.audioCtx.createBufferSource();
+      src.buffer = audioBuffer;
+      src.connect(this.audioCtx.destination);
+      this.activeTtsSource = src;
+      src.onended = () => this.stopSpeaking();
+      src.start(0);
+    } catch {
+      this.stopSpeaking();
+    }
+  }
+
   stopSpeaking() {
     if (this.ttsTimer) {
       clearInterval(this.ttsTimer);
       this.ttsTimer = null;
+    }
+    if (this.activeTtsSource) {
+      try {
+        this.activeTtsSource.stop();
+      } catch {
+        // ignore
+      }
+      this.activeTtsSource = null;
     }
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try {

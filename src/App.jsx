@@ -218,10 +218,11 @@ export default function App() {
               <div className="avatar-quick-bar">
                 <div className="avatar-quick-group">
                   {[
-                    { id: 'female01', label: 'Léa 3D' },
-                    { id: 'male02', label: 'Marc 3D' },
-                    { id: 'char:adam', label: 'Adam (Buste 3D)' },
-                    { id: 'char:mei', label: 'Mei (Buste 3D)' },
+                    { id: 'lea', label: 'Léa 3D' },
+                    { id: 'marc', label: 'Marc 3D' },
+                    { id: 'adam', label: 'Adam (Buste 3D)' },
+                    { id: 'mei', label: 'Mei (Buste 3D)' },
+                    { id: 'classic', label: 'Classique' },
                   ].map((f) => (
                     <button
                       key={f.id}
@@ -233,7 +234,7 @@ export default function App() {
                   ))}
                   <button
                     className={`space-pill ${cfg.avatarMode === 'cartoon' ? 'active' : ''}`}
-                    onClick={() => configStore.update({ avatarMode: 'cartoon' })}
+                    onClick={() => configStore.update({ avatarMode: 'cartoon', avatarFaceId: 'cartoon' })}
                   >
                     😊 Cartoon
                   </button>
@@ -245,7 +246,7 @@ export default function App() {
                   </button>
                 </div>
 
-                {cfg.avatarMode === '3d' && !cfg.avatarFaceId?.startsWith('char:') && (
+                {cfg.avatarMode === '3d' && !['adam', 'mei'].includes(cfg.avatarFaceId) && (
                   <div className="avatar-quick-group">
                     <button
                       className={`space-pill ${!cfg.avatarSkin ? 'active' : ''}`}
@@ -448,7 +449,7 @@ export default function App() {
       {showSettings && (
         <SettingsModal
           onClose={() => setShowSettings(false)}
-          onTestVoice={(sample) => engineRef.current?.speakTextWithLipSync(sample)}
+          onTestVoice={(sample, voiceOverride) => engineRef.current?.speakTextWithLipSync(sample, voiceOverride)}
         />
       )}
     </div>

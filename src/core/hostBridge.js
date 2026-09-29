@@ -18,6 +18,39 @@ export const hostBridge = {
     return hasElectron();
   },
 
+  async storageGet(key, fallback = null) {
+    try {
+      if (hasElectron() && typeof window.jarvisHost.storageGet === 'function') {
+        const val = await window.jarvisHost.storageGet(key);
+        if (val !== null && val !== undefined) return val;
+      }
+      const raw = localStorage.getItem(`jarvis2_${key}`);
+      if (raw !== null) {
+        const parsed = safeJsonParse(raw, null);
+        return parsed !== null ? parsed : raw;
+      }
+    } catch {
+      // ignore
+    }
+    return fallback;
+  },
+
+  async storageSet(key, value) {
+    try {
+      localStorage.setItem(`jarvis2_${key}`, JSON.stringify(value));
+    } catch {
+      // ignore
+    }
+    try {
+      if (hasElectron() && typeof window.jarvisHost.storageSet === 'function') {
+        return await window.jarvisHost.storageSet(key, value);
+      }
+    } catch {
+      // ignore
+    }
+    return true;
+  },
+
   onPushToTalk(cb) {
     if (typeof cb !== 'function') return () => {};
     const unsubs = [];

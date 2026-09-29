@@ -4,6 +4,7 @@ import { hostBridge } from './hostBridge.js';
 
 export const DEFAULT_LIVE_MODEL = 'models/gemini-2.5-flash-native-audio-preview-12-2025';
 export const DEFAULT_REST_MODEL = 'models/gemini-2.5-flash';
+export const DEFAULT_TTS_MODEL = 'models/gemini-2.5-flash-preview-tts';
 export const DEFAULT_VOICE = 'Aoede';
 export const DEFAULT_WAKE_WORD = 'jarvis';
 export const MAX_API_KEYS = 3;
@@ -69,6 +70,50 @@ export const VOICE_DESC = {
   Sadaltager: 'Masculine · calme, posée',
 };
 
+// Acoustic profiles (gender, pitch, rate, variant index) for local PC TTS fallback
+export const VOICE_PROFILES = {
+  // Feminine voices
+  Kore:         { gender: 'female', pitch: 1.05, rate: 1.02, idx: 0 },
+  Aoede:        { gender: 'female', pitch: 1.12, rate: 1.05, idx: 1 },
+  Leda:         { gender: 'female', pitch: 0.98, rate: 0.95, idx: 2 },
+  Zephyr:       { gender: 'female', pitch: 1.24, rate: 1.14, idx: 0 },
+  Autonoe:      { gender: 'female', pitch: 1.18, rate: 1.06, idx: 1 },
+  Callirrhoe:   { gender: 'female', pitch: 1.04, rate: 0.98, idx: 2 },
+  Despina:      { gender: 'female', pitch: 1.28, rate: 1.08, idx: 0 },
+  Erinome:      { gender: 'female', pitch: 1.08, rate: 1.10, idx: 1 },
+  Laomedeia:    { gender: 'female', pitch: 1.22, rate: 1.12, idx: 2 },
+  Achernar:     { gender: 'female', pitch: 0.94, rate: 0.94, idx: 0 },
+  Gacrux:       { gender: 'female', pitch: 0.90, rate: 1.00, idx: 1 },
+  Pulcherrima:  { gender: 'female', pitch: 1.15, rate: 1.08, idx: 2 },
+  Vindemiatrix: { gender: 'female', pitch: 0.88, rate: 0.96, idx: 0 },
+  Sulafat:      { gender: 'female', pitch: 1.00, rate: 0.98, idx: 1 },
+  // Masculine voices
+  Puck:         { gender: 'male',   pitch: 0.92, rate: 1.12, idx: 0 },
+  Charon:       { gender: 'male',   pitch: 0.80, rate: 1.00, idx: 1 },
+  Fenrir:       { gender: 'male',   pitch: 0.68, rate: 1.04, idx: 2 },
+  Orus:         { gender: 'male',   pitch: 0.78, rate: 1.06, idx: 0 },
+  Enceladus:    { gender: 'male',   pitch: 0.86, rate: 0.94, idx: 1 },
+  Iapetus:      { gender: 'male',   pitch: 0.84, rate: 1.08, idx: 2 },
+  Umbriel:      { gender: 'male',   pitch: 0.82, rate: 0.96, idx: 0 },
+  Algieba:      { gender: 'male',   pitch: 0.88, rate: 1.02, idx: 1 },
+  Algenib:      { gender: 'male',   pitch: 0.65, rate: 0.98, idx: 2 },
+  Rasalgethi:   { gender: 'male',   pitch: 0.76, rate: 0.96, idx: 0 },
+  Alnilam:      { gender: 'male',   pitch: 0.74, rate: 1.06, idx: 1 },
+  Schedar:      { gender: 'male',   pitch: 0.82, rate: 1.02, idx: 2 },
+  Achird:       { gender: 'male',   pitch: 0.90, rate: 1.06, idx: 0 },
+  Zubenelgenubi:{ gender: 'male',   pitch: 0.85, rate: 0.98, idx: 1 },
+  Sadachbia:    { gender: 'male',   pitch: 0.94, rate: 1.14, idx: 2 },
+  Sadaltager:   { gender: 'male',   pitch: 0.75, rate: 0.95, idx: 0 },
+};
+
+export function normalizeFaceId(rawId) {
+  const s = String(rawId || 'lea').trim().toLowerCase().replace(/^char:/, '');
+  if (s === 'female01') return 'lea';
+  if (s === 'male02') return 'marc';
+  if (['lea', 'marc', 'adam', 'mei', 'classic', 'cartoon'].includes(s)) return s;
+  return 'lea';
+}
+
 const STORAGE_KEY = 'jarvis2_config_v1';
 
 const DEFAULT_CONFIG = {
@@ -77,6 +122,7 @@ const DEFAULT_CONFIG = {
   voiceMode: 'hybrid', // 'live' | 'rest' | 'hybrid' | 'offline'
   liveModel: DEFAULT_LIVE_MODEL,
   restModel: DEFAULT_REST_MODEL,
+  ttsModel: DEFAULT_TTS_MODEL,
   voiceName: DEFAULT_VOICE,
   wakeWord: DEFAULT_WAKE_WORD,
   wakeListenEnabled: false,
@@ -85,7 +131,7 @@ const DEFAULT_CONFIG = {
   speechRate: 1.05,
   // Avatar
   avatarMode: '3d', // '3d' | 'cartoon' | 'reactor'
-  avatarFaceId: 'female01', // 'female01' | 'male02' | 'char:adam' | 'char:mei'
+  avatarFaceId: 'lea', // 'lea' | 'marc' | 'adam' | 'mei' | 'classic' | 'cartoon'
   avatarSkin: false, // false = holo wireframe/surface, true = full skin shaded
   avatarHair: 'auto', // 'auto' | 'none' | style id
   avatarHairShade: 'natural',
@@ -118,7 +164,11 @@ class ConfigStore {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        this.state = { ...DEFAULT_CONFIG, ...parsed };
+        this.state = {
+          ...DEFAULT_CONFIG,
+          ...parsed,
+          avatarFaceId: normalizeFaceId(parsed.avatarFaceId),
+        };
       }
     } catch {
       // ignore
@@ -127,6 +177,22 @@ class ConfigStore {
 
   async initSecrets() {
     try {
+      // Load persisted config from Electron %APPDATA%/jarvis-pc/jarvis-store.json
+      const diskConfig = await hostBridge.storageGet('config_v1', null);
+      if (diskConfig && typeof diskConfig === 'object') {
+        this.state = {
+          ...DEFAULT_CONFIG,
+          ...this.state,
+          ...diskConfig,
+          avatarFaceId: normalizeFaceId(diskConfig.avatarFaceId || this.state.avatarFaceId),
+        };
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
+        } catch {
+          // ignore
+        }
+      }
+
       const savedKeys = await hostBridge.getSecret('apiKeys', null);
       if (Array.isArray(savedKeys) && savedKeys.some(Boolean)) {
         this.state.apiKeys = savedKeys;
@@ -144,12 +210,22 @@ class ConfigStore {
   }
 
   update(patch) {
-    this.state = { ...this.state, ...patch };
+    const nextPatch = { ...patch };
+    if (nextPatch.avatarFaceId !== undefined) {
+      nextPatch.avatarFaceId = normalizeFaceId(nextPatch.avatarFaceId);
+      if (nextPatch.avatarFaceId === 'cartoon' && !nextPatch.avatarMode) {
+        nextPatch.avatarMode = 'cartoon';
+      } else if (nextPatch.avatarMode === undefined && this.state.avatarMode === 'cartoon' && nextPatch.avatarFaceId !== 'cartoon') {
+        nextPatch.avatarMode = '3d';
+      }
+    }
+    this.state = { ...this.state, ...nextPatch };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
     } catch {
       // ignore
     }
+    hostBridge.storageSet('config_v1', this.state).catch(() => {});
     if (patch.apiKeys) {
       hostBridge.setSecret('apiKeys', this.state.apiKeys).catch(() => {});
     }
