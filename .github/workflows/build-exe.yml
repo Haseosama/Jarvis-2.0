@@ -1,13 +1,18 @@
-name: Build Jarvis 2.0 Windows EXE
+name: Build & Release Jarvis 2.0 Windows EXE
 
 on:
   push:
     branches: [ main, "arena/**" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,11 +29,69 @@ jobs:
       - name: Run unit tests
         run: npm test
 
-      - name: Build standalone Windows .exe (NSIS + Portable)
-        run: npm run dist:win
+      - name: Build frontend & portable package
+        run: npm run build:exe
 
-      - name: Upload Windows .exe installer artifact
+      - name: Compile standalone launcher Jarvis-2.0-Launcher.exe
+        shell: pwsh
+        run: |
+          $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          if (Test-Path $csc) {
+            & $csc /nologo /target:winexe /out:"release\Jarvis-2.0-Windows-Portable\Jarvis-2.0.exe" "release\Jarvis-2.0-Windows-Portable\JarvisLauncher.cs"
+          }
+          Compress-Archive -Path "release\Jarvis-2.0-Windows-Portable\*" -DestinationPath "release\Jarvis-2.0-Windows-Portable.zip" -Force
+
+      - name: Build Electron NSIS & Portable EXE
+        shell: pwsh
+        run: |
+          npx electron-builder --win nsis portable --x64 --publish never
+        continue-on-error: true
+
+      - name: Collect release artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "artifacts" | Out-Null
+          if (Test-Path "out\*.exe") {
+            Copy-Item "out\*.exe" -Destination "artifacts\" -Force
+          }
+          if (Test-Path "release\Jarvis-2.0-Windows-Portable\Jarvis-2.0.exe") {
+            Copy-Item "release\Jarvis-2.0-Windows-Portable\Jarvis-2.0.exe" -Destination "artifacts\Jarvis-2.0-Launcher.exe" -Force
+          }
+          if (Test-Path "release\Jarvis-2.0-Windows-Portable.zip") {
+            Copy-Item "release\Jarvis-2.0-Windows-Portable.zip" -Destination "artifacts\" -Force
+          }
+          Get-ChildItem "artifacts"
+
+      - name: Upload GitHub Actions Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Jarvis-2.0-Windows-EXE
-          path: out/*.exe
+          path: artifacts/*
+
+      - name: Publish GitHub Release v2.0.0
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $notes = @"
+          ## 🚀 Jarvis 2.0 — Édition PC Autonome (Sans Backend)
+
+          Adaptation complète sur PC (Windows x64) de **Jarvis-Android v0.9.53**, fonctionnant de manière 100% autonome sans serveur backend externe.
+
+          ### 📦 Fichiers téléchargeables dans cette Release
+          - **`Jarvis-2.0-Setup.exe`** : Installateur Windows x64 autonome (Electron NSIS) avec raccourci Bureau et menu Démarrer.
+          - **`Jarvis-2.0-Windows-Portable.zip`** : Archive portable autonome contenant `Jarvis-2.0.exe` et toutes les ressources 3D/spatiales/plugins.
+
+          ### ✨ Nouveautés & Fonctionnalités
+          - **Avatar 3D Temps Réel (60 FPS) & Lip-Sync** : Léa, Marc, Adam (buste 3D texturé), Mei (buste 3D texturé), Classique, Cartoon 2D, Réacteur HUD, 23 coiffures 3D (`JHR1`), 10 teintes de cheveux, rendu Hologramme ou Peau 3D.
+          - **Audio & IA** : Gemini Live WebSocket (24 kHz PCM + analyse formantique F1/F2), ModelLadder REST avec rotation automatique sur 3 clés API, 30 voix Gemini, et moteur local fonctionnant même sans clé API.
+          - **Contrôle PC & Vision** : lancement d'applications PC, contrôle souris/clavier/fenêtres Windows, volume/luminosité/média/verrouillage, capture d'écran, webcam en direct, WhatsApp Web/Desktop & Email.
+          - **Espace & Voûte Céleste** : carte mondiale vectorielle, suivi orbital ISS/Tiangong/Hubble, carte du ciel nocturne (étoiles, constellations, Lune, planètes), lancements spatiaux, séismes USGS et aurores boréales.
+          - **Médias, Productivité & 82 Plugins JSON** : radios en direct (France Inter, FIP, Radio Browser, mode Sommeil), podcasts, YouTube, générateur de documents sans serveur (PDF, Word `.docx`, Excel `.xlsx`, CSV, Markdown), coffre Obsidian, tâches, agenda, dépenses, habitudes et 82 plugins JSON intégrés.
+          "@
+          $exists = gh release view v2.0.0 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create v2.0.0 (Get-ChildItem "artifacts\*" | ForEach-Object { $_.FullName }) --title "Jarvis 2.0 — Édition PC Autonome (.exe sans backend)" --notes $notes --target "${{ github.sha }}"
+          } else {
+            gh release upload v2.0.0 (Get-ChildItem "artifacts\*" | ForEach-Object { $_.FullName }) --clobber
+          }

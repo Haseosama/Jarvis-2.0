@@ -43,9 +43,15 @@
         {
           "target": "nsis",
           "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
         }
-      ],
-      "signAndEditExecutable": false
+      ]
+    },
+    "portable": {
+      "artifactName": "Jarvis-2.0-Portable.exe"
     },
     "nsis": {
       "oneClick": false,
