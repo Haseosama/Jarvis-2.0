@@ -65,8 +65,7 @@ export default function SettingsModal({ onClose, onTestVoice }) {
               <h4>Mode d’affichage de l’Avatar</h4>
               <div className="settings-chip-row">
                 {[
-                  { id: '3d', label: '🧊 Avatar 3D Temps Réel' },
-                  { id: 'cartoon', label: '😊 Cartoon 2D Expressif' },
+                  { id: '3d', label: '🧊 Avatar 3D Haute Définition' },
                   { id: 'reactor', label: '⚛️ Réacteur HUD' },
                 ].map((m) => (
                   <button
@@ -81,7 +80,7 @@ export default function SettingsModal({ onClose, onTestVoice }) {
 
               {cfg.avatarMode === '3d' && (
                 <>
-                  <h4>Personnage / Visage 3D</h4>
+                  <h4>Visage 3D (Classique 84 000 polygones, Léa, Marc)</h4>
                   <div className="settings-chip-row">
                     {BUILT_IN_FACES.map((f) => (
                       <button
@@ -90,62 +89,82 @@ export default function SettingsModal({ onClose, onTestVoice }) {
                         onClick={() =>
                           update({
                             avatarFaceId: f.id,
-                            avatarMode: f.id === 'cartoon' ? 'cartoon' : '3d',
+                            avatarMode: '3d',
                           })
                         }
                       >
-                        {f.character ? '🧑 ' : '🌐 '}
-                        {f.label} ({f.gender === 'male' ? 'H' : 'F'})
+                        🌐 {f.label} ({f.gender === 'male' ? 'H' : 'F'})
                       </button>
                     ))}
                   </div>
 
-                  {!['adam', 'mei'].includes(cfg.avatarFaceId) && (
-                    <>
-                      <h4>Style de Rendu 3D (Léa / Marc / Classique)</h4>
-                      <div className="settings-chip-row">
-                        <button
-                          className={`space-pill ${!cfg.avatarSkin ? 'active' : ''}`}
-                          onClick={() => update({ avatarSkin: false })}
-                        >
-                          🌐 Hologramme Cyan (Filaire + Surface)
-                        </button>
-                        <button
-                          className={`space-pill ${cfg.avatarSkin ? 'active' : ''}`}
-                          onClick={() => update({ avatarSkin: true })}
-                        >
-                          🎨 Peau Réaliste & Maquillage 3D
-                        </button>
-                      </div>
+                  <h4>Peau & Circuits Électriques (comme sur la version téléphone)</h4>
+                  <div className="settings-chip-row">
+                    {[
+                      { v: 7, label: '⚡ Hologramme bleu (Circuits Or & Bleu)' },
+                      { v: 5, label: '✨ Hologramme (Circuits Or)' },
+                      { v: 6, label: '💫 Hologramme + cheveux fibres optiques' },
+                      { v: 0, label: '🕸️ Réseau lumineux + circuits' },
+                      { v: 1, label: '🧑 Peau claire' },
+                      { v: 2, label: '🧑 Peau mate' },
+                      { v: 3, label: '🧑 Peau bronzée' },
+                      { v: 4, label: '🧑 Peau foncée' },
+                    ].map((s) => (
+                      <button
+                        key={s.v}
+                        className={`space-pill ${cfg.avatarSkin === s.v ? 'active' : ''}`}
+                        onClick={() => update({ avatarSkin: s.v })}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
 
-                      <h4>Coiffure 3D ({hairStyles.length} coupes disponibles)</h4>
-                      <div className="settings-grid-fields">
-                        <select
-                          value={cfg.avatarHair || 'auto'}
-                          onChange={(e) => update({ avatarHair: e.target.value })}
-                        >
-                          <option value="auto">Automatique selon le visage</option>
-                          <option value="none">Sans cheveux (Crâne)</option>
-                          {hairStyles.map((st) => (
-                            <option key={st.id} value={st.id}>
-                              {st.label} ({st.gender === 'male' ? 'Homme' : 'Femme'})
-                            </option>
-                          ))}
-                        </select>
+                  <h4>Teinte des Lèvres</h4>
+                  <div className="settings-chip-row">
+                    {[
+                      { v: 0, label: 'Naturelles' },
+                      { v: 1, label: 'Rose' },
+                      { v: 2, label: 'Rouge' },
+                      { v: 3, label: 'Prune' },
+                      { v: 4, label: 'Corail' },
+                    ].map((l) => (
+                      <button
+                        key={l.v}
+                        className={`space-pill ${(cfg.avatarLips ?? 0) === l.v ? 'active' : ''}`}
+                        onClick={() => update({ avatarLips: l.v })}
+                      >
+                        {l.label}
+                      </button>
+                    ))}
+                  </div>
 
-                        <select
-                          value={cfg.avatarHairShade || 'natural'}
-                          onChange={(e) => update({ avatarHairShade: e.target.value })}
-                        >
-                          {HAIR_SHADES.map((sh) => (
-                            <option key={sh.id} value={sh.id}>
-                              Teinte : {sh.fr || sh.label || sh.en}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </>
-                  )}
+                  <h4>Coiffure 3D ({hairStyles.length} coupes disponibles)</h4>
+                  <div className="settings-grid-fields">
+                    <select
+                      value={cfg.avatarHair || 'auto'}
+                      onChange={(e) => update({ avatarHair: e.target.value })}
+                    >
+                      <option value="auto">Automatique selon le visage</option>
+                      <option value="none">Sans cheveux (Crâne)</option>
+                      {hairStyles.map((st) => (
+                        <option key={st.id} value={st.id}>
+                          {st.label} ({st.gender === 'male' ? 'Homme' : 'Femme'})
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={cfg.avatarHairShade || 'natural'}
+                      onChange={(e) => update({ avatarHairShade: e.target.value })}
+                    >
+                      {HAIR_SHADES.map((sh) => (
+                        <option key={sh.id} value={sh.id}>
+                          Teinte : {sh.fr || sh.label || sh.en}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </>
               )}
             </div>

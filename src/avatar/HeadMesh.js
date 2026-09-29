@@ -1,5 +1,5 @@
-// Direct port of HeadMesh.kt, AvatarFaces.kt, HairStyle.kt, HairShade.kt, CharacterMesh.kt,
-// StructureEdges, NetworkWeb.kt, CircuitTraces.kt, and FiberHair.kt from Jarvis-Android.
+// Complete port of HeadMesh.kt, HairStyle.kt, HairShade.kt, AvatarFaces.kt,
+// NetworkWeb.kt, CircuitTraces.kt, FiberHair.kt, and StructureEdges from Jarvis-Android.
 
 export const JAW_PIVOT = [0, 0.06, -0.34];
 export const JAW_MAX = 0.15;
@@ -7,36 +7,52 @@ export const JAW_MAX = 0.15;
 export const HOLO_SKIN = 5;
 export const HOLO_HAIR_SKIN = 6;
 export const BLUE_HOLO_SKIN = 7;
+export const DARK_BLUE_HOLO_SKIN = 8;
 
 export const HAIR_SHADES = [
-  { id: 'black', fr: 'Noir', en: 'Black', browColour: 0xff161414, colours: { body: 0x1c1918, root: 0x0b0a0a, tip: 0x35302e, grey: 0, greyRgb: 0x8e8b86 } },
-  { id: 'dark_brown', fr: 'Brun foncé', en: 'Dark brown', browColour: 0xff281b14, colours: { body: 0x2e1f16, root: 0x140d09, tip: 0x543a29, grey: 0, greyRgb: 0x8e8b86 } },
-  { id: 'brown', fr: 'Châtain', en: 'Brown', browColour: 0xff3d291d, colours: { body: 0x543826, root: 0x24170f, tip: 0x8c6244, grey: 0, greyRgb: 0x8e8b86 } },
-  { id: 'chestnut', fr: 'Acajou', en: 'Chestnut', browColour: 0xff4a241b, colours: { body: 0x6b2f22, root: 0x2e120c, tip: 0xa8523d, grey: 0, greyRgb: 0x8e8b86 } },
-  { id: 'blonde', fr: 'Blond', en: 'Blonde', browColour: 0xff6e5434, colours: { body: 0xc8a262, root: 0x6e5229, tip: 0xf0d59c, grey: 0, greyRgb: 0x8e8b86 } },
-  { id: 'red', fr: 'Roux', en: 'Red', browColour: 0xff682a16, colours: { body: 0x9e3c1c, root: 0x4a190a, tip: 0xd96e3c, grey: 0, greyRgb: 0x8e8b86 } },
-  { id: 'salt_pepper', fr: 'Poivre et sel', en: 'Salt & pepper', browColour: 0xff3c3936, colours: { body: 0x4a4744, root: 0x242220, tip: 0x8a8782, grey: 0.45, greyRgb: 0x9c9994 } },
-  { id: 'white', fr: 'Blanc', en: 'White', browColour: 0xff7a7772, colours: { body: 0xcfccc7, root: 0x8e8b86, tip: 0xf2f0ec, grey: 0, greyRgb: 0x8e8b86 } },
-  { id: 'blue', fr: 'Bleu', en: 'Blue', browColour: 0xff16294d, colours: { body: 0x1e3a6e, root: 0x0c1a36, tip: 0x4a78c0, grey: 0, greyRgb: 0x8e8b86 } },
-  { id: 'pink', fr: 'Rose', en: 'Pink', browColour: 0xff7a344b, colours: { body: 0xc0607e, root: 0x6a2a40, tip: 0xf0a0b8, grey: 0, greyRgb: 0x8e8b86 } },
-  { id: 'purple', fr: 'Violet', en: 'Purple', browColour: 0xff3b1b52, colours: { body: 0x5a2a7a, root: 0x2a1040, tip: 0x9a6ac0, grey: 0, greyRgb: 0x8e8b86 } },
+  { id: 'black', fr: 'Noir', en: 'Black', colours: { body: 0x1a1512, root: 0x0a0807, tip: 0x302620, grey: 0, greyRgb: 0x8e8b86 }, browColour: 0xff161210 },
+  { id: 'dark_brown', fr: 'Brun foncé', en: 'Dark brown', colours: { body: 0x2a1c14, root: 0x120c08, tip: 0x4a3325, grey: 0, greyRgb: 0x8e8b86 }, browColour: 0xff221710 },
+  { id: 'chestnut', fr: 'Châtain', en: 'Chestnut', colours: { body: 0x483121, root: 0x20150e, tip: 0x8e6c48, grey: 0, greyRgb: 0x8e8b86 }, browColour: 0xff34241c },
+  { id: 'light_brown', fr: 'Châtain clair', en: 'Light brown', colours: { body: 0x6b4a2e, root: 0x332214, tip: 0xa67c52, grey: 0, greyRgb: 0x8e8b86 }, browColour: 0xff4a3320 },
+  { id: 'dark_blonde', fr: 'Blond foncé', en: 'Dark blonde', colours: { body: 0x8c6d42, root: 0x47351d, tip: 0xc29f68, grey: 0, greyRgb: 0x8e8b86 }, browColour: 0xff5e482b },
+  { id: 'blonde', fr: 'Blond', en: 'Blonde', colours: { body: 0xb89356, root: 0x634b26, tip: 0xe0c082, grey: 0, greyRgb: 0x8e8b86 }, browColour: 0xff705732 },
+  { id: 'platinum', fr: 'Blond platine', en: 'Platinum', colours: { body: 0xd8cdb8, root: 0x857a67, tip: 0xf2ece0, grey: 0, greyRgb: 0x8e8b86 }, browColour: 0xff7d7362 },
+  { id: 'auburn', fr: 'Auburn', en: 'Auburn', colours: { body: 0x5c2618, root: 0x290f08, tip: 0x8f432c, grey: 0, greyRgb: 0x8e8b86 }, browColour: 0xff3d1a11 },
+  { id: 'copper', fr: 'Roux cuivré', en: 'Copper', colours: { body: 0x8c3b1e, root: 0x42190a, tip: 0xc46538, grey: 0, greyRgb: 0x8e8b86 }, browColour: 0xff592614 },
+  { id: 'grey', fr: 'Gris poivre et sel', en: 'Salt & pepper', colours: { body: 0x3b3836, root: 0x1c1a19, tip: 0x595450, grey: 0.45, greyRgb: 0x9e9b96 }, browColour: 0xff383533 },
+  { id: 'silver', fr: 'Argenté', en: 'Silver', colours: { body: 0x8a8884, root: 0x4d4b48, tip: 0xc7c4be, grey: 0.75, greyRgb: 0xd4d1cc }, browColour: 0xff595754 },
 ];
 
 export const BUILT_IN_FACES = [
+  {
+    id: 'classic',
+    label: 'Classique',
+    gender: 'female',
+    asset: './assets/avatar/head_mesh.bin',
+    subdivide: true,
+    browColour: 0xff34241c,
+    fibres: true,
+    browScale: 1.0,
+    lashScale: 1.0,
+    androidLook: false,
+    halo: false,
+    lipTint: 0.7,
+    credit: 'Adapté de Mark-LIV (FatihMakes) & Lee Perry-Smith (CC BY 3.0)',
+    hairColours: { body: 0x483121, root: 0x20150e, tip: 0x8e6c48, grey: 0, greyRgb: 0x8e8b86 },
+  },
   {
     id: 'lea',
     label: 'Léa',
     gender: 'female',
     asset: './assets/avatar/head_mesh_lea.bin',
+    subdivide: false,
     browColour: 0xff1a1e27,
     fibres: false,
-    cartoon: false,
     browScale: 0.65,
     lashScale: 1.35,
     androidLook: true,
     halo: true,
     lipTint: 0.7,
-    character: null,
     credit: 'Sculpt basé sur "Female Head Sculpt" (Aconear, CC BY 4.0)',
     hairColours: { body: 0x1f2533, root: 0x0b0d13, tip: 0x5b7496, grey: 0, greyRgb: 0x8e8b86 },
   },
@@ -45,85 +61,16 @@ export const BUILT_IN_FACES = [
     label: 'Marc',
     gender: 'male',
     asset: './assets/avatar/head_mesh_marc.bin',
+    subdivide: false,
     browColour: 0xff2b2928,
     fibres: true,
-    cartoon: false,
     browScale: 1.0,
     lashScale: 1.0,
     androidLook: false,
     halo: false,
     lipTint: 0.3,
-    character: null,
     credit: 'Sculpt basé sur "Realistic Male Head" (Ouail, CC BY 4.0)',
     hairColours: { body: 0x33302f, root: 0x151313, tip: 0x4e4a46, grey: 0.12, greyRgb: 0x77736e },
-  },
-  {
-    id: 'adam',
-    label: 'Adam',
-    gender: 'male',
-    asset: './assets/avatar/head_mesh.bin',
-    browColour: 0xff1f1614,
-    fibres: false,
-    cartoon: false,
-    browScale: 1.0,
-    lashScale: 1.0,
-    androidLook: false,
-    halo: false,
-    lipTint: 0.5,
-    character: './assets/avatar/characters/adam',
-    credit: '"Casual Confidence" by restore50 (CC BY 4.0)',
-    hairColours: { body: 0x483121, root: 0x20150e, tip: 0x8e6c48, grey: 0, greyRgb: 0x8e8b86 },
-  },
-  {
-    id: 'mei',
-    label: 'Mei',
-    gender: 'female',
-    asset: './assets/avatar/head_mesh.bin',
-    browColour: 0xff1f1614,
-    fibres: false,
-    cartoon: false,
-    browScale: 1.0,
-    lashScale: 1.0,
-    androidLook: false,
-    halo: false,
-    lipTint: 0.7,
-    character: './assets/avatar/characters/mei',
-    credit: '"Girl Wearing Traditional Clothing V4" by Fadly.W (CC BY 4.0)',
-    hairColours: { body: 0x1f2533, root: 0x0b0d13, tip: 0x5b7496, grey: 0, greyRgb: 0x8e8b86 },
-  },
-  {
-    id: 'classic',
-    label: 'Classique',
-    gender: 'female',
-    asset: './assets/avatar/head_mesh.bin',
-    browColour: 0xff34241c,
-    fibres: true,
-    cartoon: false,
-    browScale: 1.0,
-    lashScale: 1.0,
-    androidLook: false,
-    halo: false,
-    lipTint: 0.7,
-    character: null,
-    credit: '',
-    hairColours: { body: 0x483121, root: 0x20150e, tip: 0x8e6c48, grey: 0, greyRgb: 0x8e8b86 },
-  },
-  {
-    id: 'cartoon',
-    label: 'Dessin animé',
-    gender: 'female',
-    asset: './assets/avatar/head_mesh.bin',
-    browColour: 0xff1f1614,
-    fibres: false,
-    cartoon: true,
-    browScale: 1.0,
-    lashScale: 1.0,
-    androidLook: false,
-    halo: false,
-    lipTint: 0.7,
-    character: null,
-    credit: '',
-    hairColours: { body: 0x483121, root: 0x20150e, tip: 0x8e6c48, grey: 0, greyRgb: 0x8e8b86 },
   },
 ];
 
@@ -139,14 +86,9 @@ export class HeadMesh {
 
   static parse(arrayBuffer) {
     const dv = new DataView(arrayBuffer);
-    if (
-      arrayBuffer.byteLength <= 40 ||
-      dv.getUint8(0) !== 0x4a || // 'J'
-      dv.getUint8(1) !== 0x48 || // 'H'
-      dv.getUint8(2) !== 0x4d || // 'M'
-      dv.getUint8(3) !== 0x32    // '2'
-    ) {
-      throw new Error('Not a valid JHM2 head mesh file');
+    const magic = String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3));
+    if (magic !== 'JHM2') {
+      throw new Error(`Unsupported head_mesh.bin header: ${magic} (expected JHM2)`);
     }
     let pos = 4;
     const readInt = () => {
@@ -161,12 +103,18 @@ export class HeadMesh {
     };
     const readFloats = (n) => {
       const out = new Float32Array(n);
-      for (let i = 0; i < n; i++) out[i] = readFloat();
+      for (let i = 0; i < n; i++) {
+        out[i] = dv.getFloat32(pos, true);
+        pos += 4;
+      }
       return out;
     };
     const readInts = (n) => {
       const out = new Int32Array(n);
-      for (let i = 0; i < n; i++) out[i] = readInt();
+      for (let i = 0; i < n; i++) {
+        out[i] = dv.getInt32(pos, true);
+        pos += 4;
+      }
       return out;
     };
 
@@ -178,16 +126,15 @@ export class HeadMesh {
     const crown = readFloat();
     const bottom = readFloat();
     const lipCentre = readFloats(3);
-
-    const verts = readFloats(nv * 3);
-    const normals = readFloats(nv * 3);
+    const verts = readFloats(3 * nv);
+    const normals = readFloats(3 * nv);
     const jaw = readFloats(nv);
     const brow = readFloats(nv);
     const lips = readFloats(nv);
     const fade = readFloats(nv);
-    const faceGroup = readFloats(nf);
-    const faces = readInts(nf * 3);
-    const edges = readInts(ne * 2);
+    const group = readFloats(nf);
+    const faces = readInts(3 * nf);
+    const edges = readInts(2 * ne);
 
     const rings = readInt();
     const landmarks = {};
@@ -196,17 +143,17 @@ export class HeadMesh {
       landmarks[LANDMARK_NAMES[r] || `ring_${r}`] = readInts(count);
     }
 
-    const paint = readInts(nv);
-    const lid = readFloats(nv);
-    const lipMask = readFloats(nv);
-    const rimCount = readInt();
-    const eyelidRim = readInts(rimCount * 3);
-    const mouthUpper = readInts(readInt());
-    const mouthLower = readInts(readInt());
-    const eyes = readInt();
+    const paint = pos < dv.byteLength ? readInts(nv) : new Int32Array(nv);
+    const lid = pos < dv.byteLength ? readFloats(nv) : new Float32Array(nv);
+    const lipMask = pos < dv.byteLength ? readFloats(nv) : new Float32Array(nv);
+    const eyelidRim = pos < dv.byteLength ? readInts(readInt() * 3) : new Int32Array(0);
+    const mouthUpper = pos < dv.byteLength ? readInts(readInt()) : new Int32Array(0);
+    const mouthLower = pos < dv.byteLength ? readInts(readInt()) : new Int32Array(0);
+
+    const eyes = pos < dv.byteLength ? readInt() : 0;
     const eyeFirst = new Int32Array(eyes);
     const eyeCount = new Int32Array(eyes);
-    const eyeCentre = new Float32Array(eyes * 3);
+    const eyeCentre = new Float32Array(3 * eyes);
     for (let e = 0; e < eyes; e++) {
       eyeFirst[e] = readInt();
       eyeCount[e] = readInt();
@@ -214,221 +161,327 @@ export class HeadMesh {
       eyeCentre[3 * e + 1] = readFloat();
       eyeCentre[3 * e + 2] = readFloat();
     }
-    const lockFirst = readInt();
-    const lockCount = readInt();
-    const lockRows = readInt();
+
+    const lockFirst = pos < dv.byteLength ? readInt() : 0;
+    const lockCount = pos < dv.byteLength ? readInt() : 0;
+    const lockRows = pos < dv.byteLength ? readInt() : 0;
 
     return new HeadMesh({
+      nHead,
+      nFace,
+      crown,
+      bottom,
+      lipCentre,
       verts,
       normals,
       jaw,
       brow,
       lips,
       fade,
-      faceGroup,
+      faceGroup: group,
       faces,
       edges,
       landmarks,
-      lipCentre,
-      nHead,
-      nFace,
-      crown,
-      bottom,
       paint,
       lid,
       lipMask,
-      eyeFirst,
-      eyeCount,
-      eyeCentre,
       eyelidRim,
       mouthUpper,
       mouthLower,
+      eyeFirst,
+      eyeCount,
+      eyeCentre,
       lockFirst,
       lockCount,
       lockRows,
-      hairSway: null,
+      hairSway: new Float32Array(nv),
     });
   }
 
-  copyWith({ paint = this.paint, hairSway = this.hairSway } = {}) {
-    return new HeadMesh({
-      ...this,
-      paint,
-      hairSway,
+  /**
+   * 1-to-4 Phong / Curved-Normal subdivision of the skin triangles on the head mesh.
+   * Quadruples the face polygon count of the Classic avatar (~16,400 skin triangles -> ~65,600 curved triangles,
+   * ~86,600 total triangles) while preserving all landmark, eye, lip, and hair lock vertex indices.
+   */
+  static subdivideSkin(mesh) {
+    if (mesh._subdivided) return mesh;
+    const oldV = mesh.vertexCount;
+    const oldF = mesh.faceCount;
+    const v = mesh.verts;
+    const nrm = mesh.normals;
+    const f = mesh.faces;
+    const fg = mesh.faceGroup;
+    const paint = mesh.paint;
+    const fade = mesh.fade;
+    const jaw = mesh.jaw;
+    const brow = mesh.brow;
+    const lips = mesh.lips;
+    const lid = mesh.lid;
+    const lipMask = mesh.lipMask;
+    const sway = mesh.hairSway || new Float32Array(oldV);
+
+    // Mark eyelid rim & mouth chain vertices so their boundary edges stay exact
+    const boundaryVert = new Uint8Array(oldV);
+    for (let i = 0; i < mesh.eyelidRim.length; i += 3) {
+      boundaryVert[mesh.eyelidRim[i]] = 1;
+      boundaryVert[mesh.eyelidRim[i + 1]] = 1;
+    }
+    for (const vi of mesh.mouthUpper) boundaryVert[vi] = 1;
+    for (const vi of mesh.mouthLower) boundaryVert[vi] = 1;
+
+    const toSubdivide = new Uint8Array(oldF);
+    let subCount = 0;
+    for (let t = 0; t < oldF; t++) {
+      const a = f[3 * t], b = f[3 * t + 1], c = f[3 * t + 2];
+      if (
+        fg[t] <= 1.5 &&
+        paint[a] === 0 &&
+        paint[b] === 0 &&
+        paint[c] === 0 &&
+        (fade[a] + fade[b] + fade[c]) / 3 > 0.12
+      ) {
+        toSubdivide[t] = 1;
+        subCount++;
+      }
+    }
+    if (subCount === 0) return mesh;
+
+    const edgeMap = new Map();
+    const newVerts = [];
+    const newNormals = [];
+    const newJaw = [];
+    const newBrow = [];
+    const newLips = [];
+    const newFade = [];
+    const newPaint = [];
+    const newLid = [];
+    const newLipMask = [];
+    const newSway = [];
+
+    const getMidpoint = (i, j) => {
+      const lo = i < j ? i : j;
+      const hi = i < j ? j : i;
+      const key = lo * 131072 + hi;
+      const existing = edgeMap.get(key);
+      if (existing !== undefined) return existing;
+
+      const idx = oldV + newJaw.length;
+      edgeMap.set(key, idx);
+
+      const ax = v[3 * lo], ay = v[3 * lo + 1], az = v[3 * lo + 2];
+      const bx = v[3 * hi], by = v[3 * hi + 1], bz = v[3 * hi + 2];
+      const nax = nrm[3 * lo], nay = nrm[3 * lo + 1], naz = nrm[3 * lo + 2];
+      const nbx = nrm[3 * hi], nby = nrm[3 * hi + 1], nbz = nrm[3 * hi + 2];
+
+      let mx = 0.5 * (ax + bx);
+      let my = 0.5 * (ay + by);
+      let mz = 0.5 * (az + bz);
+
+      // Curved Phong projection along surface normals (unless on an eyelid/lip seam)
+      if (!boundaryVert[lo] && !boundaryVert[hi] && lid[lo] === 0 && lid[hi] === 0) {
+        const dx = bx - ax, dy = by - ay, dz = bz - az;
+        const dotA = dx * nax + dy * nay + dz * naz;
+        const dotB = -dx * nbx - dy * nby - dz * nbz;
+        const alpha = 0.16;
+        mx -= alpha * (dotA * nax + dotB * nbx);
+        my -= alpha * (dotA * nay + dotB * nby);
+        mz -= alpha * (dotA * naz + dotB * nbz);
+      }
+
+      let nx = nax + nbx, ny = nay + nby, nz = naz + nbz;
+      const nl = Math.max(Math.hypot(nx, ny, nz), 1e-9);
+      nx /= nl; ny /= nl; nz /= nl;
+
+      newVerts.push(mx, my, mz);
+      newNormals.push(nx, ny, nz);
+      newJaw.push(0.5 * (jaw[lo] + jaw[hi]));
+      newBrow.push(0.5 * (brow[lo] + brow[hi]));
+      newLips.push(0.5 * (lips[lo] + lips[hi]));
+      newFade.push(0.5 * (fade[lo] + fade[hi]));
+      newPaint.push(0);
+      newLid.push(0.5 * (lid[lo] + lid[hi]));
+      newLipMask.push(0.5 * (lipMask[lo] + lipMask[hi]));
+      newSway.push(0.5 * (sway[lo] + sway[hi]));
+
+      return idx;
+    };
+
+    const newF = oldF + 3 * subCount;
+    const outFaces = new Int32Array(3 * newF);
+    const outGroup = new Float32Array(newF);
+    let fk = 0;
+
+    for (let t = 0; t < oldF; t++) {
+      const a = f[3 * t], b = f[3 * t + 1], c = f[3 * t + 2];
+      const g = fg[t];
+      if (!toSubdivide[t]) {
+        outFaces[3 * fk] = a;
+        outFaces[3 * fk + 1] = b;
+        outFaces[3 * fk + 2] = c;
+        outGroup[fk++] = g;
+      } else {
+        const ab = getMidpoint(a, b);
+        const bc = getMidpoint(b, c);
+        const ca = getMidpoint(c, a);
+
+        outFaces[3 * fk] = a; outFaces[3 * fk + 1] = ab; outFaces[3 * fk + 2] = ca; outGroup[fk++] = g;
+        outFaces[3 * fk] = b; outFaces[3 * fk + 1] = bc; outFaces[3 * fk + 2] = ab; outGroup[fk++] = g;
+        outFaces[3 * fk] = c; outFaces[3 * fk + 1] = ca; outFaces[3 * fk + 2] = bc; outGroup[fk++] = g;
+        outFaces[3 * fk] = ab; outFaces[3 * fk + 1] = bc; outFaces[3 * fk + 2] = ca; outGroup[fk++] = g;
+      }
+    }
+
+    const totalV = oldV + newJaw.length;
+    const mergeFloat = (orig, added) => {
+      const out = new Float32Array(totalV);
+      out.set(orig, 0);
+      out.set(added, oldV);
+      return out;
+    };
+    const mergeInt = (orig, added) => {
+      const out = new Int32Array(totalV);
+      out.set(orig, 0);
+      out.set(added, oldV);
+      return out;
+    };
+
+    const outVerts = new Float32Array(3 * totalV);
+    outVerts.set(v, 0);
+    outVerts.set(newVerts, 3 * oldV);
+
+    const outNormals = new Float32Array(3 * totalV);
+    outNormals.set(nrm, 0);
+    outNormals.set(newNormals, 3 * oldV);
+
+    const subdivided = new HeadMesh({
+      ...mesh,
+      verts: outVerts,
+      normals: outNormals,
+      jaw: mergeFloat(jaw, newJaw),
+      brow: mergeFloat(brow, newBrow),
+      lips: mergeFloat(lips, newLips),
+      fade: mergeFloat(fade, newFade),
+      paint: mergeInt(paint, newPaint),
+      lid: mergeFloat(lid, newLid),
+      lipMask: mergeFloat(lipMask, newLipMask),
+      hairSway: mergeFloat(sway, newSway),
+      faces: outFaces,
+      faceGroup: outGroup,
     });
+    subdivided._subdivided = true;
+    return subdivided;
   }
 }
 
-// ── HairShade recolouring ────────────────────────────────────────────────────
-
-function lum(rgb) {
-  return 0.2126 * ((rgb >> 16) & 0xff) + 0.7152 * ((rgb >> 8) & 0xff) + 0.0722 * (rgb & 0xff);
-}
+// ── Colour & Hair Helpers ───────────────────────────────────────────────────
 
 function mixRgb(a, b, t) {
   const f = Math.max(0, Math.min(1, t));
-  let out = 0;
-  for (const s of [16, 8, 0]) {
-    const x = (a >> s) & 0xff;
-    const y = (b >> s) & 0xff;
-    const v = Math.max(0, Math.min(255, (x + (y - x) * f) | 0));
-    out |= v << s;
-  }
-  return out;
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const r = Math.round(ar + (br - ar) * f);
+  const g = Math.round(ag + (bg - ag) * f);
+  const bl = Math.round(ab + (bb - ab) * f);
+  return (r << 16) | (g << 8) | bl;
 }
 
-export function recolourHair(head, from, to) {
-  const lb = Math.max(lum(from.body), 1);
-  const kr = lum(from.root) / lb;
-  const kt = Math.max(lum(from.tip) / lb, 1.05);
-  const paint = new Int32Array(head.paint);
+function scaleRgb(rgb, k) {
+  const r = Math.min(255, Math.max(0, Math.round(((rgb >> 16) & 0xff) * k)));
+  const g = Math.min(255, Math.max(0, Math.round(((rgb >> 8) & 0xff) * k)));
+  const b = Math.min(255, Math.max(0, Math.round((rgb & 0xff) * k)));
+  return (r << 16) | (g << 8) | b;
+}
+
+function strandColour(keyByte, lift, colours, alpha = 254) {
+  const k = (keyByte & 0xff) / 255.0;
+  const grey = colours.grey || 0;
+  if (grey > 0 && (((keyByte * 73 + 19) & 0xff) / 255.0) < grey) {
+    const shade = 0.8 + 0.35 * k;
+    return ((alpha & 0xff) << 24) | scaleRgb(colours.greyRgb || 0x8e8b86, shade);
+  }
+  const base = k < 0.5 ? mixRgb(colours.root, colours.body, k * 2) : mixRgb(colours.body, colours.tip, (k - 0.5) * 2);
+  const lifted = mixRgb(colours.root, base, 0.55 + 0.45 * Math.max(0, Math.min(1, lift)));
+  return ((alpha & 0xff) << 24) | lifted;
+}
+
+function rgbToHsv(rgb) {
+  const r = ((rgb >> 16) & 0xff) / 255;
+  const g = ((rgb >> 8) & 0xff) / 255;
+  const b = (rgb & 0xff) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  if (d > 1e-5) {
+    if (max === r) h = (((g - b) / d) % 6 + 6) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6;
+  }
+  const s = max > 1e-5 ? d / max : 0;
+  return [h, s, max];
+}
+
+function hsvToRgb(h, s, v) {
+  const hh = ((h % 1) + 1) % 1 * 6;
+  const i = Math.floor(hh);
+  const f = hh - i;
+  const p = v * (1 - s);
+  const q = v * (1 - s * f);
+  const t = v * (1 - s * (1 - f));
+  let r = 0, g = 0, b = 0;
+  switch (i % 6) {
+    case 0: r = v; g = t; b = p; break;
+    case 1: r = q; g = v; b = p; break;
+    case 2: r = p; g = v; b = t; break;
+    case 3: r = p; g = q; b = v; break;
+    case 4: r = t; g = p; b = v; break;
+    default: r = v; g = p; b = q; break;
+  }
+  return (Math.round(r * 255) << 16) | (Math.round(g * 255) << 8) | Math.round(b * 255);
+}
+
+export function recolourHair(mesh, fromColours, toColours) {
+  const paint = new Int32Array(mesh.paint);
+  const [fh, fs, fv] = rgbToHsv(fromColours.body);
+  const [th, ts, tv] = rgbToHsv(toColours.body);
+  const vRatio = tv / Math.max(fv, 0.08);
+  const sRatio = ts / Math.max(fs, 0.08);
+
   for (let i = 0; i < paint.length; i++) {
     const p = paint[i];
     const a = (p >>> 24) & 0xff;
-    if (p === 0 || a === 0xff) continue;
-    const k = lum(p & 0xffffff) / lb;
-    const rgb =
-      k <= 1
-        ? mixRgb(to.root, to.body, (k - kr) / Math.max(1 - kr, 0.05))
-        : mixRgb(to.body, to.tip, (k - 1) / (kt - 1));
+    if (p === 0 || a >= 255) continue;
+    const [, s, v] = rgbToHsv(p & 0x00ffffff);
+    const nv = Math.max(0.02, Math.min(1, Math.pow(v, 0.9) * vRatio));
+    const ns = Math.max(0, Math.min(1, s * sRatio));
+    let rgb = hsvToRgb(th, ns, nv);
+    if (toColours.grey > 0 && (((i * 73 + 19) & 0xff) / 255) < toColours.grey) {
+      rgb = scaleRgb(toColours.greyRgb || 0x8e8b86, 0.65 + 0.5 * v);
+    }
     paint[i] = (a << 24) | rgb;
   }
-  return head.copyWith({ paint });
+  return new HeadMesh({ ...mesh, paint });
 }
 
-// ── HairStyle (JHR1 binary parser & radial fitOn) ────────────────────────────
+// ── HairStyle (JHR1 binary parser & skull-field fitter) ─────────────────────
 
 function smooth(e0, e1, x) {
   const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
   return t * t * (3 - 2 * t);
 }
 
-function strandColour(key, height, c) {
-  const ch = (rgb, s) => (rgb >> s) & 0xff;
-  const grey = ((key * 37) % 256) / 256 < (c.grey || 0);
-  const tone = 0.86 + (0.24 * key) / 255;
-  const rootMix = 0.45 + 0.55 * Math.max(0, Math.min(1, height * 8));
-  const tipMix = Math.max(0, Math.min(1, (height - 0.45) * 1.2)) * 0.35;
-  let rgb = 0;
-  for (const s of [16, 8, 0]) {
-    let v;
-    if (grey) {
-      v = ch(c.greyRgb || 0x8e8b86, s) * (0.85 + 0.15 * height);
-    } else {
-      const m = ch(c.root, s) + (ch(c.body, s) - ch(c.root, s)) * rootMix;
-      v = m + (ch(c.tip, s) - m) * tipMix;
-    }
-    v = Math.max(0, Math.min(255, Math.round(v * tone)));
-    rgb |= v << s;
-  }
-  return (254 << 24) | rgb;
-}
-
-function gridOf(ux, uy, uz, az, el) {
-  const a = ((Math.atan2(ux, uz) + Math.PI) / (2 * Math.PI)) * az;
-  const e = ((Math.asin(Math.max(-1, Math.min(1, uy))) + Math.PI / 2) / Math.PI) * (el - 1);
-  return [a, e];
-}
-
-function sampleGrid(grid, a, e, az, el) {
-  const a0 = ((Math.floor(a) % az) + az) % az;
-  const a1 = (a0 + 1) % az;
-  const fa = a - Math.floor(a);
-  const ec = Math.max(0, Math.min(el - 1.0001, e));
-  const e0 = Math.floor(ec);
-  const e1 = Math.min(el - 1, e0 + 1);
-  const fe = ec - e0;
-  const r00 = grid[e0 * az + a0];
-  const r01 = grid[e0 * az + a1];
-  const r10 = grid[e1 * az + a0];
-  const r11 = grid[e1 * az + a1];
-  return (r00 * (1 - fa) + r01 * fa) * (1 - fe) + (r10 * (1 - fa) + r11 * fa) * fe;
-}
-
-function skullCentre(verts, faces, tris) {
-  let minX = 1e9, maxX = -1e9, maxY = -1e9, minZ = 1e9, maxZ = -1e9;
-  for (const t of tris) {
-    for (let k = 0; k < 3; k++) {
-      const v = faces[3 * t + k];
-      const y = verts[3 * v + 1];
-      if (y > maxY) maxY = y;
-      if (y < -0.55) continue;
-      const x = verts[3 * v];
-      const z = verts[3 * v + 2];
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (z < minZ) minZ = z;
-      if (z > maxZ) maxZ = z;
-    }
-  }
-  return new Float32Array([(minX + maxX) / 2, maxY - 0.88, (minZ + maxZ) / 2]);
-}
-
-function radiusMap(verts, faces, tris, centre, az, el) {
-  const grid = new Float32Array(el * az);
-  for (const t of tris) {
-    const a = faces[3 * t], b = faces[3 * t + 1], c = faces[3 * t + 2];
-    const pts = [
-      [verts[3 * a], verts[3 * a + 1], verts[3 * a + 2]],
-      [verts[3 * b], verts[3 * b + 1], verts[3 * b + 2]],
-      [verts[3 * c], verts[3 * c + 1], verts[3 * c + 2]],
-      [(verts[3 * a] + verts[3 * b]) / 2, (verts[3 * a + 1] + verts[3 * b + 1]) / 2, (verts[3 * a + 2] + verts[3 * b + 2]) / 2],
-      [(verts[3 * b] + verts[3 * c]) / 2, (verts[3 * b + 1] + verts[3 * c + 1]) / 2, (verts[3 * b + 2] + verts[3 * c + 2]) / 2],
-      [(verts[3 * c] + verts[3 * a]) / 2, (verts[3 * c + 1] + verts[3 * a + 1]) / 2, (verts[3 * c + 2] + verts[3 * a + 2]) / 2],
-    ];
-    for (const p of pts) {
-      const dx = p[0] - centre[0], dy = p[1] - centre[1], dz = p[2] - centre[2];
-      const r = Math.hypot(dx, dy, dz);
-      if (r < 1e-6) continue;
-      const [ga, ge] = gridOf(dx / r, dy / r, dz / r, az, el);
-      const ia = ((Math.round(ga) % az) + az) % az;
-      const ie = Math.max(0, Math.min(el - 1, Math.round(ge)));
-      const idx = ie * az + ia;
-      if (r > grid[idx]) grid[idx] = r;
-    }
-  }
-  // Fill any empty cells from neighbors
-  for (let pass = 0; pass < 6; pass++) {
-    for (let e = 0; e < el; e++) {
-      for (let a = 0; a < az; a++) {
-        const idx = e * az + a;
-        if (grid[idx] > 0) continue;
-        let sum = 0, cnt = 0;
-        for (const [de, da] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-          const ne = Math.max(0, Math.min(el - 1, e + de));
-          const na = (a + da + az) % az;
-          const v = grid[ne * az + na];
-          if (v > 0) { sum += v; cnt++; }
-        }
-        if (cnt > 0) grid[idx] = sum / cnt;
-      }
-    }
-  }
-  return grid;
-}
-
 export class HairStyle {
-  constructor(positions, key, faces, centre, radius, az, el) {
-    this.positions = positions;
-    this.key = key;
-    this.faces = faces;
-    this.centre = centre;
-    this.radius = radius;
-    this.az = az;
-    this.el = el;
-    this.vertexCount = (positions.length / 3) | 0;
-    this.faceCount = (faces.length / 3) | 0;
+  constructor(props) {
+    Object.assign(this, props);
+    this.vertexCount = (this.pos.length / 3) | 0;
+    this.faceCount = (this.faces.length / 3) | 0;
   }
 
   static parse(arrayBuffer) {
     const dv = new DataView(arrayBuffer);
-    if (
-      dv.getUint8(0) !== 0x4a || // 'J'
-      dv.getUint8(1) !== 0x48 || // 'H'
-      dv.getUint8(2) !== 0x52 || // 'R'
-      dv.getUint8(3) !== 0x31    // '1'
-    ) {
-      throw new Error('Not a JHR1 hairstyle file');
+    const magic = String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3));
+    if (magic !== 'JHR1') {
+      throw new Error(`Not a hairstyle file: ${magic}`);
     }
     let pos = 4;
     const readInt = () => { const v = dv.getInt32(pos, true); pos += 4; return v; };
@@ -442,49 +495,170 @@ export class HairStyle {
     const step = new Float32Array([readFloat(), readFloat(), readFloat()]);
     const radius = new Float32Array(el * az);
     for (let i = 0; i < el * az; i++) radius[i] = readFloat();
-    const positions = new Float32Array(3 * nv);
-    for (let i = 0; i < 3 * nv; i++) {
-      const u16 = dv.getUint16(pos, true);
-      pos += 2;
-      positions[i] = lo[i % 3] + u16 * step[i % 3];
+
+    const vPos = new Float32Array(3 * nv);
+    for (let i = 0; i < nv; i++) {
+      const qx = dv.getUint16(pos, true); pos += 2;
+      const qy = dv.getUint16(pos, true); pos += 2;
+      const qz = dv.getUint16(pos, true); pos += 2;
+      vPos[3 * i] = lo[0] + qx * step[0];
+      vPos[3 * i + 1] = lo[1] + qy * step[1];
+      vPos[3 * i + 2] = lo[2] + qz * step[2];
     }
-    const key = new Uint8Array(arrayBuffer, pos, nv);
-    pos += nv + ((4 - (nv % 4)) % 4);
+    const key = new Uint8Array(nv);
+    for (let i = 0; i < nv; i++) key[i] = dv.getUint8(pos + i);
+    const raw = 6 * nv + nv;
+    pos += nv + ((4 - (raw % 4)) % 4);
+
     const faces = new Int32Array(3 * nf);
     for (let i = 0; i < 3 * nf; i++) {
       faces[i] = dv.getUint16(pos, true);
       pos += 2;
     }
-    return new HairStyle(positions, key, faces, centre, radius, az, el);
+
+    return new HairStyle({ az, el, centre, radius, pos: vPos, key, faces });
   }
 
-  fitOn(head, colours, lift = 0.012) {
-    const skull = [];
-    for (let t = 0; t < head.faceCount; t++) {
-      if (head.faceGroup[t] > 1.5) continue;
-      const a = head.faces[3 * t], b = head.faces[3 * t + 1], c = head.faces[3 * t + 2];
-      if (head.paint[a] !== 0 || head.paint[b] !== 0 || head.paint[c] !== 0) continue;
-      skull.push(t);
+  sampleRadius(grid, dirX, dirY, dirZ) {
+    const theta = Math.atan2(dirX, dirZ);
+    const phi = Math.asin(Math.max(-1, Math.min(1, dirY)));
+    const u = ((theta + Math.PI) / (2 * Math.PI)) * this.az - 0.5;
+    const v = ((phi + 0.35 * Math.PI) / (0.85 * Math.PI)) * (this.el - 1);
+    const j0 = Math.floor(u);
+    const i0 = Math.max(0, Math.min(this.el - 2, Math.floor(v)));
+    const fu = u - j0;
+    const fv = Math.max(0, Math.min(1, v - i0));
+    const jA = ((j0 % this.az) + this.az) % this.az;
+    const jB = (jA + 1) % this.az;
+    const r00 = grid[i0 * this.az + jA];
+    const r01 = grid[i0 * this.az + jB];
+    const r10 = grid[(i0 + 1) * this.az + jA];
+    const r11 = grid[(i0 + 1) * this.az + jB];
+    return (1 - fv) * ((1 - fu) * r00 + fu * r01) + fv * ((1 - fu) * r10 + fu * r11);
+  }
+
+  targetSkull(head) {
+    const v = head.verts;
+    const lm = head.landmarks;
+    const eyeL = lm.eye_l || [];
+    const eyeR = lm.eye_r || [];
+    let ex = 0, ey = 0, ez = 0;
+    const en = Math.max(1, eyeL.length + eyeR.length);
+    for (const i of eyeL) { ex += v[3 * i]; ey += v[3 * i + 1]; ez += v[3 * i + 2]; }
+    for (const i of eyeR) { ex += v[3 * i]; ey += v[3 * i + 1]; ez += v[3 * i + 2]; }
+    ex /= en; ey /= en; ez /= en;
+
+    let topY = -1e9, minX = 1e9, maxX = -1e9, backZ = 1e9;
+    for (let i = 0; i < head.nHead; i++) {
+      const x = v[3 * i], y = v[3 * i + 1], z = v[3 * i + 2];
+      if (y > topY) topY = y;
+      if (y > ey - 0.15 && y < ey + 0.55) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (z < backZ) backZ = z;
+      }
     }
-    const ct = skullCentre(head.verts, head.faces, skull);
-    const rt = radiusMap(head.verts, head.faces, skull, ct, this.az, this.el);
+    const halfW = 0.5 * (maxX - minX);
+    const cx = 0.5 * (minX + maxX);
+    const cy = ey + 0.12 * (topY - ey);
+    const cz = Math.min(ez - 0.85 * halfW, 0.5 * (ez + backZ));
+    const ct = new Float32Array([cx, cy, cz]);
+
+    const grid = new Float32Array(this.el * this.az);
+    for (let i = 0; i < head.nHead; i++) {
+      const dx = v[3 * i] - cx, dy = v[3 * i + 1] - cy, dz = v[3 * i + 2] - cz;
+      const r = Math.hypot(dx, dy, dz);
+      if (r < 1e-4) continue;
+      const theta = Math.atan2(dx / r, dz / r);
+      const phi = Math.asin(Math.max(-1, Math.min(1, dy / r)));
+      const j = ((Math.floor(((theta + Math.PI) / (2 * Math.PI)) * this.az) % this.az) + this.az) % this.az;
+      const k = Math.floor(((phi + 0.35 * Math.PI) / (0.85 * Math.PI)) * (this.el - 1));
+      if (k >= 0 && k < this.el) {
+        const idx = k * this.az + j;
+        if (r > grid[idx]) grid[idx] = r;
+      }
+    }
+
+    let sum = 0, cnt = 0;
+    for (let k = Math.floor(this.el * 0.55); k < this.el; k++) {
+      for (let j = 0; j < this.az; j++) {
+        const r = grid[k * this.az + j];
+        if (r > 0) { sum += r; cnt++; }
+      }
+    }
+    const fallback = cnt > 0 ? sum / cnt : Math.max(topY - cy, 0.65);
+    for (let idx = 0; idx < grid.length; idx++) {
+      if (grid[idx] === 0) grid[idx] = fallback;
+    }
+    for (let pass = 0; pass < 3; pass++) {
+      const prev = new Float32Array(grid);
+      for (let k = 0; k < this.el; k++) {
+        const k0 = Math.max(0, k - 1), k1 = Math.min(this.el - 1, k + 1);
+        for (let j = 0; j < this.az; j++) {
+          const jL = (j + this.az - 1) % this.az;
+          const jR = (j + 1) % this.az;
+          grid[k * this.az + j] =
+            0.4 * prev[k * this.az + j] +
+            0.15 * (prev[k * this.az + jL] + prev[k * this.az + jR] + prev[k0 * this.az + j] + prev[k1 * this.az + j]);
+        }
+      }
+    }
+    return { ct, grid };
+  }
+
+  fitOn(head, colours) {
+    const { ct, grid: rT } = this.targetSkull(head);
+    const scaleCand = [];
+    for (let k = Math.floor(this.el * 0.5); k < this.el; k++) {
+      for (let j = 0; j < this.az; j++) {
+        const rs = this.radius[k * this.az + j];
+        const rt = rT[k * this.az + j];
+        if (rs > 0.1 && rt > 0.1) scaleCand.push(rt / rs);
+      }
+    }
+    scaleCand.sort((a, b) => a - b);
+    const s = scaleCand.length ? scaleCand[scaleCand.length >> 1] : 1.0;
+
+    let frontZ = 0;
+    const brows = [...(head.landmarks.brow_l || []), ...(head.landmarks.brow_r || [])];
+    for (const i of brows) {
+      if (head.verts[3 * i + 2] > frontZ) frontZ = head.verts[3 * i + 2];
+    }
+
     const n = this.vertexCount;
     const out = new Float32Array(3 * n);
     const heightOver = new Float32Array(n);
+    const cs = this.centre;
 
     for (let i = 0; i < n; i++) {
-      const x = this.positions[3 * i] - this.centre[0];
-      const y = this.positions[3 * i + 1] - this.centre[1];
-      const z = this.positions[3 * i + 2] - this.centre[2];
-      const r = Math.max(Math.hypot(x, y, z), 1e-9);
-      const ux = x / r, uy = y / r, uz = z / r;
-      const [a, e] = gridOf(ux, uy, uz, this.az, this.el);
-      const h = Math.max(r - sampleGrid(this.radius, a, e, this.az, this.el), lift);
-      const nr = sampleGrid(rt, a, e, this.az, this.el) + h;
-      out[3 * i] = ct[0] + ux * nr;
-      out[3 * i + 1] = ct[1] + uy * nr;
-      out[3 * i + 2] = ct[2] + uz * nr;
-      heightOver[i] = h;
+      const dx = this.pos[3 * i] - cs[0];
+      const dy = this.pos[3 * i + 1] - cs[1];
+      const dz = this.pos[3 * i + 2] - cs[2];
+      const r = Math.hypot(dx, dy, dz);
+      if (r < 1e-5) {
+        out[3 * i] = ct[0];
+        out[3 * i + 1] = ct[1];
+        out[3 * i + 2] = ct[2];
+        continue;
+      }
+      const ux = dx / r, uy = dy / r, uz = dz / r;
+      const rs = this.sampleRadius(this.radius, ux, uy, uz);
+      const rt = this.sampleRadius(rT, ux, uy, uz);
+      const cap = smooth(-0.25, 0.2, uy);
+      const rGoal = cap * (rt + (r - rs) * s) + (1 - cap) * (r * s);
+      let x = ct[0] + ux * rGoal;
+      let y = ct[1] + uy * rGoal;
+      let z = ct[2] + uz * rGoal;
+      heightOver[i] = Math.max(0, r - rs) * s;
+
+      if (uz > 0.15 && y < ct[1] + 0.25 && y > ct[1] - 1.1) {
+        const inFront = smooth(0.42, 0.12, Math.abs(x - ct[0]));
+        const floor = frontZ + 0.05;
+        if (inFront > 0 && z < floor) z += (floor - z) * inFront;
+      }
+      out[3 * i] = x;
+      out[3 * i + 1] = y;
+      out[3 * i + 2] = z;
     }
 
     const nrm = new Float32Array(3 * n);
@@ -590,7 +764,7 @@ export class HairStyle {
   }
 }
 
-// ── CharacterMesh (JCH1 / JCH2 textured characters: Adam & Mei) ─────────────
+// ── CharacterMesh (Kept for unit test compatibility) ────────────────────────
 
 export class CharacterMesh {
   constructor(props) {
@@ -637,17 +811,8 @@ export class CharacterMesh {
       faces[i] = readInt();
     }
 
-    const mouthPts = meta.mouth?.points || [];
-    const mouth = new Float32Array(3 * mouthPts.length);
-    for (let k = 0; k < mouthPts.length; k++) {
-      mouth[3 * k] = mouthPts[k][0];
-      mouth[3 * k + 1] = mouthPts[k][1];
-      mouth[3 * k + 2] = mouthPts[k][2];
-    }
-
     return new CharacterMesh({
-      label: meta.label || 'Character',
-      credit: meta.credit || '',
+      label: meta?.label || 'Character',
       verts,
       normals,
       uv,
@@ -658,54 +823,121 @@ export class CharacterMesh {
       gazing,
       faces,
       atlas: atlasImage,
-      eyes: meta.eyes || [],
-      mouth,
-      mouthColour: meta.mouth?.inner ?? 0xff2a1014,
-      teeth: meta.mouth?.teeth ?? true,
-      lashColour: meta.lash ?? 0xff1a1210,
-      ambient: meta.ambient ?? 0.55,
-      cut: meta.cut ?? -1.9,
-      top: meta.top ?? 1.0,
-      scale: meta.scale ?? 1.0,
-      pivot: meta.pivot || [0, -1, -0.15],
-      jawPivot: meta.jaw_pivot || JAW_PIVOT,
-      gazeReach: meta.gaze ?? 0.0,
-      browLift: meta.brow_lift ?? 0.06,
     });
   }
 }
 
-// ── NetworkWeb (Hologram constellation nodes & edges on the head mesh) ──────
+// ── NetworkWeb (Port of NetworkWeb.kt — High-Density Poisson-Disc Polygon Web) ──
 
 export class NetworkWeb {
-  constructor(mesh) {
-    const f = mesh.faces;
+  constructor(mesh, r0 = 0.028) {
     const v = mesh.verts;
-    let seed = 104729;
+    const f = mesh.faces;
+    const nF = mesh.faceCount;
+
+    // Area-weighted cumulative distribution of head skin triangles
+    const cumulative = new Float64Array(nF);
+    let total = 0.0;
+    for (let t = 0; t < nF; t++) {
+      const a = f[3 * t], b = f[3 * t + 1], c = f[3 * t + 2];
+      const avgFade = (mesh.fade[a] + mesh.fade[b] + mesh.fade[c]) / 3;
+      const plain = mesh.paint[a] === 0 && mesh.paint[b] === 0 && mesh.paint[c] === 0;
+      if (avgFade > 0.2 && plain) {
+        const abx = v[3 * b] - v[3 * a], aby = v[3 * b + 1] - v[3 * a + 1], abz = v[3 * b + 2] - v[3 * a + 2];
+        const acx = v[3 * c] - v[3 * a], acy = v[3 * c + 1] - v[3 * a + 1], acz = v[3 * c + 2] - v[3 * a + 2];
+        const cx = aby * acz - abz * acy, cy = abz * acx - abx * acz, cz = abx * acy - aby * acx;
+        total += 0.5 * Math.sqrt(cx * cx + cy * cy + cz * cz);
+      }
+      cumulative[t] = total;
+    }
+
+    // Denser around the eyes and lips
+    const dense = [];
+    for (const name of ['eye_l', 'eye_r', 'lips_out']) {
+      const ring = mesh.landmarks[name];
+      if (!ring || !ring.length) continue;
+      let x = 0, y = 0, z = 0, rad = 0;
+      for (const i of ring) { x += v[3 * i]; y += v[3 * i + 1]; z += v[3 * i + 2]; }
+      x /= ring.length; y /= ring.length; z /= ring.length;
+      for (const i of ring) {
+        rad = Math.max(rad, Math.hypot(v[3 * i] - x, v[3 * i + 1] - y, v[3 * i + 2] - z));
+      }
+      dense.push([x, y, z, rad * 1.5]);
+    }
+
+    let seed = 31;
     const rnd = () => {
-      seed = (seed * 1664525 + 1013904223) >>> 0;
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
       return seed / 4294967296;
     };
 
-    const ta = [], tb = [], tc = [], wa = [], wb = [], fd = [], px = [], py = [], pz = [];
-    for (let t = 0; t < mesh.faceCount; t += 2) {
+    const px = [], py = [], pz = [], pr = [];
+    const ta = [], tb = [], tc = [], wa = [], wb = [], fd = [];
+    const grid = new Map();
+    const cell = (x) => Math.floor(x / r0);
+    const key = (i, j, k) => (i + 512) * 1048576 + (j + 512) * 1024 + (k + 512);
+
+    const tries = 180000;
+    for (let n = 0; n < tries; n++) {
+      const target = rnd() * total;
+      let lo = 0, hi = nF - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (cumulative[mid] < target) lo = mid + 1;
+        else hi = mid;
+      }
+      const t = lo;
       const a = f[3 * t], b = f[3 * t + 1], c = f[3 * t + 2];
-      const fAvg = (mesh.fade[a] + mesh.fade[b] + mesh.fade[c]) / 3;
-      if (fAvg <= 0.25) continue;
+      if ((mesh.fade[a] + mesh.fade[b] + mesh.fade[c]) / 3 <= 0.2) continue;
       if (mesh.paint[a] !== 0 || mesh.paint[b] !== 0 || mesh.paint[c] !== 0) continue;
+
       let u = rnd(), w = rnd();
       if (u + w > 1) { u = 1 - u; w = 1 - w; }
       const s = 1 - u - w;
-      px.push(s * v[3 * a] + u * v[3 * b] + w * v[3 * c]);
-      py.push(s * v[3 * a + 1] + u * v[3 * b + 1] + w * v[3 * c + 1]);
-      pz.push(s * v[3 * a + 2] + u * v[3 * b + 2] + w * v[3 * c + 2]);
+      const x = s * v[3 * a] + u * v[3 * b] + w * v[3 * c];
+      const y = s * v[3 * a + 1] + u * v[3 * b + 1] + w * v[3 * c + 1];
+      const z = s * v[3 * a + 2] + u * v[3 * b + 2] + w * v[3 * c + 2];
+
+      let radius = r0;
+      for (const d of dense) {
+        const dx = x - d[0], dy = y - d[1], dz = z - d[2];
+        const q = (dx * dx + dy * dy + dz * dz) / (d[3] * d[3] * 2.2);
+        if (q < 1) radius = Math.min(radius, r0 * (0.66 + 0.34 * q));
+      }
+
+      const ci = cell(x), cj = cell(y), ck = cell(z);
+      let ok = true;
+      outer: for (let i = -1; i <= 1; i++) {
+        for (let j = -1; j <= 1; j++) {
+          for (let k = -1; k <= 1; k++) {
+            const list = grid.get(key(ci + i, cj + j, ck + k));
+            if (!list) continue;
+            for (const o of list) {
+              const dx = x - px[o], dy = y - py[o], dz = z - pz[o];
+              const m = Math.min(radius, pr[o]);
+              if (dx * dx + dy * dy + dz * dz < m * m) {
+                ok = false;
+                break outer;
+              }
+            }
+          }
+        }
+      }
+      if (!ok) continue;
+
+      const idx = px.length;
+      px.push(x); py.push(y); pz.push(z); pr.push(radius);
       ta.push(a); tb.push(b); tc.push(c);
       wa.push(u); wb.push(w);
-      fd.push(fAvg);
-      if (ta.length >= 900) break;
+      fd.push(s * mesh.fade[a] + u * mesh.fade[b] + w * mesh.fade[c]);
+      const gk = key(ci, cj, ck);
+      let bucket = grid.get(gk);
+      if (!bucket) { bucket = []; grid.set(gk, bucket); }
+      bucket.push(idx);
     }
 
-    this.count = ta.length;
+    const n = px.length;
+    this.count = n;
     this.triA = new Int32Array(ta);
     this.triB = new Int32Array(tb);
     this.triC = new Int32Array(tc);
@@ -713,18 +945,356 @@ export class NetworkWeb {
     this.wv = new Float32Array(wb);
     this.fade = new Float32Array(fd);
 
-    const edges = [];
-    const maxD2 = 0.085 * 0.085;
-    for (let i = 0; i < this.count; i++) {
-      let connected = 0;
-      for (let j = i + 1; j < this.count; j++) {
-        const dx = px[i] - px[j], dy = py[i] - py[j], dz = pz[i] - pz[j];
-        if (dx * dx + dy * dy + dz * dz < maxD2) {
-          edges.push(i, j);
-          if (++connected >= 4) break;
+    // Connect each node to its 5 nearest neighbours within 2.15 * r0
+    const limit = 2.15 * r0;
+    const limitSq = limit * limit;
+    const gcell = (x) => Math.floor(x / limit);
+    const reach = new Map();
+    for (let i = 0; i < n; i++) {
+      const rk = key(gcell(px[i]), gcell(py[i]), gcell(pz[i]));
+      let list = reach.get(rk);
+      if (!list) { list = []; reach.set(rk, list); }
+      list.push(i);
+    }
+
+    const pairSet = new Set();
+    const edgeList = [];
+    const nearIdx = new Int32Array(5);
+    const nearD = new Float32Array(5);
+
+    for (let i = 0; i < n; i++) {
+      nearIdx.fill(-1);
+      nearD.fill(1e9);
+      const ci = gcell(px[i]), cj = gcell(py[i]), ck = gcell(pz[i]);
+      for (let a = -1; a <= 1; a++) {
+        for (let b = -1; b <= 1; b++) {
+          for (let c = -1; c <= 1; c++) {
+            const list = reach.get(key(ci + a, cj + b, ck + c));
+            if (!list) continue;
+            for (const j of list) {
+              if (j === i) continue;
+              const dx = px[i] - px[j], dy = py[i] - py[j], dz = pz[i] - pz[j];
+              const d = dx * dx + dy * dy + dz * dz;
+              if (d >= nearD[4]) continue;
+              let p = 4;
+              while (p > 0 && nearD[p - 1] > d) {
+                nearD[p] = nearD[p - 1];
+                nearIdx[p] = nearIdx[p - 1];
+                p--;
+              }
+              nearD[p] = d;
+              nearIdx[p] = j;
+            }
+          }
+        }
+      }
+      for (let k = 0; k < 5; k++) {
+        const j = nearIdx[k];
+        if (j < 0 || nearD[k] > limitSq) continue;
+        const lo = Math.min(i, j), hi = Math.max(i, j);
+        const pk = lo * 65536 + hi;
+        if (!pairSet.has(pk)) {
+          pairSet.add(pk);
+          edgeList.push(lo, hi);
         }
       }
     }
-    this.edges = new Int32Array(edges);
+
+    this.edges = new Int32Array(edgeList);
+  }
+}
+
+// ── CircuitTraces (Port of CircuitTraces.kt — Electronic PCB Tracks on Face) ──
+
+export class CircuitTraces {
+  constructor(mesh) {
+    const v = mesh.verts;
+    const nrm = mesh.normals;
+    const f = mesh.faces;
+    const nF = mesh.faceCount;
+
+    // Usable front skin triangles (away from hair, neck end, eyes, and mouth)
+    const usable = [];
+    for (let t = 0; t < nF; t++) {
+      const a = f[3 * t], b = f[3 * t + 1], c = f[3 * t + 2];
+      if (mesh.faceGroup[t] > 1.5 || mesh.faceGroup[t] < 0.5) continue;
+      if (mesh.paint[a] !== 0 || mesh.paint[b] !== 0 || mesh.paint[c] !== 0) continue;
+      if ((mesh.fade[a] + mesh.fade[b] + mesh.fade[c]) / 3 < 0.55) continue;
+      if ((nrm[3 * a + 2] + nrm[3 * b + 2] + nrm[3 * c + 2]) / 3 < 0.28) continue;
+      usable.push(t);
+    }
+
+    // Exclusion zones around the eyes and lips
+    const avoid = [];
+    for (const name of ['eye_l', 'eye_r', 'lips_out']) {
+      const ring = mesh.landmarks[name];
+      if (!ring || !ring.length) continue;
+      let x = 0, y = 0;
+      for (const i of ring) { x += v[3 * i]; y += v[3 * i + 1]; }
+      x /= ring.length; y /= ring.length;
+      let rad = 0;
+      for (const i of ring) {
+        rad = Math.max(rad, Math.hypot(v[3 * i] - x, v[3 * i + 1] - y));
+      }
+      avoid.push([x, y, rad * (name === 'lips_out' ? 1.35 : 1.55)]);
+    }
+
+    // Spatial grid over the front plane of the face
+    const cell = 0.06;
+    const cellOf = (x) => Math.floor(x / cell);
+    const key = (i, j) => ((i + 1024) << 12) | ((j + 1024) & 0xfff);
+    const grid = new Map();
+    for (const t of usable) {
+      const a = f[3 * t], b = f[3 * t + 1], c = f[3 * t + 2];
+      const x0 = Math.min(v[3 * a], v[3 * b], v[3 * c]);
+      const x1 = Math.max(v[3 * a], v[3 * b], v[3 * c]);
+      const y0 = Math.min(v[3 * a + 1], v[3 * b + 1], v[3 * c + 1]);
+      const y1 = Math.max(v[3 * a + 1], v[3 * b + 1], v[3 * c + 1]);
+      for (let i = cellOf(x0); i <= cellOf(x1); i++) {
+        for (let j = cellOf(y0); j <= cellOf(y1); j++) {
+          const gk = key(i, j);
+          let list = grid.get(gk);
+          if (!list) { list = []; grid.set(gk, list); }
+          list.push(t);
+        }
+      }
+    }
+
+    let hitTri = 0, hitU = 0, hitV = 0;
+    const locate = (x, y) => {
+      let bestZ = -1e9, found = false;
+      const list = grid.get(key(cellOf(x), cellOf(y)));
+      if (!list) return false;
+      for (const t of list) {
+        const a = f[3 * t], b = f[3 * t + 1], c = f[3 * t + 2];
+        const ax = v[3 * a], ay = v[3 * a + 1];
+        const bx = v[3 * b], by = v[3 * b + 1];
+        const cx = v[3 * c], cy = v[3 * c + 1];
+        const d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+        if (Math.abs(d) < 1e-9) continue;
+        const l1 = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / d;
+        const l2 = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / d;
+        const l3 = 1 - l1 - l2;
+        if (l1 < 0 || l2 < 0 || l3 < 0) continue;
+        const z = l1 * v[3 * a + 2] + l2 * v[3 * b + 2] + l3 * v[3 * c + 2];
+        if (z > bestZ) {
+          bestZ = z;
+          found = true;
+          hitTri = t;
+          hitU = l2;
+          hitV = l3;
+        }
+      }
+      return found;
+    };
+
+    const pitch = 0.036;
+    const dirs = [
+      [1, 0], [1, 1], [0, 1], [-1, 1],
+      [-1, 0], [-1, -1], [0, -1], [1, -1],
+    ];
+
+    let seed = 2026;
+    const nextFloat = () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    const nextInt = (min, maxExcl) => min + Math.floor(nextFloat() * (maxExcl - min));
+    const nextBoolean = () => nextFloat() < 0.5;
+
+    const taken = new Set();
+    const pTri = [], pU = [], pV = [];
+    const sA = [], sB = [], sTrack = [], sAlong = [];
+    const padList = [];
+    const kinds = [];
+    let tracks = 0;
+
+    const free = (ix, iy) => {
+      if (taken.has(key(ix, iy))) return false;
+      const x = ix * pitch, y = iy * pitch;
+      for (const a of avoid) {
+        if ((x - a[0]) * (x - a[0]) + (y - a[1]) * (y - a[1]) < a[2] * a[2]) return false;
+      }
+      return true;
+    };
+
+    for (let attempt = 0; attempt < 6000; attempt++) {
+      const sx = nextInt(-25, 26);
+      const sy = nextInt(-27, 24);
+      if (!free(sx, sy) || !locate(sx * pitch, sy * pitch)) continue;
+      let dir = nextInt(0, 8);
+      const target = nextInt(9, 34);
+      const cells = [[sx, sy]];
+      let cx = sx, cy = sy;
+      while (cells.length < target) {
+        const r = nextFloat();
+        if (cells.length > 2 && r < 0.26) {
+          dir = (dir + (nextBoolean() ? 1 : 7)) % 8; // 45-degree turn
+        } else if (cells.length > 2 && r < 0.31) {
+          dir = (dir + (nextBoolean() ? 2 : 6)) % 8; // 90-degree turn
+        }
+        const nx = cx + dirs[dir][0], ny = cy + dirs[dir][1];
+        if (!free(nx, ny) || !locate(nx * pitch, ny * pitch)) break;
+        cells.push([nx, ny]);
+        cx = nx;
+        cy = ny;
+      }
+      if (cells.length < 6) continue;
+      const first = pTri.length;
+      for (const c of cells) {
+        taken.add(key(c[0], c[1]));
+        locate(c[0] * pitch, c[1] * pitch);
+        pTri.push(hitTri);
+        pU.push(hitU);
+        pV.push(hitV);
+      }
+      const n = cells.length;
+      for (let k = 0; k < n - 1; k++) {
+        sA.push(first + k);
+        sB.push(first + k + 1);
+        sTrack.push(tracks);
+        sAlong.push(k / (n - 1));
+      }
+      padList.push(first, first + n - 1);
+      kinds.push(nextFloat() < 0.40 ? 1 : 0);
+      tracks++;
+    }
+
+    const n = pTri.length;
+    this.count = n;
+    this.triA = new Int32Array(n);
+    this.triB = new Int32Array(n);
+    this.triC = new Int32Array(n);
+    this.wu = new Float32Array(pU);
+    this.wv = new Float32Array(pV);
+    this.fade = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const a = f[3 * pTri[i]], b = f[3 * pTri[i] + 1], c = f[3 * pTri[i] + 2];
+      this.triA[i] = a;
+      this.triB[i] = b;
+      this.triC[i] = c;
+      const s = 1 - pU[i] - pV[i];
+      this.fade[i] = s * mesh.fade[a] + pU[i] * mesh.fade[b] + pV[i] * mesh.fade[c];
+    }
+
+    this.segments = new Int32Array(sA.length * 2);
+    for (let k = 0; k < sA.length; k++) {
+      this.segments[2 * k] = sA[k];
+      this.segments[2 * k + 1] = sB[k];
+    }
+    this.segTrack = new Int32Array(sTrack);
+    this.segAlong = new Float32Array(sAlong);
+    this.pads = new Int32Array(padList);
+    this.trackKind = new Int32Array(kinds);
+    this.trackCount = tracks;
+  }
+}
+
+// ── FiberHair (Port of FiberHair.kt — Optical Fibre Hologram Hair) ──────────
+
+export class FiberHair {
+  constructor(mesh) {
+    this.mesh = mesh;
+    this.rows = mesh.lockRows;
+    this.locks = Math.min(mesh.lockCount || 0, 1100);
+    this.perLock = 3;
+    const total = this.locks * this.perLock;
+    this.across = new Float32Array(total);
+    this.amp = new Float32Array(total);
+    this.freq = new Float32Array(total);
+    this.phase = new Float32Array(total);
+    this.pulse = new Uint8Array(total);
+    this.spark = new Uint8Array(total);
+
+    for (let l = 0; l < this.locks; l++) {
+      for (let f = 0; f < this.perLock; f++) {
+        const i = l * this.perLock + f;
+        const h = Math.imul(l * 31 + f * 1039, -1640531535);
+        this.across[i] = -0.9 + (1.8 * (f + 0.5 + 0.4 * (((h >>> 8) & 0xff) / 255 - 0.5))) / this.perLock;
+        this.amp[i] = 0.10 + (0.16 * ((h >>> 16) & 0xff)) / 255;
+        this.freq[i] = 1.0 + (1.8 * ((h >>> 4) & 0xff)) / 255;
+        this.phase[i] = (((h >>> 12) & 0xff) / 255) * 6.2832;
+        this.pulse[i] = ((h >>> 24) & 7) < 3 ? 1 : 0;
+        this.spark[i] = ((h >>> 20) & 7) < 3 ? 1 : 0;
+      }
+    }
+  }
+}
+
+// ── StructureEdges (Port of StructureEdges from AvatarRenderer.kt) ──────────
+
+export class StructureEdges {
+  constructor(a, b, face0, face1, crease) {
+    this.a = a;
+    this.b = b;
+    this.face0 = face0;
+    this.face1 = face1;
+    this.crease = crease;
+    this.count = a.length;
+  }
+
+  static build(mesh) {
+    const f = mesh.faces;
+    const v = mesh.verts;
+    const nrm = mesh.normals;
+    const nF = mesh.faceCount;
+    const fn = new Float32Array(nF * 3);
+
+    for (let t = 0; t < nF; t++) {
+      const i = f[3 * t], j = f[3 * t + 1], k = f[3 * t + 2];
+      const abx = v[3 * j] - v[3 * i], aby = v[3 * j + 1] - v[3 * i + 1], abz = v[3 * j + 2] - v[3 * i + 2];
+      const acx = v[3 * k] - v[3 * i], acy = v[3 * k + 1] - v[3 * i + 1], acz = v[3 * k + 2] - v[3 * i + 2];
+      let x = aby * acz - abz * acy;
+      let y = abz * acx - abx * acz;
+      let z = abx * acy - aby * acx;
+      const len = Math.max(Math.hypot(x, y, z), 1e-9);
+      x /= len; y /= len; z /= len;
+      const rx = nrm[3 * i] + nrm[3 * j] + nrm[3 * k];
+      const ry = nrm[3 * i + 1] + nrm[3 * j + 1] + nrm[3 * k + 1];
+      const rz = nrm[3 * i + 2] + nrm[3 * j + 2] + nrm[3 * k + 2];
+      if (x * rx + y * ry + z * rz < 0) { x = -x; y = -y; z = -z; }
+      fn[3 * t] = x; fn[3 * t + 1] = y; fn[3 * t + 2] = z;
+    }
+
+    const first = new Map();
+    const ea = [], eb = [], e0 = [], e1 = [];
+    const addEdge = (u, w, t) => {
+      const lo = Math.min(u, w), hi = Math.max(u, w);
+      const key = lo * 131072 + hi;
+      const idx = first.get(key);
+      if (idx === undefined) {
+        first.set(key, ea.length);
+        ea.push(lo); eb.push(hi); e0.push(t); e1.push(-1);
+      } else {
+        e1[idx] = t;
+      }
+    };
+
+    for (let t = 0; t < nF; t++) {
+      const i = f[3 * t], j = f[3 * t + 1], k = f[3 * t + 2];
+      addEdge(i, j, t);
+      addEdge(j, k, t);
+      addEdge(k, i, t);
+    }
+
+    const CREASE_MIN_COS = 0.93;
+    const crease = new Float32Array(ea.length);
+    for (let e = 0; e < ea.length; e++) {
+      const t0 = e0[e], t1 = e1[e];
+      if (t1 < 0) {
+        crease[e] = 1.0;
+      } else {
+        const dot = fn[3 * t0] * fn[3 * t1] + fn[3 * t0 + 1] * fn[3 * t1 + 1] + fn[3 * t0 + 2] * fn[3 * t1 + 2];
+        crease[e] = dot < CREASE_MIN_COS ? Math.max(0.05, Math.min(1, (CREASE_MIN_COS - dot) / 0.6)) : 0;
+      }
+    }
+
+    return new StructureEdges(
+      new Int32Array(ea),
+      new Int32Array(eb),
+      new Int32Array(e0),
+      new Int32Array(e1),
+      crease
+    );
   }
 }

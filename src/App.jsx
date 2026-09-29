@@ -42,7 +42,7 @@ export default function App() {
       role: 'assistant',
       text:
         'Bonjour ! Je suis Jarvis 2.0 Édition PC (application autonome sans serveur externe).\n' +
-        '• Avatar 3D temps réel (Léa, Marc, Adam, Mei, 23 coiffures, 10 teintes, lip-sync 60 FPS)\n' +
+        '• Avatar 3D haute définition (Classique à 84 000 polygones + circuits électriques, Léa, Marc, 23 coiffures, 11 teintes, lip-sync 60 FPS)\n' +
         '• Contrôle PC complet (applications, souris/clavier/fenêtres, capture d’écran, webcam, fichiers, PDF/Word/Excel)\n' +
         '• Carte du monde & orbites ISS, Voûte céleste, Radios en direct, Podcasts, YouTube et 82 plugins JSON intégrés.',
       timestamp: Date.now(),
@@ -241,11 +241,9 @@ export default function App() {
               <div className="avatar-quick-bar">
                 <div className="avatar-quick-group">
                   {[
+                    { id: 'classic', label: 'Classique 3D' },
                     { id: 'lea', label: 'Léa 3D' },
                     { id: 'marc', label: 'Marc 3D' },
-                    { id: 'adam', label: 'Adam (Buste 3D)' },
-                    { id: 'mei', label: 'Mei (Buste 3D)' },
-                    { id: 'classic', label: 'Classique' },
                   ].map((f) => (
                     <button
                       key={f.id}
@@ -256,12 +254,6 @@ export default function App() {
                     </button>
                   ))}
                   <button
-                    className={`space-pill ${cfg.avatarMode === 'cartoon' ? 'active' : ''}`}
-                    onClick={() => configStore.update({ avatarMode: 'cartoon', avatarFaceId: 'cartoon' })}
-                  >
-                    😊 Cartoon
-                  </button>
-                  <button
                     className={`space-pill ${cfg.avatarMode === 'reactor' ? 'active' : ''}`}
                     onClick={() => configStore.update({ avatarMode: 'reactor' })}
                   >
@@ -269,17 +261,40 @@ export default function App() {
                   </button>
                 </div>
 
-                {cfg.avatarMode === '3d' && !['adam', 'mei'].includes(cfg.avatarFaceId) && (
+                {cfg.avatarMode === '3d' && (
                   <div className="avatar-quick-group">
                     <button
-                      className={`space-pill ${!cfg.avatarSkin ? 'active' : ''}`}
-                      onClick={() => configStore.update({ avatarSkin: false })}
+                      className={`space-pill ${cfg.avatarSkin === 7 ? 'active' : ''}`}
+                      onClick={() => configStore.update({ avatarSkin: 7 })}
+                      title="Hologramme bleu + circuits électriques (défaut téléphone)"
                     >
-                      🌐 Hologramme
+                      ⚡ Holo Bleu + Circuits
                     </button>
                     <button
-                      className={`space-pill ${cfg.avatarSkin ? 'active' : ''}`}
-                      onClick={() => configStore.update({ avatarSkin: true })}
+                      className={`space-pill ${cfg.avatarSkin === 5 ? 'active' : ''}`}
+                      onClick={() => configStore.update({ avatarSkin: 5 })}
+                      title="Hologramme doré + circuits électriques"
+                    >
+                      ✨ Holo Or + Circuits
+                    </button>
+                    <button
+                      className={`space-pill ${cfg.avatarSkin === 6 ? 'active' : ''}`}
+                      onClick={() => configStore.update({ avatarSkin: 6 })}
+                      title="Hologramme + cheveux en fibres optiques + circuits"
+                    >
+                      💫 Fibres Optiques
+                    </button>
+                    <button
+                      className={`space-pill ${cfg.avatarSkin === 0 ? 'active' : ''}`}
+                      onClick={() => configStore.update({ avatarSkin: 0 })}
+                      title="Réseau polygonal lumineux + circuits électriques"
+                    >
+                      🕸️ Réseau Lumineux
+                    </button>
+                    <button
+                      className={`space-pill ${cfg.avatarSkin >= 1 && cfg.avatarSkin <= 4 ? 'active' : ''}`}
+                      onClick={() => configStore.update({ avatarSkin: 2 })}
+                      title="Peau réaliste 3D"
                     >
                       🎨 Peau 3D
                     </button>
@@ -294,6 +309,7 @@ export default function App() {
                   viseme={viseme}
                   faceId={cfg.avatarFaceId}
                   skin={cfg.avatarSkin}
+                  lips={cfg.avatarLips}
                   hairStyleId={cfg.avatarHair}
                   hairShadeId={cfg.avatarHairShade}
                   avatarMode={cfg.avatarMode}

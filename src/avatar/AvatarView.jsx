@@ -7,20 +7,17 @@ import {
   BLUE_HOLO_SKIN,
   HeadMesh,
   HairStyle,
-  CharacterMesh,
   recolourHair,
 } from './HeadMesh.js';
 import { HoloAvatar } from './Visemes.js';
 import {
   AvatarRenderer,
-  CharacterRenderer,
-  CartoonRenderer,
+  DEEP_BLUE,
   drawGlowReactor,
 } from './AvatarRenderer.js';
 
 const meshCache = new Map();
 const hairCache = new Map();
-const charCache = new Map();
 
 async function loadHeadMesh(url) {
   if (meshCache.has(url)) return meshCache.get(url);
@@ -44,27 +41,6 @@ async function loadHairStyle(id) {
   return parsed;
 }
 
-async function loadCharacterMesh(folder) {
-  if (charCache.has(folder)) return charCache.get(folder);
-  const [metaRes, binRes] = await Promise.all([
-    fetch(`${folder}/meta.json`),
-    fetch(`${folder}/mesh.bin`),
-  ]);
-  const meta = await metaRes.json();
-  const bin = await binRes.arrayBuffer();
-  const atlasImg = await new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = `${folder}/atlas.webp`;
-  });
-  const ch = CharacterMesh.parse(bin, meta, atlasImg);
-  const renderer = new CharacterRenderer(ch);
-  charCache.set(folder, renderer);
-  return renderer;
-}
-
 function moodForState(state) {
   if (state === 'LISTENING') return 'LISTENING';
   if (state === 'THINKING' || state === 'CONNECTING') return 'THINKING';
@@ -72,19 +48,22 @@ function moodForState(state) {
   return 'IDLE';
 }
 
-function resolveFaceSpec(faceId, avatarMode, config) {
-  if (avatarMode === 'cartoon') {
-    return BUILT_IN_FACES.find((f) => f.id === 'cartoon') || BUILT_IN_FACES[3];
-  }
+function resolveFaceSpec(faceId, config) {
   if (faceId) {
     const clean = String(faceId).replace(/^char:/, '').toLowerCase();
-    const mapId =
-      clean === 'female01' ? 'lea' : clean === 'male02' ? 'marc' : clean;
+    const mapId = clean === 'female01' ? 'lea' : clean === 'male02' ? 'marc' : clean;
     const found = BUILT_IN_FACES.find((f) => f.id === mapId);
     if (found) return found;
   }
-  const idx = config?.avatarModel ?? 1;
+  const idx = config?.avatarModel ?? 0;
   return BUILT_IN_FACES[Math.max(0, Math.min(BUILT_IN_FACES.length - 1, idx))];
+}
+
+function resolveSkinCode(skinProp, config) {
+  if (typeof skinProp === 'number') return skinProp;
+  if (typeof config?.avatarSkin === 'number') return config.avatarSkin;
+  if (skinProp === true) return 2; // Realistic skin (Mate)
+  return BLUE_HOLO_SKIN; // Default in Jarvis-Android: 7 (Hologramme bleu + circuits électriques)
 }
 
 export default function AvatarView({
@@ -94,8 +73,9 @@ export default function AvatarView({
   audioLevel = 0,
   viseme = null,
   timeline = null,
-  faceId = 'lea',
-  skin = false,
+  faceId = 'classic',
+  skin = BLUE_HOLO_SKIN,
+  lips = 0,
   hairStyleId = 'auto',
   hairShadeId = 'natural',
   avatarMode = '3d',
@@ -111,12 +91,10 @@ export default function AvatarView({
   const engineRef = useRef({
     renderer: null,
     avatar: null,
-    charRenderer: null,
-    cartoonRenderer: new CartoonRenderer(),
   });
   const [ready, setReady] = useState(false);
 
-  const faceSpec = resolveFaceSpec(faceId, avatarMode, config);
+  const faceSpec = resolveFaceSpec(faceId, config);
   const effectiveHairId =
     hairStyleId && hairStyleId !== 'auto' && hairStyleId !== 'none'
       ? hairStyleId
@@ -126,8 +104,8 @@ export default function AvatarView({
       ? hairShadeId
       : config?.avatarHairColour?.[faceSpec.label] || '';
   const showFace = avatarMode !== 'reactor' && config?.avatarFace !== false;
-  const skinMode = skin ? 2 : config?.avatarSkin ?? BLUE_HOLO_SKIN;
-  const lipTone = config?.avatarLips ?? 0;
+  const skinMode = resolveSkinCode(skin, config);
+  const lipTone = typeof lips === 'number' ? lips : config?.avatarLips ?? 0;
   const levelVal = Math.max(outputLevel || 0, audioLevel || 0);
 
   useEffect(() => {
@@ -139,24 +117,23 @@ export default function AvatarView({
         const targetColours = shade ? shade.colours : faceSpec.hairColours;
         let finalMesh = baseMesh;
 
-        if (effectiveHairId && !faceSpec.character && !faceSpec.cartoon) {
+        if (effectiveHairId) {
           const style = await loadHairStyle(effectiveHairId);
           if (style) {
             finalMesh = style.fitOn(baseMesh, targetColours);
           }
-        } else if (shade && !faceSpec.character && !faceSpec.cartoon) {
+        } else if (shade) {
           finalMesh = recolourHair(baseMesh, faceSpec.hairColours, targetColours);
         }
 
-        let charRend = null;
-        if (faceSpec.character) {
-          charRend = await loadCharacterMesh(faceSpec.character);
+        // Subdivide the Classic avatar head mesh (4x polygons with curved Phong normals)
+        if (faceSpec.subdivide) {
+          finalMesh = HeadMesh.subdivideSkin(finalMesh);
         }
 
         if (cancelled) return;
         engineRef.current.renderer = new AvatarRenderer(finalMesh);
         engineRef.current.avatar = new HoloAvatar(finalMesh);
-        engineRef.current.charRenderer = charRend;
         setReady(true);
       } catch (err) {
         console.error('Avatar load error:', err);
@@ -209,7 +186,7 @@ export default function AvatarView({
       lastMs = nowMs;
 
       const p = propsRef.current;
-      const { renderer, avatar, charRenderer, cartoonRenderer } = engineRef.current;
+      const { renderer, avatar } = engineRef.current;
 
       let frames = null;
       if (timeline) {
@@ -230,10 +207,10 @@ export default function AvatarView({
           w / 2,
           h / 2,
           Math.min(w, h) * 0.36,
-          p.primaryHex,
           p.state,
           level,
-          nowMs / 1000
+          nowMs / 1000,
+          p.primaryHex
         );
         ctx.restore();
         return;
@@ -244,29 +221,24 @@ export default function AvatarView({
 
       const r = Math.min(w, h) * (p.closeUp ? 0.52 : 0.38);
       const cx = w / 2;
-      const cy = h * (p.closeUp ? 0.48 : 0.47);
+      const cy = h * (p.closeUp ? 0.48 : 0.46);
 
-      if (p.faceSpec.character && charRenderer) {
-        charRenderer.draw(ctx, avatar, cx, cy, r, p.primaryHex);
-      } else if (p.faceSpec.cartoon) {
-        cartoonRenderer.draw(ctx, avatar, cx, cy, r, p.primaryHex);
-      } else {
-        const shade = HAIR_SHADES.find((s) => s.id === p.effectiveShadeId);
-        renderer.holo = p.skinMode >= HOLO_SKIN;
-        renderer.holoHair = p.skinMode === HOLO_HAIR_SKIN;
-        renderer.blueMix = p.skinMode >= BLUE_HOLO_SKIN;
-        renderer.skin = renderer.blueMix ? 5 : renderer.holo ? 2 : p.skinMode;
-        renderer.lips = p.lipTone;
-        renderer.browColour = renderer.holo
-          ? 0xff0c2160
-          : shade?.browColour ?? p.faceSpec.browColour;
-        renderer.browScale = p.faceSpec.browScale;
-        renderer.lashScale = p.faceSpec.lashScale;
-        renderer.androidLook = p.faceSpec.androidLook;
-        renderer.halo = p.faceSpec.halo;
-        renderer.lipTint = p.faceSpec.lipTint;
-        renderer.draw(ctx, avatar, cx, cy, r, p.primaryHex, p.accentHex, p.bgHex);
-      }
+      const shade = HAIR_SHADES.find((s) => s.id === p.effectiveShadeId);
+      renderer.holo = p.skinMode >= HOLO_SKIN;
+      renderer.holoHair = p.skinMode === HOLO_HAIR_SKIN;
+      renderer.blueMix = p.skinMode >= BLUE_HOLO_SKIN;
+      renderer.skin = renderer.blueMix ? 5 : renderer.holo ? 2 : p.skinMode;
+      renderer.lips = p.lipTone;
+      renderer.browColour = renderer.holo
+        ? DEEP_BLUE
+        : shade?.browColour ?? p.faceSpec.browColour;
+      renderer.browScale = p.faceSpec.browScale;
+      renderer.lashScale = p.faceSpec.lashScale;
+      renderer.androidLook = p.faceSpec.androidLook;
+      renderer.halo = p.faceSpec.halo;
+      renderer.lipTint = p.faceSpec.lipTint;
+      renderer.fibreOverlay = p.faceSpec.fibres !== false;
+      renderer.draw(ctx, avatar, cx, cy, r, p.primaryHex, p.accentHex, p.bgHex);
 
       ctx.restore();
     }

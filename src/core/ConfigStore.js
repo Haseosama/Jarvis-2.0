@@ -107,11 +107,17 @@ export const VOICE_PROFILES = {
 };
 
 export function normalizeFaceId(rawId) {
-  const s = String(rawId || 'lea').trim().toLowerCase().replace(/^char:/, '');
+  const s = String(rawId || 'classic').trim().toLowerCase().replace(/^char:/, '');
   if (s === 'female01') return 'lea';
   if (s === 'male02') return 'marc';
-  if (['lea', 'marc', 'adam', 'mei', 'classic', 'cartoon'].includes(s)) return s;
-  return 'lea';
+  if (['classic', 'lea', 'marc'].includes(s)) return s;
+  return 'classic';
+}
+
+export function normalizeSkinMode(rawSkin) {
+  if (typeof rawSkin === 'number' && rawSkin >= 0 && rawSkin <= 8) return rawSkin;
+  if (rawSkin === true) return 2;
+  return 7; // Default in Jarvis-Android: 7 (Hologramme bleu + circuits électriques)
 }
 
 const STORAGE_KEY = 'jarvis2_config_v1';
@@ -130,9 +136,10 @@ const DEFAULT_CONFIG = {
   ttsEnabled: true,
   speechRate: 1.05,
   // Avatar
-  avatarMode: '3d', // '3d' | 'cartoon' | 'reactor'
-  avatarFaceId: 'lea', // 'lea' | 'marc' | 'adam' | 'mei' | 'classic' | 'cartoon'
-  avatarSkin: false, // false = holo wireframe/surface, true = full skin shaded
+  avatarMode: '3d', // '3d' | 'reactor'
+  avatarFaceId: 'classic', // 'classic' | 'lea' | 'marc'
+  avatarSkin: 7, // 7 = Hologramme bleu + circuits, 5 = Hologramme or + circuits, 6 = Hologramme + fibres, 0 = Réseau lumineux, 1..4 = Peau
+  avatarLips: 0, // 0 = Naturelles, 1 = Rose, 2 = Rouge, 3 = Prune, 4 = Corail
   avatarHair: 'auto', // 'auto' | 'none' | style id
   avatarHairShade: 'natural',
   // User & Location
@@ -167,7 +174,9 @@ class ConfigStore {
         this.state = {
           ...DEFAULT_CONFIG,
           ...parsed,
+          avatarMode: parsed.avatarMode === 'reactor' ? 'reactor' : '3d',
           avatarFaceId: normalizeFaceId(parsed.avatarFaceId),
+          avatarSkin: normalizeSkinMode(parsed.avatarSkin),
         };
       }
     } catch {
@@ -184,7 +193,11 @@ class ConfigStore {
           ...DEFAULT_CONFIG,
           ...this.state,
           ...diskConfig,
+          avatarMode: (diskConfig.avatarMode || this.state.avatarMode) === 'reactor' ? 'reactor' : '3d',
           avatarFaceId: normalizeFaceId(diskConfig.avatarFaceId || this.state.avatarFaceId),
+          avatarSkin: normalizeSkinMode(
+            diskConfig.avatarSkin !== undefined ? diskConfig.avatarSkin : this.state.avatarSkin
+          ),
         };
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
@@ -213,11 +226,12 @@ class ConfigStore {
     const nextPatch = { ...patch };
     if (nextPatch.avatarFaceId !== undefined) {
       nextPatch.avatarFaceId = normalizeFaceId(nextPatch.avatarFaceId);
-      if (nextPatch.avatarFaceId === 'cartoon' && !nextPatch.avatarMode) {
-        nextPatch.avatarMode = 'cartoon';
-      } else if (nextPatch.avatarMode === undefined && this.state.avatarMode === 'cartoon' && nextPatch.avatarFaceId !== 'cartoon') {
-        nextPatch.avatarMode = '3d';
-      }
+    }
+    if (nextPatch.avatarSkin !== undefined) {
+      nextPatch.avatarSkin = normalizeSkinMode(nextPatch.avatarSkin);
+    }
+    if (nextPatch.avatarMode !== undefined && nextPatch.avatarMode !== 'reactor') {
+      nextPatch.avatarMode = '3d';
     }
     this.state = { ...this.state, ...nextPatch };
     try {

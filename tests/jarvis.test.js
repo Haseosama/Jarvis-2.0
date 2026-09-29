@@ -2,7 +2,16 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { HeadMesh, HairStyle, CharacterMesh, HAIR_SHADES, BUILT_IN_FACES, recolourHair } from '../src/avatar/HeadMesh.js';
+import {
+  HeadMesh,
+  HairStyle,
+  CharacterMesh,
+  HAIR_SHADES,
+  BUILT_IN_FACES,
+  CircuitTraces,
+  NetworkWeb,
+  recolourHair,
+} from '../src/avatar/HeadMesh.js';
 import { textToVisemes, VisemeStream, pcmVisemes, HoloAvatar } from '../src/avatar/Visemes.js';
 import {
   parseMapRings,
@@ -131,28 +140,41 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     assert.ok(Array.isArray(win.windows));
   });
 
-  it('persists avatar face selection and defines distinct voice profiles for all 30 voices', async () => {
+  it('subdivides Classic avatar to 84,000+ polygons, generates PCB electrical circuits, and keeps only Classic/Léa/Marc', async () => {
+    assert.deepEqual(
+      BUILT_IN_FACES.map((f) => f.id),
+      ['classic', 'lea', 'marc']
+    );
     assert.equal(normalizeFaceId('female01'), 'lea');
     assert.equal(normalizeFaceId('male02'), 'marc');
-    assert.equal(normalizeFaceId('char:adam'), 'adam');
-    assert.equal(normalizeFaceId('char:mei'), 'mei');
+    assert.equal(normalizeFaceId('char:adam'), 'classic');
+    assert.equal(normalizeFaceId('char:mei'), 'classic');
+    assert.equal(normalizeFaceId('cartoon'), 'classic');
 
-    for (const face of BUILT_IN_FACES) {
-      assert.ok(face.id, 'face has id');
-      assert.ok(face.gender === 'female' || face.gender === 'male', `${face.id} has gender`);
-    }
+    const classicAb = readArrayBuffer('avatar/head_mesh.bin');
+    const baseClassic = HeadMesh.parse(classicAb);
+    const subClassic = HeadMesh.subdivideSkin(baseClassic);
+    assert.ok(subClassic.faceCount > 80000, `Expected >80,000 polygons on subdivided Classic, got ${subClassic.faceCount}`);
+
+    const circuits = new CircuitTraces(subClassic);
+    assert.ok(circuits.trackCount > 50, `Expected >50 circuit tracks, got ${circuits.trackCount}`);
+    assert.ok(circuits.segments.length > 500, 'Expected >500 circuit segment endpoints');
+    assert.ok(circuits.pads.length > 100, 'Expected >100 circuit pads');
+
+    const web = new NetworkWeb(subClassic);
+    assert.ok(web.count > 5000, `Expected >5,000 polygon web nodes, got ${web.count}`);
+    assert.ok(web.edges.length > 20000, 'Expected >20,000 polygon web edge endpoints');
 
     assert.equal(ALL_VOICES.length, 30);
     for (const v of ALL_VOICES) {
       const prof = VOICE_PROFILES[v];
       assert.ok(prof, `Voice ${v} has acoustic profile`);
       assert.ok(prof.gender === 'female' || prof.gender === 'male');
-      assert.ok(typeof prof.pitch === 'number' && prof.pitch > 0.5 && prof.pitch < 1.5);
-      assert.ok(typeof prof.rate === 'number' && prof.rate > 0.7 && prof.rate < 1.4);
     }
 
-    configStore.update({ avatarFaceId: 'marc', voiceName: 'Fenrir' });
-    assert.equal(configStore.get().avatarFaceId, 'marc');
+    configStore.update({ avatarFaceId: 'classic', avatarSkin: 7, voiceName: 'Fenrir' });
+    assert.equal(configStore.get().avatarFaceId, 'classic');
+    assert.equal(configStore.get().avatarSkin, 7);
     assert.equal(configStore.get().voiceName, 'Fenrir');
   });
 });

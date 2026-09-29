@@ -1,12 +1,27 @@
-// Complete Canvas2D renderer porting AvatarRenderer.kt, CharacterRenderer.kt,
-// CartoonAvatar.kt, and GlowReactor from Jarvis-Android.
+// Complete port of AvatarRenderer.kt (including StructureEdges, NetworkWeb,
+// CircuitTraces, FiberHair, drawEtched, drawHalo, drawEyes, drawFeatures) and GlowReactor from Jarvis-Android.
 
-import { NetworkWeb, JAW_MAX } from './HeadMesh.js';
+import {
+  NetworkWeb,
+  CircuitTraces,
+  FiberHair,
+  StructureEdges,
+} from './HeadMesh.js';
 
 const CAM_D = 4.6;
 const LUT_N = 192;
+const MIN_ALPHA = 0.05;
+const BROW_HAIRS = 160;
+const LID_COLUMNS = 9;
+const HAIR_FIBRE_LOCKS = 600;
+const FIBRES_PER_LOCK = 8;
+
 const ANDROID_SKIN = 0xffcdd2d8;
-const DEEP_BLUE = 0xff0c2160;
+const ANDROID_GLOW = 0xff35c9ff;
+export const DEEP_BLUE = 0xff0c2160;
+const GOLD_CIRCUIT = 0xffffb640;
+const BLUE_HOT = 0xff8fc1ff;
+
 const SKIN_TONES = [0xf1c9a8, 0xd9a47c, 0xb07a54, 0x7a4e36, 0x69b4f0];
 const LIP_TONES = [0xd9707f, 0xc02836, 0x8e3a6b, 0xe8735a];
 
@@ -28,7 +43,12 @@ function intToCss(col, alphaOverride = null) {
   const b = col & 0xff;
   const a = alphaOverride !== null ? alphaOverride : ((col >>> 24) & 0xff) / 255;
   if (a >= 0.995) return `rgb(${r},${g},${b})`;
-  return `rgba(${r},${g},${b},${a.toFixed(3)})`;
+  return `rgba(${r},${g},${b},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+}
+
+function smooth01(e0, e1, x) {
+  const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
 }
 
 export class AvatarRenderer {
@@ -39,20 +59,42 @@ export class AvatarRenderer {
     this.xs = new Float32Array(this.nV);
     this.ys = new Float32Array(this.nV);
     this.faceColor = new Int32Array(this.nF);
+    this.faceFront = new Uint8Array(this.nF);
     this.faceZ = new Float32Array(this.nF);
     this.order = new Int32Array(this.nF);
     this.lut = new Int32Array(LUT_N);
     this.lutKey = '';
+
+    // High-density polygon web
     this.web = new NetworkWeb(mesh);
     this.wx = new Float32Array(this.web.count);
     this.wy = new Float32Array(this.web.count);
     this.wz = new Float32Array(this.web.count);
 
-    // Config properties updated before draw
-    this.skin = 1;
-    this.holo = false;
+    // Structural edges & scanner sweep
+    this.structure = StructureEdges.build(mesh);
+    this.scanY = 0;
+
+    // Electronic PCB circuit tracks & pads (lazy-initialized on first draw)
+    this._circuits = null;
+    this.cx = null;
+    this.cy = null;
+    this.cz = null;
+    this.etchKeep = null;
+
+    // Optical-fibre hologram hair
+    this._fiberHair = null;
+
+    // Pre-generated eyebrow hairs & eyelid curves (exact port of AvatarRenderer.kt)
+    this.browHairs = this._initBrowHairs();
+    this.lidCurves = this._initLidCurves();
+    this.lashRnd = this._initLashRnd();
+
+    // Renderer settings updated before draw
+    this.skin = 5; // 0 = web, 1..4 = skin tones, 5 = blue hologram skin
+    this.holo = true;
     this.holoHair = false;
-    this.blueMix = false;
+    this.blueMix = true;
     this.fibreOverlay = true;
     this.browColour = 0xff34241c;
     this.browScale = 1.0;
@@ -61,7 +103,92 @@ export class AvatarRenderer {
     this.lipTint = 0.7;
     this.halo = false;
     this.lips = 0;
-    this.cap = 0;
+  }
+
+  get circuits() {
+    if (!this._circuits) {
+      this._circuits = new CircuitTraces(this.mesh);
+      this.cx = new Float32Array(this._circuits.count);
+      this.cy = new Float32Array(this._circuits.count);
+      this.cz = new Float32Array(this._circuits.count);
+    }
+    return this._circuits;
+  }
+
+  get fiberHair() {
+    if (!this._fiberHair) {
+      this._fiberHair = new FiberHair(this.mesh);
+    }
+    return this._fiberHair;
+  }
+
+  _initBrowHairs() {
+    let seed = 11;
+    const rnd = () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    const list = [];
+    for (let i = 0; i < BROW_HAIRS; i++) {
+      list.push({
+        u: rnd(),
+        off: rnd() * 2 - 1,
+        len: 0.7 + 0.6 * rnd(),
+        jitter: (rnd() - 0.5) * 0.4,
+      });
+    }
+    return list;
+  }
+
+  _initLashRnd() {
+    const out = new Float32Array(40);
+    for (let i = 0; i < 40; i++) {
+      const h = Math.imul(23 + i, -1640531535) >>> 0;
+      out[i] = (h & 0xffff) / 65535;
+    }
+    return out;
+  }
+
+  _initLidCurves() {
+    const mesh = this.mesh;
+    const eyes = mesh.eyeFirst ? mesh.eyeFirst.length : 0;
+    const rim = mesh.eyelidRim || new Int32Array(0);
+    const curves = [];
+    for (let e = 0; e < eyes; e++) {
+      const pair = [];
+      for (let flag = 0; flag < 2; flag++) {
+        const set = new Set();
+        for (let k = 0; k < (rim.length / 3) | 0; k++) {
+          if (rim[3 * k + 2] !== flag) continue;
+          for (const v of [rim[3 * k], rim[3 * k + 1]]) {
+            const x = mesh.verts[3 * v];
+            let bestEye = 0;
+            let bestDist = Infinity;
+            for (let ei = 0; ei < eyes; ei++) {
+              const d = Math.abs(mesh.eyeCentre[3 * ei] - x);
+              if (d < bestDist) { bestDist = d; bestEye = ei; }
+            }
+            if (bestEye === e) set.add(v);
+          }
+        }
+        const verts = Int32Array.from(set);
+        let lo = Infinity, hi = -Infinity;
+        for (const v of verts) {
+          const x = mesh.verts[3 * v];
+          if (x < lo) lo = x;
+          if (x > hi) hi = x;
+        }
+        if (!Number.isFinite(lo)) { lo = 0; hi = 1; }
+        const span = Math.max(hi - lo, 1e-4);
+        const column = new Int32Array(verts.length);
+        for (let i = 0; i < verts.length; i++) {
+          column[i] = Math.max(0, Math.min(LID_COLUMNS - 1, Math.floor(((mesh.verts[3 * verts[i]] - lo) / span) * (LID_COLUMNS - 1))));
+        }
+        pair.push({ verts, column });
+      }
+      curves.push(pair);
+    }
+    return curves;
   }
 
   buildLut(bg, primary) {
@@ -162,48 +289,43 @@ export class AvatarRenderer {
 
   draw(ctx, avatar, cx, cy, r, primary, accent, bg) {
     avatar.pose();
+    this.scanY = avatar.scan || 0;
     const amp = avatar.glow;
     const v = avatar.pv;
     const nrm = avatar.pn;
     const mesh = this.mesh;
+    const strokePx = Math.max(1.0, r / 170);
 
     // 1. Radial aura
-    const ar = r * 1.9;
+    const ar = r * 1.95;
     const prR = (primary >> 16) & 0xff, prG = (primary >> 8) & 0xff, prB = primary & 0xff;
     const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, ar);
-    grad.addColorStop(0, `rgba(${prR},${prG},${prB},${(0.13 + 0.25 * amp).toFixed(3)})`);
-    grad.addColorStop(0.4, `rgba(${prR},${prG},${prB},${(0.07 + 0.14 * amp).toFixed(3)})`);
+    grad.addColorStop(0, `rgba(${prR},${prG},${prB},${((34 + 66 * amp) / 255).toFixed(3)})`);
+    grad.addColorStop(0.38, `rgba(${prR},${prG},${prB},${((20 + 40 * amp) / 255).toFixed(3)})`);
     grad.addColorStop(1, `rgba(${prR},${prG},${prB},0)`);
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(cx, cy, ar, 0, Math.PI * 2);
     ctx.fill();
 
-    // 2. Optional Léa halo
+    // 2. Multi-ring breathing halo (Léa)
     if (this.halo) {
-      ctx.save();
-      const hr = r * 1.15;
-      ctx.strokeStyle = `rgba(53,201,255,${(0.28 + 0.28 * amp).toFixed(3)})`;
-      ctx.lineWidth = Math.max(2, r * 0.022);
-      ctx.beginPath();
-      ctx.arc(cx, cy - r * 0.06, hr, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
+      this.drawHalo(ctx, cx, cy, r, amp, avatar.time);
     }
 
-    // 3. Drifting particles of light
-    for (let k = 0; k < 24; k++) {
-      const h = ((k * -1640531535) >>> 8) & 0xffff;
+    // 3. Drifting points of light in the dark (26 particles as in AvatarRenderer.kt)
+    for (let k = 0; k < 26; k++) {
+      const h = (Math.imul(k, -1640531535) >>> 8) & 0xffff;
       const ang = (h % 628) / 100 + 0.05 * avatar.time * (k % 2 === 0 ? 1 : -1);
-      const dist = r * (1.1 + 0.8 * (((h / 7) | 0) % 100) / 100);
+      const dist = r * (1.15 + 0.85 * ((((h / 7) | 0) % 100) / 100));
       const tw = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(avatar.time * (0.8 + (h % 5) * 0.3) + k));
-      ctx.fillStyle = `rgba(${prR},${prG},${prB},${(0.55 * tw).toFixed(3)})`;
+      ctx.fillStyle = `rgba(${prR},${prG},${prB},${((150 * tw) / 255).toFixed(3)})`;
       ctx.beginPath();
-      ctx.arc(cx + Math.cos(ang) * dist * 0.82, cy + Math.sin(ang) * dist * 1.02, 1.3 + (h % 2), 0, Math.PI * 2);
+      ctx.arc(cx + Math.cos(ang) * dist * 0.8, cy + Math.sin(ang) * dist * 1.05, 1.2 + (h % 3), 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // 4. Project vertices
+    // 4. Project 3D vertices to screen space
     for (let i = 0; i < this.nV; i++) {
       const w = Math.max(CAM_D - v[3 * i + 2], 0.35);
       const k = (CAM_D / w) * r;
@@ -217,6 +339,8 @@ export class AvatarRenderer {
     let count = 0;
     const f = mesh.faces;
     const fade = mesh.fade;
+    this.faceFront.fill(0);
+
     for (let t = 0; t < this.nF; t++) {
       const a = f[3 * t], b = f[3 * t + 1], c = f[3 * t + 2];
       const abx = v[3 * b] - v[3 * a], aby = v[3 * b + 1] - v[3 * a + 1], abz = v[3 * b + 2] - v[3 * a + 2];
@@ -231,10 +355,11 @@ export class AvatarRenderer {
       const rz = nrm[3 * a + 2] + nrm[3 * b + 2] + nrm[3 * c + 2];
       if (nx * rx + ny * ry + nz * rz < 0) { nx = -nx; ny = -ny; nz = -nz; }
       if (nz < 0 && mesh.faceGroup[t] > 2.25) { nx = -nx; ny = -ny; nz = -nz; }
-      if (nz <= 0.015) continue;
+      if (nz > 0.015) this.faceFront[t] = 1;
+      else continue;
 
       const area = Math.abs((this.xs[b] - this.xs[a]) * (this.ys[c] - this.ys[a]) - (this.xs[c] - this.xs[a]) * (this.ys[b] - this.ys[a]));
-      if (area <= 2.2) continue;
+      if (area <= 0.8) continue;
 
       if ((this.skin === 0 || (this.holo && !this.holoHair)) && mesh.faceGroup[t] > 1.5) continue;
       const fadeAvg = (fade[a] + fade[b] + fade[c]) / 3;
@@ -272,7 +397,7 @@ export class AvatarRenderer {
     const faceZ = this.faceZ;
     activeOrder.sort((t1, t2) => faceZ[t1] - faceZ[t2]);
 
-    // 6. Draw triangles
+    // 6. Draw 3D surface triangles
     for (let k = 0; k < count; k++) {
       const t = activeOrder[k];
       const a = f[3 * t], b = f[3 * t + 1], d = f[3 * t + 2];
@@ -281,32 +406,96 @@ export class AvatarRenderer {
       const x2 = this.xs[d], y2 = this.ys[d];
       const tcx = (x0 + x1 + x2) / 3, tcy = (y0 + y1 + y2) / 3;
 
-      const col = intToCss(this.faceColor[t], 1);
-      ctx.fillStyle = col;
+      ctx.fillStyle = intToCss(this.faceColor[t], 1);
       ctx.beginPath();
-      // Slightly expand each triangle by ~0.45px from centroid to avoid seam gaps
-      const gx0 = x0 + (x0 - tcx > 0 ? 0.45 : -0.45), gy0 = y0 + (y0 - tcy > 0 ? 0.45 : -0.45);
-      const gx1 = x1 + (x1 - tcx > 0 ? 0.45 : -0.45), gy1 = y1 + (y1 - tcy > 0 ? 0.45 : -0.45);
-      const gx2 = x2 + (x2 - tcx > 0 ? 0.45 : -0.45), gy2 = y2 + (y2 - tcy > 0 ? 0.45 : -0.45);
-      ctx.moveTo(gx0, gy0);
-      ctx.lineTo(gx1, gy1);
-      ctx.lineTo(gx2, gy2);
+      const dx0 = x0 - tcx, dy0 = y0 - tcy, g0 = 0.55 / Math.max(Math.abs(dx0) + Math.abs(dy0), 0.55);
+      const dx1 = x1 - tcx, dy1 = y1 - tcy, g1 = 0.55 / Math.max(Math.abs(dx1) + Math.abs(dy1), 0.55);
+      const dx2 = x2 - tcx, dy2 = y2 - tcy, g2 = 0.55 / Math.max(Math.abs(dx2) + Math.abs(dy2), 0.55);
+      ctx.moveTo(x0 + dx0 * g0, y0 + dy0 * g0);
+      ctx.lineTo(x1 + dx1 * g1, y1 + dy1 * g1);
+      ctx.lineTo(x2 + dx2 * g2, y2 + dy2 * g2);
       ctx.closePath();
       ctx.fill();
     }
 
-    // 7. Holographic Web / Etched Android Circuits
-    if (this.skin === 0 || this.holo || this.androidLook) {
-      this.drawWebOverlay(ctx, nrm, amp, primary, avatar.time);
+    // 7. Structural Polygon Edges & Energy Scanner Sweep (on Web and Hologram modes)
+    if (this.skin === 0 || this.holo) {
+      this.drawWire(ctx, v, amp, primary, bg, strokePx);
     }
 
-    // 8. Facial features (brows, eyes, catchlights, lip lines)
-    this.drawFeatures(ctx, avatar, r, primary);
+    // 8. High-Density Poisson-Disc Polygon Web & Twinkling Nodes
+    this.drawWeb(ctx, nrm, amp, primary, strokePx, avatar.time);
+
+    // 9. Electronic Circuit Tracks, Running Light Pulses & Terminal Pads (Phone Version!)
+    if (this.holo || this.skin === 0) {
+      this.drawCircuits(ctx, nrm, amp, primary, bg, strokePx, avatar.time);
+    } else if (this.androidLook && this.skin > 0) {
+      this.drawEtched(ctx, nrm, amp, strokePx, avatar.time);
+    }
+
+    // 10. Optical-Fibre Hologram Hair or Realistic Hair Strands
+    if (this.holoHair) {
+      this.drawFiberHair(ctx, nrm, primary, GOLD_CIRCUIT, avatar.time, strokePx);
+    } else if (this.fibreOverlay && this.skin > 0 && !this.holo) {
+      this.drawFibres(ctx, v, nrm, strokePx);
+    }
+
+    // 11. Facial features (160 brow hairs, smooth lid curves, 15+7 lashes, catchlights, lip chains)
+    this.drawFeatures(ctx, avatar, r, primary, strokePx);
   }
 
-  drawWebOverlay(ctx, nrm, amp, primary, t) {
+  // ── Structural Wireframe & Scanner Sweep (AvatarRenderer.kt drawWire) ───────
+
+  drawWire(ctx, v, amp, primary, bg, strokePx) {
+    const st = this.structure;
+    const scan = this.scanY;
+    const gain = (0.80 + 0.45 * amp) * (this.holo ? 0.45 : 0.85);
+    const buckets = [[], [], [], []];
+
+    for (let k = 0; k < st.count; k++) {
+      const f0 = st.face0[k], f1 = st.face1[k];
+      const front0 = this.faceFront[f0] === 1;
+      const front1 = f1 >= 0 ? this.faceFront[f1] === 1 : front0;
+      if (!front0 && !front1) continue;
+      const i0 = st.a[k], i1 = st.b[k];
+      const silhouette = front0 !== front1;
+      const fadeE = 0.5 * (this.mesh.fade[i0] + this.mesh.fade[i1]);
+      let alpha = silhouette ? 0.55 : st.crease[k] > 0 ? 0.14 + 0.38 * st.crease[k] : 0;
+
+      // Energy scanner sweep
+      const ym = 0.5 * (v[3 * i0 + 1] + v[3 * i1 + 1]);
+      const d = (ym - scan) / 0.13;
+      alpha += 0.34 * Math.exp(-d * d);
+      alpha *= fadeE * gain;
+      if (alpha <= MIN_ALPHA) continue;
+      const bkt = Math.max(0, Math.min(3, (alpha * 4) | 0));
+      buckets[bkt].push(i0, i1);
+    }
+
+    const baseCol = mixInt(bg, primary, 0.52);
+    ctx.lineWidth = Math.max(0.7, strokePx * 0.75);
+    for (let b = 0; b < 4; b++) {
+      const arr = buckets[b];
+      if (!arr.length) continue;
+      const a = Math.min(1, (b + 0.5) / 4) * 0.8;
+      ctx.strokeStyle = intToCss(mixInt(baseCol, primary, a), a);
+      ctx.beginPath();
+      for (let i = 0; i < arr.length; i += 2) {
+        const i0 = arr[i], i1 = arr[i + 1];
+        ctx.moveTo(this.xs[i0], this.ys[i0]);
+        ctx.lineTo(this.xs[i1], this.ys[i1]);
+      }
+      ctx.stroke();
+    }
+  }
+
+  // ── High-Density Polygon Web & Twinkling Nodes (AvatarRenderer.kt drawWeb) ──
+
+  drawWeb(ctx, nrm, amp, primary, strokePx, t) {
+    if (this.skin > 0 && !this.holo) return;
     const w = this.web;
-    const prR = (primary >> 16) & 0xff, prG = (primary >> 8) & 0xff, prB = primary & 0xff;
+    const gain = (0.85 + 0.5 * amp) * (this.holo ? 0.38 : 1.0);
+
     for (let i = 0; i < w.count; i++) {
       const a = w.triA[i], b = w.triB[i], c = w.triC[i];
       const u = w.wu[i], q = w.wv[i], s = 1 - u - q;
@@ -314,81 +503,724 @@ export class AvatarRenderer {
       this.wy[i] = s * this.ys[a] + u * this.ys[b] + q * this.ys[c];
       this.wz[i] = s * nrm[3 * a + 2] + u * nrm[3 * b + 2] + q * nrm[3 * c + 2];
     }
-    const alphaScale = this.skin === 0 ? 0.42 : this.holo ? 0.22 : 0.14;
-    ctx.strokeStyle = `rgba(${prR},${prG},${prB},${(alphaScale * (0.8 + 0.4 * amp)).toFixed(3)})`;
-    ctx.lineWidth = 0.85;
-    ctx.beginPath();
+
+    // 1. Web polygon edges (4 Fresnel buckets)
+    const lineBuckets = [[], [], [], []];
     const e = w.edges;
     for (let k = 0; k < e.length; k += 2) {
       const i = e[k], j = e[k + 1];
-      if (this.wz[i] < 0.08 || this.wz[j] < 0.08) continue;
-      if (this.skin > 0 && this.wz[i] > 0.55 && this.wz[j] > 0.55) continue; // keep contour only on solid skin
-      ctx.moveTo(this.wx[i], this.wy[i]);
-      ctx.lineTo(this.wx[j], this.wy[j]);
+      const nzi = this.wz[i], nzj = this.wz[j];
+      if (nzi < 0.05 && nzj < 0.05) continue;
+      // On solid hologram skin, keep the polygon web focused around the contour and relief
+      if (this.holo && nzi > 0.72 && nzj > 0.72) continue;
+      const fres = Math.pow(Math.max(0, Math.min(1, 1 - 0.5 * (nzi + nzj))), 2.4);
+      let a = (0.30 + 0.55 * fres) * 0.5 * (w.fade[i] * w.fade[i] + w.fade[j] * w.fade[j]) * gain;
+      if (nzi < 0.15 || nzj < 0.15) a *= 0.6;
+      if (a <= MIN_ALPHA) continue;
+      const bk = Math.max(0, Math.min(3, (a * 4) | 0));
+      lineBuckets[bk].push(i, j);
     }
-    ctx.stroke();
-  }
 
-  drawFeatures(ctx, avatar, r, primary) {
-    const face = Math.pow(Math.max(0, Math.cos(avatar.yaw) * Math.cos(avatar.pitch)), 2);
-    if (face < 0.02) return;
-    const mesh = this.mesh;
-    const lm = mesh.landmarks;
-    const hairCol = this.holo ? DEEP_BLUE : this.browColour;
-
-    // Brows
-    for (const key of ['brow_l', 'brow_r']) {
-      const idx = lm[key];
-      if (!idx || idx.length === 0) continue;
-      ctx.strokeStyle = intToCss(this.skin === 0 ? primary : hairCol, 0.78 * face);
-      ctx.lineWidth = Math.max(1.8, r * 0.028 * this.browScale);
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(0.75, strokePx * 0.6);
+    for (let bk = 0; bk < 4; bk++) {
+      const arr = lineBuckets[bk];
+      if (!arr.length) continue;
+      const alpha = ((bk + 0.5) / 4) * (this.holo ? 0.48 : 0.92);
+      ctx.strokeStyle = intToCss(primary, alpha);
       ctx.beginPath();
-      for (let i = 0; i < idx.length; i++) {
-        const vi = idx[i];
-        if (i === 0) ctx.moveTo(this.xs[vi], this.ys[vi]);
-        else ctx.lineTo(this.xs[vi], this.ys[vi]);
+      for (let m = 0; m < arr.length; m += 2) {
+        const i = arr[m], j = arr[m + 1];
+        ctx.moveTo(this.wx[i], this.wy[i]);
+        ctx.lineTo(this.wx[j], this.wy[j]);
       }
       ctx.stroke();
     }
 
-    // Eyelid rims & catchlights
-    const open = Math.max(0, Math.min(1, (1 - avatar.blink) * avatar.lids));
-    const lashCol = this.holo ? DEEP_BLUE : this.skin === 0 ? primary : 0xff16100e;
-    ctx.strokeStyle = intToCss(lashCol, 0.85 * face);
-    ctx.lineWidth = Math.max(1.2, r * 0.011 * this.lashScale);
-    ctx.beginPath();
-    for (let i = 0; i < mesh.eyelidRim.length; i += 3) {
-      const v0 = mesh.eyelidRim[i], v1 = mesh.eyelidRim[i + 1], upper = mesh.eyelidRim[i + 2];
-      if (upper === 1) {
-        ctx.moveTo(this.xs[v0], this.ys[v0]);
-        ctx.lineTo(this.xs[v1], this.ys[v1]);
+    // 2. Twinkling polygon nodes (3 size/brightness buckets)
+    const nodeBuckets = [[], [], []];
+    for (let i = 0; i < w.count; i++) {
+      const nz = this.wz[i];
+      if (nz < 0 || w.fade[i] < 0.25) continue;
+      const fres = Math.pow(Math.max(0, Math.min(1, 1 - nz)), 2.4);
+      const tw = 0.8 + 0.2 * Math.sin(t * 2.1 + i * 1.7);
+      const br = (0.55 + 0.9 * fres) * tw * w.fade[i] * w.fade[i];
+      const hash = (Math.imul(i, -1640531535) >>> 16) & 0xff;
+      const bk = br > 0.85 || hash > 236 ? 2 : br > 0.5 ? 1 : 0;
+      if (this.holo && (bk < 1 || nz > 0.65)) continue;
+      nodeBuckets[bk].push(i);
+    }
+
+    const radii = [0.7, 1.1, 1.7];
+    const alphas = [0.62, 0.82, 1.0];
+    for (let bk = 0; bk < 3; bk++) {
+      const arr = nodeBuckets[bk];
+      if (!arr.length) continue;
+      const col = bk === 2 ? mixInt(primary, 0xffffffff, 0.55) : primary;
+      ctx.fillStyle = intToCss(col, alphas[bk] * (this.holo ? 0.65 : 1.0));
+      const rad = radii[bk] * Math.max(0.8, Math.min(1.6, strokePx / 2.2));
+      ctx.beginPath();
+      for (let m = 0; m < arr.length; m++) {
+        const i = arr[m];
+        ctx.moveTo(this.wx[i] + rad, this.wy[i]);
+        ctx.arc(this.wx[i], this.wy[i], rad, 0, Math.PI * 2);
+      }
+      ctx.fill();
+    }
+  }
+
+  // ── Electronic Circuit Tracks, Pulses & Pads (AvatarRenderer.kt drawCircuits) ──
+
+  drawCircuits(ctx, nrm, amp, primary, bg, strokePx, t) {
+    const c = this.circuits;
+    if (!c || c.count === 0) return;
+
+    for (let i = 0; i < c.count; i++) {
+      const a = c.triA[i], b = c.triB[i], d = c.triC[i];
+      const u = c.wu[i], q = c.wv[i], w = 1 - u - q;
+      this.cx[i] = w * this.xs[a] + u * this.xs[b] + q * this.xs[d];
+      this.cy[i] = w * this.ys[a] + u * this.ys[b] + q * this.ys[d];
+      this.cz[i] = w * nrm[3 * a + 2] + u * nrm[3 * b + 2] + q * nrm[3 * d + 2];
+    }
+
+    const circuitBuckets = [[], [], [], [], [], []];
+    const gain = 0.85 + 0.4 * amp;
+    const segCount = (c.segments.length / 2) | 0;
+
+    for (let k = 0; k < segCount; k++) {
+      const i = c.segments[2 * k], j = c.segments[2 * k + 1];
+      const face = smooth01(0.10, 0.45, Math.min(this.cz[i], this.cz[j]));
+      if (face <= 0) continue;
+
+      // Running light pulse along each electronic track
+      const phase = (t * 0.32 + c.segTrack[k] * 0.137) % 1.25;
+      const d = (c.segAlong[k] - phase) / 0.07;
+      const a = (0.42 + 0.58 * Math.exp(-d * d)) * face * (c.fade[i] + c.fade[j]) * 0.5 * gain;
+      const level = a > 0.75 ? 2 : a > 0.45 ? 1 : 0;
+      const kind = this.blueMix ? c.trackKind[c.segTrack[k]] : 0;
+      const bk = kind * 3 + level;
+      circuitBuckets[bk].push(i, j);
+    }
+
+    const gold = GOLD_CIRCUIT;
+    const goldHot = mixInt(gold, 0xffffff, 0.6);
+    const blueHot = BLUE_HOT;
+
+    ctx.save();
+    ctx.lineCap = 'round';
+
+    // 1. Wide glowing gold halo under the gold circuit tracks
+    const haloAlphas = [38 / 255, 58 / 255, 88 / 255];
+    for (let level = 0; level < 3; level++) {
+      const arr = circuitBuckets[level];
+      if (!arr.length) continue;
+      ctx.lineWidth = Math.max(3.4, strokePx * (2.6 + 0.9 * level));
+      ctx.strokeStyle = intToCss(gold, haloAlphas[level]);
+      ctx.beginPath();
+      for (let m = 0; m < arr.length; m += 2) {
+        const i = arr[m], j = arr[m + 1];
+        ctx.moveTo(this.cx[i], this.cy[i]);
+        ctx.lineTo(this.cx[j], this.cy[j]);
+      }
+      ctx.stroke();
+    }
+
+    // 2. Crisp gold & deep-blue electronic circuit tracks + bright running light pulses
+    const lineAlphas = [195 / 255, 238 / 255, 1.0];
+    for (let bk = 0; bk < 6; bk++) {
+      const arr = circuitBuckets[bk];
+      if (!arr.length) continue;
+      const kind = (bk / 3) | 0;
+      const level = bk % 3;
+      ctx.lineWidth = Math.max(1.3, strokePx * (0.78 + 0.32 * level));
+      const base = kind === 1 ? DEEP_BLUE : gold;
+      const hot = kind === 1 ? blueHot : goldHot;
+      ctx.strokeStyle = intToCss(level === 2 ? hot : base, lineAlphas[level]);
+      ctx.beginPath();
+      for (let m = 0; m < arr.length; m += 2) {
+        const i = arr[m], j = arr[m + 1];
+        ctx.moveTo(this.cx[i], this.cy[i]);
+        ctx.lineTo(this.cx[j], this.cy[j]);
+      }
+      ctx.stroke();
+    }
+
+    // 3. Round terminal circuit pads (outer ring + inner center)
+    const outerR = Math.max(1.9, strokePx * 1.25);
+    const innerR = Math.max(0.85, strokePx * 0.52);
+    for (let kind = 0; kind < 2; kind++) {
+      const padPoints = [];
+      for (let idx = 0; idx < c.pads.length; idx++) {
+        const p = c.pads[idx];
+        const trackK = this.blueMix ? c.trackKind[(idx / 2) | 0] : 0;
+        if (trackK !== kind) continue;
+        if (smooth01(0.10, 0.45, this.cz[p]) <= 0) continue;
+        padPoints.push(p);
+      }
+      if (padPoints.length > 0) {
+        ctx.fillStyle = intToCss(kind === 1 ? DEEP_BLUE : gold, 0.96);
+        ctx.beginPath();
+        for (const p of padPoints) {
+          ctx.moveTo(this.cx[p] + outerR, this.cy[p]);
+          ctx.arc(this.cx[p], this.cy[p], outerR, 0, Math.PI * 2);
+        }
+        ctx.fill();
+
+        ctx.fillStyle = intToCss(kind === 1 ? 0xffbfdcff : bg, 1.0);
+        ctx.beginPath();
+        for (const p of padPoints) {
+          ctx.moveTo(this.cx[p] + innerR, this.cy[p]);
+          ctx.arc(this.cx[p], this.cy[p], innerR, 0, Math.PI * 2);
+        }
+        ctx.fill();
       }
     }
-    ctx.stroke();
 
-    if (open > 0.38) {
-      for (let e = 0; e < mesh.eyeFirst.length; e++) {
+    ctx.restore();
+  }
+
+  // ── Etched Porcelain Circuits for Léa (AvatarRenderer.kt drawEtched) ────────
+
+  _getEtchKeep(c) {
+    if (this.etchKeep && this.etchKeep.length === c.count) return this.etchKeep;
+    const v = this.mesh.verts;
+    let mid = 0, n = 0;
+    for (const name of ['eye_l', 'eye_r']) {
+      const ring = this.mesh.landmarks[name] || [];
+      for (const i of ring) { mid += v[3 * i]; n++; }
+    }
+    mid = n > 0 ? mid / n : 0;
+    const trackOf = new Int32Array(c.count).fill(-1);
+    for (let k = 0; k < (c.segments.length / 2) | 0; k++) {
+      trackOf[c.segments[2 * k]] = c.segTrack[k];
+      trackOf[c.segments[2 * k + 1]] = c.segTrack[k];
+    }
+    const keep = new Uint8Array(c.count);
+    for (let i = 0; i < c.count; i++) {
+      const a = c.triA[i], b = c.triB[i], d = c.triC[i];
+      const u = c.wu[i], q = c.wv[i], w = 1 - u - q;
+      const x = w * v[3 * a] + u * v[3 * b] + q * v[3 * d] - mid;
+      const y = w * v[3 * a + 1] + u * v[3 * b + 1] + q * v[3 * d + 1];
+      const ax = Math.abs(x);
+      const forehead = y >= 0.16 && y <= 0.40 && ax >= 0.06 && ax <= 0.46;
+      const cheek = y >= -0.62 && y <= 0.05 && ax >= 0.30 && ax <= 0.62;
+      if ((forehead || cheek) && trackOf[i] % 2 === 0) keep[i] = 1;
+    }
+    this.etchKeep = keep;
+    return keep;
+  }
+
+  drawEtched(ctx, nrm, amp, strokePx, t) {
+    const c = this.circuits;
+    if (!c || c.count === 0) return;
+
+    for (let i = 0; i < c.count; i++) {
+      const a = c.triA[i], b = c.triB[i], d = c.triC[i];
+      const u = c.wu[i], q = c.wv[i], w = 1 - u - q;
+      this.cx[i] = w * this.xs[a] + u * this.xs[b] + q * this.xs[d];
+      this.cy[i] = w * this.ys[a] + u * this.ys[b] + q * this.ys[d];
+      this.cz[i] = w * nrm[3 * a + 2] + u * nrm[3 * b + 2] + q * nrm[3 * d + 2];
+    }
+
+    const keep = this._getEtchKeep(c);
+    const buckets = [[], []];
+    const segCount = (c.segments.length / 2) | 0;
+
+    for (let k = 0; k < segCount; k++) {
+      const i = c.segments[2 * k], j = c.segments[2 * k + 1];
+      if (!keep[i] || !keep[j]) continue;
+      const face = smooth01(0.15, 0.50, Math.min(this.cz[i], this.cz[j])) * (c.fade[i] + c.fade[j]) * 0.5;
+      if (face <= 0.05) continue;
+      const phase = (t * 0.22 + c.segTrack[k] * 0.211) % 1.6;
+      const d = (c.segAlong[k] - phase) / 0.06;
+      const bk = Math.exp(-d * d) > 0.35 ? 1 : 0;
+      buckets[bk].push(i, j);
+    }
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (let bk = 0; bk <= 1; bk++) {
+      const arr = buckets[bk];
+      if (!arr.length) continue;
+      // Pale highlight groove edge
+      ctx.lineWidth = Math.max(1.6, strokePx * 1.05);
+      ctx.strokeStyle = 'rgba(244,247,250,0.47)';
+      ctx.beginPath();
+      const dy = Math.max(0.8, strokePx * 0.35);
+      for (let m = 0; m < arr.length; m += 2) {
+        const i = arr[m], j = arr[m + 1];
+        ctx.moveTo(this.cx[i], this.cy[i] + dy);
+        ctx.lineTo(this.cx[j], this.cy[j] + dy);
+      }
+      ctx.stroke();
+
+      // Etched darker groove line
+      ctx.lineWidth = Math.max(1.1, strokePx * 0.62);
+      ctx.strokeStyle = 'rgba(125,132,142,0.84)';
+      ctx.beginPath();
+      for (let m = 0; m < arr.length; m += 2) {
+        const i = arr[m], j = arr[m + 1];
+        ctx.moveTo(this.cx[i], this.cy[i]);
+        ctx.lineTo(this.cx[j], this.cy[j]);
+      }
+      ctx.stroke();
+    }
+
+    // Running cyan pulse along etched tracks
+    if (buckets[1].length > 0) {
+      const arr = buckets[1];
+      ctx.lineWidth = Math.max(2.4, strokePx * 1.6);
+      ctx.strokeStyle = intToCss(ANDROID_GLOW, (70 + 60 * amp) / 255);
+      ctx.beginPath();
+      for (let m = 0; m < arr.length; m += 2) {
+        const i = arr[m], j = arr[m + 1];
+        ctx.moveTo(this.cx[i], this.cy[i]);
+        ctx.lineTo(this.cx[j], this.cy[j]);
+      }
+      ctx.stroke();
+
+      ctx.lineWidth = Math.max(1.0, strokePx * 0.55);
+      ctx.strokeStyle = 'rgba(233,251,255,0.86)';
+      ctx.stroke();
+    }
+
+    // Silver terminal pads
+    const outerR = Math.max(1.5, strokePx * 0.95);
+    const innerR = Math.max(0.75, strokePx * 0.48);
+    const pads = [];
+    for (const p of c.pads) {
+      if (keep[p] && smooth01(0.15, 0.50, this.cz[p]) > 0.1) pads.push(p);
+    }
+    if (pads.length > 0) {
+      ctx.fillStyle = 'rgba(111,118,128,0.90)';
+      ctx.beginPath();
+      for (const p of pads) {
+        ctx.moveTo(this.cx[p] + outerR, this.cy[p]);
+        ctx.arc(this.cx[p], this.cy[p], outerR, 0, Math.PI * 2);
+      }
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(242,245,248,1.0)';
+      ctx.beginPath();
+      for (const p of pads) {
+        ctx.moveTo(this.cx[p] + innerR, this.cy[p]);
+        ctx.arc(this.cx[p], this.cy[p], innerR, 0, Math.PI * 2);
+      }
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ── Optical-Fibre Hologram Hair (FiberHair.kt) ─────────────────────────────
+
+  drawFiberHair(ctx, nrm, primary, gold, t, strokePx) {
+    const fh = this.fiberHair;
+    if (fh.rows < 3 || fh.locks === 0) return;
+
+    const buckets = Array.from({ length: Math.max(fh.rows - 1, 1) }, () => []);
+    const hotLines = [];
+    const sparks = [];
+
+    for (let l = 0; l < fh.locks; l++) {
+      const base = this.mesh.lockFirst + l * 3 * fh.rows;
+      if (nrm[3 * (base + 1) + 2] < 0.10) continue;
+      for (let f = 0; f < fh.perLock; f++) {
+        const i = l * fh.perLock + f;
+        const u = fh.across[i];
+        const ph = fh.pulse[i] ? (t * 0.55 + i * 0.0137) % 1.6 : -9;
+        let px = 0, py = 0;
+        for (let s = 0; s < fh.rows; s++) {
+          const li = base + 3 * s, ci = li + 1, ri = li + 2;
+          const dx = this.xs[ri] - this.xs[li], dy = this.ys[ri] - this.ys[li];
+          const half = 0.5 * Math.hypot(dx, dy);
+          const along = s / (fh.rows - 1);
+          const sway = half * fh.amp[i] * Math.sin(along * fh.freq[i] * 6.2832 + fh.phase[i] + t * 1.1) * (0.4 + 0.6 * along);
+          const nl = Math.max(Math.hypot(dx, dy), 1e-4);
+          const x = this.xs[ci] + dx * 0.5 * u + (dy / nl) * sway;
+          const y = this.ys[ci] + dy * 0.5 * u - (dx / nl) * sway;
+          if (s > 0) {
+            if (Math.abs(along - ph) < 0.2) {
+              hotLines.push(px, py, x, y);
+            } else {
+              const b = Math.min(buckets.length, s) - 1;
+              buckets[b].push(px, py, x, y);
+            }
+          }
+          px = x; py = y;
+        }
+        if (fh.spark[i]) sparks.push(px, py);
+      }
+    }
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+
+    for (let b = 0; b < buckets.length; b++) {
+      const arr = buckets[b];
+      if (!arr.length) continue;
+      const frac = (b + 1) / buckets.length;
+      ctx.lineWidth = Math.max(0.7, strokePx * 0.5);
+      const col = mixInt(primary, 0xffffffff, 0.25 * frac * frac);
+      ctx.strokeStyle = intToCss(col, (3 + 17 * frac * frac) / 255);
+      ctx.beginPath();
+      for (let m = 0; m < arr.length; m += 4) {
+        ctx.moveTo(arr[m], arr[m + 1]);
+        ctx.lineTo(arr[m + 2], arr[m + 3]);
+      }
+      ctx.stroke();
+    }
+
+    if (hotLines.length > 0) {
+      ctx.lineWidth = Math.max(1.3, strokePx * 0.95);
+      ctx.strokeStyle = intToCss(mixInt(primary, 0xffffffff, 0.6), 120 / 255);
+      ctx.beginPath();
+      for (let m = 0; m < hotLines.length; m += 4) {
+        ctx.moveTo(hotLines[m], hotLines[m + 1]);
+        ctx.lineTo(hotLines[m + 2], hotLines[m + 3]);
+      }
+      ctx.stroke();
+    }
+
+    if (sparks.length > 0) {
+      const sr = Math.max(1.2, strokePx * 0.8);
+      ctx.fillStyle = intToCss(gold, 135 / 255);
+      ctx.beginPath();
+      for (let m = 0; m < sparks.length; m += 2) {
+        ctx.moveTo(sparks[m] + sr, sparks[m + 1]);
+        ctx.arc(sparks[m], sparks[m + 1], sr, 0, Math.PI * 2);
+      }
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  // ── Realistic Hair Strands & Sheen (AvatarRenderer.kt drawFibres) ──────────
+
+  drawFibres(ctx, v, nrm, strokePx) {
+    const mesh = this.mesh;
+    if (mesh.lockCount === 0 || mesh.lockRows < 3) return;
+    const rows = mesh.lockRows;
+    const locks = Math.min(mesh.lockCount, HAIR_FIBRE_LOCKS);
+    const light = mixInt(this.browColour, 0xff6b4e36, 0.6);
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (let pass = 0; pass < 2; pass++) {
+      ctx.lineWidth = Math.max(0.7, strokePx * (pass === 0 ? 0.62 : 0.5));
+      ctx.strokeStyle = pass === 0 ? 'rgba(18,10,6,0.51)' : intToCss(light, 24 / 255);
+      ctx.beginPath();
+      for (let l = 0; l < locks; l++) {
+        const base = mesh.lockFirst + l * 3 * rows;
+        if (nrm[3 * (base + 1) + 2] < 0.10) continue;
+        const lockHash = Math.imul(l, -1640531535);
+        const lockFreq = 1.2 + (1.6 * ((lockHash >>> 8) & 0xff)) / 255;
+        const lockPhase = (((lockHash >>> 16) & 0xff) / 255) * 6.2832;
+        for (let f = 0; f < FIBRES_PER_LOCK; f++) {
+          if ((f + l) % 2 !== pass) continue;
+          const hash = Math.imul(l * 31 + f * 1039, -1640531535);
+          const u = -0.9 + (1.8 * (f + 0.5 + 0.35 * (((hash >>> 8) & 0xff) / 255 - 0.5))) / FIBRES_PER_LOCK;
+          const wave = 0.10 + (0.10 * ((hash >>> 16) & 0xff)) / 255;
+          const stop = rows - (((hash >>> 24) & 3) === 0 ? 2 : 0);
+          let px = 0, py = 0;
+          for (let sIdx = 0; sIdx < stop; sIdx++) {
+            const li = base + 3 * sIdx, ci = li + 1, ri = li + 2;
+            const dx = this.xs[ri] - this.xs[li], dy = this.ys[ri] - this.ys[li];
+            const half = 0.5 * Math.hypot(dx, dy);
+            let x = this.xs[ci] + dx * 0.5 * u;
+            let y = this.ys[ci] + dy * 0.5 * u;
+            const t = sIdx / (rows - 1);
+            const shift = half * wave * Math.sin(t * lockFreq * 6.2832 + lockPhase + f * 0.35);
+            const nx = this.ys[ri] - this.ys[li], ny = this.xs[li] - this.xs[ri];
+            const nl = Math.max(Math.hypot(nx, ny), 1e-4);
+            x += (nx / nl) * shift;
+            y += (ny / nl) * shift;
+            if (sIdx > 0) {
+              ctx.moveTo(px, py);
+              ctx.lineTo(x, y);
+            }
+            px = x; py = y;
+          }
+        }
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ── Multi-ring Breathing Halo (AvatarRenderer.kt drawHalo) ─────────────────
+
+  drawHalo(ctx, cx, cy, r, amp, t) {
+    const hcy = cy - r * 0.10;
+    const rr = r * 1.30;
+    const breath = 0.85 + 0.15 * Math.sin(t * 1.3) + 0.25 * amp;
+    const rings = [
+      { rad: rr, width: r * 0.20, col: ANDROID_GLOW, alpha: (30 * breath) / 255 },
+      { rad: rr, width: r * 0.07, col: ANDROID_GLOW, alpha: (70 * breath) / 255 },
+      { rad: rr, width: r * 0.022, col: ANDROID_GLOW, alpha: 200 / 255 },
+      { rad: rr, width: r * 0.008, col: 0xffe9fbff, alpha: 235 / 255 },
+      { rad: r * 1.62, width: r * 0.010, col: ANDROID_GLOW, alpha: 55 / 255 },
+      { rad: r * 1.88, width: r * 0.008, col: 0xff9a6bff, alpha: 45 / 255 },
+    ];
+    ctx.save();
+    for (const rg of rings) {
+      ctx.strokeStyle = intToCss(rg.col, rg.alpha);
+      ctx.lineWidth = Math.max(1, rg.width);
+      ctx.beginPath();
+      ctx.arc(cx, hcy, rg.rad, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ── Smooth Lid Curve Helper (AvatarRenderer.kt lidPoints) ──────────────────
+
+  _lidPoints(curve) {
+    const curveX = new Float32Array(LID_COLUMNS);
+    const curveY = new Float32Array(LID_COLUMNS);
+    const curveN = new Float32Array(LID_COLUMNS);
+    for (let k = 0; k < curve.verts.length; k++) {
+      const v = curve.verts[k];
+      const c = curve.column[k];
+      curveX[c] += this.xs[v];
+      curveY[c] += this.ys[v];
+      curveN[c] += 1;
+    }
+    const ux = [], uy = [];
+    for (let c = 0; c < LID_COLUMNS; c++) {
+      if (curveN[c] > 0) {
+        ux.push(curveX[c] / curveN[c]);
+        uy.push(curveY[c] / curveN[c]);
+      }
+    }
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 1; i < ux.length - 1; i++) {
+        uy[i] = 0.25 * uy[i - 1] + 0.5 * uy[i] + 0.25 * uy[i + 1];
+      }
+    }
+    return { ux, uy };
+  }
+
+  // ── Brows, Lashes, Eyelids, Catchlights & Lip Chains (drawFeatures) ────────
+
+  drawFeatures(ctx, avatar, r, primary, strokePx) {
+    const face = Math.pow(Math.max(0, Math.cos(avatar.yaw) * Math.cos(avatar.pitch)), 2);
+    if (face < 0.02) return;
+    const mesh = this.mesh;
+    const lm = mesh.landmarks;
+    const lipsOut = lm.lips_out || [];
+    let midX = 0;
+    for (const vi of lipsOut) midX += this.xs[vi];
+    midX = lipsOut.length ? midX / lipsOut.length : 0;
+
+    const hairCol = this.holo ? DEEP_BLUE : this.browColour;
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // 1. Eyebrows (underlay + 160 individual hairs)
+    for (const key of ['brow_l', 'brow_r']) {
+      const idx = lm[key];
+      if (!idx || idx.length < 2) continue;
+      const n = idx.length;
+      const inner0 = Math.abs(this.xs[idx[0]] - midX) < Math.abs(this.xs[idx[n - 1]] - midX);
+      const px = new Float32Array(n);
+      const py = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        const vi = idx[inner0 ? i : n - 1 - i];
+        px[i] = this.xs[vi];
+        py[i] = this.ys[vi];
+      }
+
+      if (this.skin === 0) {
+        ctx.strokeStyle = intToCss(primary, (60 * face) / 255);
+        ctx.lineWidth = strokePx * 4.5;
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+          if (i === 0) ctx.moveTo(px[i], py[i]);
+          else ctx.lineTo(px[i], py[i]);
+        }
+        ctx.stroke();
+
+        ctx.strokeStyle = intToCss(primary, (230 * face) / 255);
+        ctx.lineWidth = strokePx * 1.8;
+        ctx.stroke();
+        continue;
+      }
+
+      const cum = new Float32Array(n);
+      for (let i = 1; i < n; i++) {
+        cum[i] = cum[i - 1] + Math.hypot(px[i] - px[i - 1], py[i] - py[i - 1]);
+      }
+      const total = Math.max(cum[n - 1], 1);
+
+      // Soft brow underlay
+      ctx.strokeStyle = intToCss(hairCol, (90 * face) / 255);
+      ctx.lineWidth = r * 0.030 * this.browScale;
+      ctx.beginPath();
+      for (let step = 0; step <= 24; step++) {
+        const target = (step / 24) * total;
+        let seg = 1;
+        while (seg < n - 1 && cum[seg] < target) seg++;
+        const segLen = Math.max(cum[seg] - cum[seg - 1], 1e-3);
+        const f = Math.max(0, Math.min(1, (target - cum[seg - 1]) / segLen));
+        const bx = px[seg - 1] + (px[seg] - px[seg - 1]) * f;
+        const by = py[seg - 1] + (py[seg] - py[seg - 1]) * f;
+        if (step === 0) ctx.moveTo(bx, by);
+        else ctx.lineTo(bx, by);
+      }
+      ctx.stroke();
+
+      // 160 individual brow hairs
+      ctx.strokeStyle = intToCss(hairCol, (215 * face) / 255);
+      ctx.lineWidth = Math.max(1, strokePx * 0.85);
+      ctx.beginPath();
+      for (const h of this.browHairs) {
+        const target = h.u * total;
+        let seg = 1;
+        while (seg < n - 1 && cum[seg] < target) seg++;
+        const segLen = Math.max(cum[seg] - cum[seg - 1], 1e-3);
+        const f = Math.max(0, Math.min(1, (target - cum[seg - 1]) / segLen));
+        const tx = (px[seg] - px[seg - 1]) / segLen;
+        const ty = (py[seg] - py[seg - 1]) / segLen;
+        let nx = -ty, ny = tx;
+        if (ny > 0) { nx = -nx; ny = -ny; }
+        const width = r * (0.050 - 0.026 * h.u) * this.browScale;
+        const rx = px[seg - 1] + (px[seg] - px[seg - 1]) * f + nx * h.off * width * 0.5;
+        const ry = py[seg - 1] + (py[seg] - py[seg - 1]) * f + ny * h.off * width * 0.5;
+        const angle = 0.95 - 1.1 * h.u + h.jitter;
+        const ca = Math.cos(angle), sa = Math.sin(angle);
+        const length = r * 0.048 * h.len * (1.0 - 0.35 * h.u) * (0.5 + 0.5 * this.browScale);
+        ctx.moveTo(rx, ry);
+        ctx.lineTo(rx + (tx * ca + nx * sa) * length, ry + (ty * ca + ny * sa) * length);
+      }
+      ctx.stroke();
+    }
+
+    // 2. Eyelids, Eyelashes & Eyeball Catchlights (AvatarRenderer.kt drawEyes)
+    const open = Math.max(0, Math.min(1, (1 - avatar.blink) * avatar.lids));
+    const lash = this.holo ? DEEP_BLUE : this.skin > 0 ? 0xff1e120e : primary;
+    const fold = this.holo ? DEEP_BLUE : this.skin > 0 ? 0xff6b4636 : primary;
+    const foldAlpha = this.holo ? 130 / 255 : 70 / 255;
+
+    for (let e = 0; e < this.lidCurves.length; e++) {
+      const up = this.lidCurves[e][1];
+      const low = this.lidCurves[e][0];
+      if (!up.verts.length) continue;
+      const { ux, uy } = this._lidPoints(up);
+      const n = ux.length;
+      if (n < 2) continue;
+      if (Math.abs(ux[0] - midX) > Math.abs(ux[n - 1] - midX)) {
+        ux.reverse();
+        uy.reverse();
+      }
+
+      // Upper eyelid crease fold
+      ctx.strokeStyle = intToCss(fold, foldAlpha * face * (0.4 + 0.6 * open));
+      ctx.lineWidth = strokePx * 1.4;
+      ctx.beginPath();
+      for (let i = 0; i < n - 1; i++) {
+        ctx.moveTo(ux[i], uy[i] - r * 0.016);
+        ctx.lineTo(ux[i + 1], uy[i + 1] - r * 0.016);
+      }
+      ctx.stroke();
+
+      // Upper lash line (thicker towards outer corner)
+      ctx.strokeStyle = intToCss(lash, (235 / 255) * face);
+      for (let i = 0; i < n - 1; i++) {
+        ctx.lineWidth = strokePx * (0.8 + (1.5 * (i + 0.5)) / (n - 1)) * (0.6 + 0.4 * this.lashScale);
+        ctx.beginPath();
+        ctx.moveTo(ux[i], uy[i]);
+        ctx.lineTo(ux[i + 1], uy[i + 1]);
+        ctx.stroke();
+      }
+
+      // 15 curved upper lashes
+      const outward = ux[n - 1] < ux[0] ? -1 : 1;
+      const lashes = 15;
+      ctx.strokeStyle = intToCss(lash, (215 / 255) * face);
+      ctx.lineWidth = Math.max(1, strokePx * 0.65);
+      ctx.beginPath();
+      for (let k = 0; k < lashes; k++) {
+        const t = (k + 0.5) / lashes;
+        const pos = t * (n - 1);
+        const i = Math.max(0, Math.min(n - 2, pos | 0));
+        const f = pos - i;
+        const bx = ux[i] + (ux[i + 1] - ux[i]) * f;
+        const by = uy[i] + (uy[i + 1] - uy[i]) * f;
+        const len = r * 0.030 * this.lashScale * (0.45 + 0.75 * t) * (0.8 + 0.4 * this.lashRnd[k]);
+        const lift = 2 * open - 1;
+        const dx = outward * (0.30 + 0.55 * t) * Math.max(0.5, Math.abs(lift));
+        const dy = -lift * (1.0 - 0.35 * t);
+        const dl = Math.max(Math.hypot(dx, dy), 1e-3);
+        const midx = bx + (dx / dl) * len * 0.55;
+        const midy = by + (dy / dl) * len * 0.55;
+        const tipX = bx + (dx / dl) * len;
+        const tipY = by + (dy / dl) * len;
+        ctx.moveTo(bx, by);
+        ctx.lineTo(midx, midy);
+        ctx.lineTo(tipX + outward * len * 0.10, tipY - lift * len * 0.05);
+      }
+      ctx.stroke();
+
+      // Lower lid & 7 short lower lashes
+      const lowPts = this._lidPoints(low);
+      const m = lowPts.ux.length;
+      if (m >= 2) {
+        ctx.strokeStyle = intToCss(lash, (120 / 255) * face);
+        ctx.lineWidth = strokePx * 0.65;
+        ctx.beginPath();
+        for (let i = 0; i < m - 1; i++) {
+          ctx.moveTo(lowPts.ux[i], lowPts.uy[i]);
+          ctx.lineTo(lowPts.ux[i + 1], lowPts.uy[i + 1]);
+        }
+        ctx.stroke();
+
+        ctx.strokeStyle = intToCss(lash, (105 / 255) * face);
+        ctx.lineWidth = Math.max(1, strokePx * 0.5);
+        ctx.beginPath();
+        for (let k = 0; k < 7; k++) {
+          const pos = ((k + 0.5) / 7) * (m - 1);
+          const i = Math.max(0, Math.min(m - 2, pos | 0));
+          const f = pos - i;
+          const bx = lowPts.ux[i] + (lowPts.ux[i + 1] - lowPts.ux[i]) * f;
+          const by = lowPts.uy[i] + (lowPts.uy[i + 1] - lowPts.uy[i]) * f;
+          ctx.moveTo(bx, by);
+          ctx.lineTo(
+            bx + outward * r * 0.004,
+            by + r * 0.010 * (0.7 + 0.6 * this.lashRnd[20 + k]) * (0.3 + 0.7 * open)
+          );
+        }
+        ctx.stroke();
+      }
+
+      // Dual eyeball catchlights
+      if (open > 0.4 && mesh.eyeFirst.length > e) {
         const pole = mesh.eyeFirst[e] + 17;
         if (pole < this.nV) {
-          ctx.fillStyle = `rgba(255,255,255,${(0.9 * face * open).toFixed(3)})`;
+          ctx.fillStyle = `rgba(255,255,255,${((235 / 255) * face * open).toFixed(3)})`;
           ctx.beginPath();
-          ctx.arc(this.xs[pole] - r * 0.01, this.ys[pole] - r * 0.01, Math.max(1.3, r * 0.008), 0, Math.PI * 2);
+          ctx.arc(this.xs[pole] - r * 0.010, this.ys[pole] - r * 0.010, Math.max(1.2, r * 0.0075), 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = `rgba(255,255,255,${((110 / 255) * face * open).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(this.xs[pole] + r * 0.008, this.ys[pole] + r * 0.009, Math.max(0.8, r * 0.0038), 0, Math.PI * 2);
           ctx.fill();
         }
       }
     }
 
-    // Mouth lip lines
+    // 3. Upper & lower mouth lip lines
     const lipLine = this.holo ? DEEP_BLUE : this.skin > 0 ? 0xff6e2a38 : primary;
     for (const [chain, alpha] of [
-      [mesh.mouthUpper, 0.78],
-      [mesh.mouthLower, 0.66],
+      [mesh.mouthUpper, 200 / 255],
+      [mesh.mouthLower, 170 / 255],
     ]) {
       if (!chain || chain.length === 0) continue;
       ctx.strokeStyle = intToCss(lipLine, alpha * face);
-      ctx.lineWidth = Math.max(1.1, r * 0.008);
+      ctx.lineWidth = strokePx * 1.2;
       ctx.beginPath();
       for (let k = 0; k < chain.length; k++) {
         const vi = chain[k];
@@ -397,440 +1229,38 @@ export class AvatarRenderer {
       }
       ctx.stroke();
     }
-  }
-}
-
-// ── CharacterRenderer (Adam & Mei textured 3D busts) ─────────────────────────
-
-export class CharacterRenderer {
-  constructor(characterMesh) {
-    this.ch = characterMesh;
-    this.nV = characterMesh.vertexCount;
-    this.nF = characterMesh.faceCount;
-    this.pv = new Float32Array(3 * this.nV);
-    this.xs = new Float32Array(this.nV);
-    this.ys = new Float32Array(this.nV);
-    this.lit = new Float32Array(this.nV);
-    this.faceZ = new Float32Array(this.nF);
-    this.order = new Int32Array(this.nF);
-
-    // Pre-sample average RGB colour per UV triangle from the atlas image for ultra-fast software shading,
-    // plus support affine texture draw when atlas is loaded.
-    this.triAvgColor = new Array(this.nF);
-    this.prepareAtlasColors();
-  }
-
-  prepareAtlasColors() {
-    const ch = this.ch;
-    if (!ch.atlas) return;
-    try {
-      const w = ch.atlas.width || 512;
-      const h = ch.atlas.height || 512;
-      const off = document.createElement('canvas');
-      off.width = w;
-      off.height = h;
-      const octx = off.getContext('2d');
-      octx.drawImage(ch.atlas, 0, 0, w, h);
-      const data = octx.getImageData(0, 0, w, h).data;
-      const f = ch.faces;
-      const uv = ch.uv;
-      for (let t = 0; t < this.nF; t++) {
-        const a = f[3 * t], b = f[3 * t + 1], c = f[3 * t + 2];
-        const u = (uv[2 * a] + uv[2 * b] + uv[2 * c]) / 3;
-        const v = (uv[2 * a + 1] + uv[2 * b + 1] + uv[2 * c + 1]) / 3;
-        const px = Math.max(0, Math.min(w - 1, Math.floor(u * w)));
-        const py = Math.max(0, Math.min(h - 1, Math.floor(v * h)));
-        const idx = (py * w + px) * 4;
-        this.triAvgColor[t] = [data[idx], data[idx + 1], data[idx + 2]];
-      }
-    } catch {}
-  }
-
-  draw(ctx, avatar, cx, cy, r, primary) {
-    const ch = this.ch;
-    const k = r * ch.scale;
-    const ox = cx;
-    const oy = cy - r * 0.08;
-    const CAM = 4.6;
-
-    // Aura behind character
-    const prR = (primary >> 16) & 0xff, prG = (primary >> 8) & 0xff, prB = primary & 0xff;
-    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 1.7);
-    grad.addColorStop(0, `rgba(${prR},${prG},${prB},${(0.18 + 0.22 * avatar.glow).toFixed(3)})`);
-    grad.addColorStop(1, `rgba(${prR},${prG},${prB},0)`);
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r * 1.7, 0, Math.PI * 2);
-    ctx.fill();
-
-    const cyaw = Math.cos(avatar.yaw), syaw = Math.sin(avatar.yaw);
-    const cp = Math.cos(avatar.pitch), sp = Math.sin(avatar.pitch);
-    const cr = Math.cos(avatar.roll), sr = Math.sin(avatar.roll);
-    const m00 = cyaw, m01 = 0, m02 = syaw;
-    const m10 = sp * syaw, m11 = cp, m12 = -sp * cyaw;
-    const m20 = -cp * syaw, m21 = sp, m22 = cp * cyaw;
-
-    const jawAng = Math.max(0, Math.min(1, avatar.mouth)) * JAW_MAX;
-    const jy = ch.jawPivot[1], jz = ch.jawPivot[2];
-    const px = ch.pivot[0], py = ch.pivot[1], pz = ch.pivot[2];
-    const v = ch.verts, n = ch.normals;
-    const lx = -0.45, ly = 0.5, lz = 0.75;
-    const ll = Math.hypot(lx, ly, lz);
-    const lift = Math.max(-0.4, Math.min(1.2, avatar.brow)) * ch.browLift;
-    const gx = Math.max(-1, Math.min(1, avatar.gaze[0])) * ch.gazeReach;
-    const gy = Math.max(-1, Math.min(1, avatar.gaze[1])) * ch.gazeReach * 0.6;
-
-    for (let i = 0; i < this.nV; i++) {
-      let x = v[3 * i], y = v[3 * i + 1], z = v[3 * i + 2];
-      if (ch.brow[i] !== 0) y += ch.brow[i] * lift;
-      if (ch.gazing[i]) { x += gx; y += gy; }
-      const w = ch.jaw[i];
-      if (w > 0 && jawAng > 0) {
-        const ang = w * jawAng;
-        const c = Math.cos(ang), s = Math.sin(ang);
-        const dy = y - jy, dz = z - jz;
-        y = jy + dy * c - dz * s;
-        z = jz + dy * s + dz * c;
-      }
-      const h = ch.headW[i];
-      const dx = x - px, dy = y - py, dz = z - pz;
-      const rx = m00 * dx + m01 * dy + m02 * dz;
-      const ry = m10 * dx + m11 * dy + m12 * dz;
-      const rz = m20 * dx + m21 * dy + m22 * dz;
-      const tx = rx * cr - ry * sr, ty = rx * sr + ry * cr;
-      x += h * (px + tx - x);
-      y += h * (py + ty - y);
-      z += h * (pz + rz - z);
-      this.pv[3 * i] = x;
-      this.pv[3 * i + 1] = y;
-      this.pv[3 * i + 2] = z;
-      const kk = (CAM / Math.max(CAM - z, 0.35)) * k;
-      this.xs[i] = ox + x * kk;
-      this.ys[i] = oy - y * kk;
-
-      const nx = n[3 * i], ny = n[3 * i + 1], nz = n[3 * i + 2];
-      const rnx = m00 * nx + m01 * ny + m02 * nz;
-      const rny = m10 * nx + m11 * ny + m12 * nz;
-      const rnz = m20 * nx + m21 * ny + m22 * nz;
-      const tnx = rnx * cr - rny * sr, tny = rnx * sr + rny * cr;
-      const fx = nx + h * (tnx - nx), fy = ny + h * (tny - ny), fz = nz + h * (rnz - nz);
-      this.lit[i] = ch.unlit[i] ? 1 : ch.ambient + (1 - ch.ambient) * (Math.abs(fx * lx + fy * ly + fz * lz) / ll);
-    }
-
-    const f = ch.faces;
-    for (let t = 0; t < this.nF; t++) {
-      this.faceZ[t] = this.pv[3 * f[3 * t] + 2] + this.pv[3 * f[3 * t + 1] + 2] + this.pv[3 * f[3 * t + 2] + 2];
-      this.order[t] = t;
-    }
-    const faceZ = this.faceZ;
-    this.order.sort((a, b) => faceZ[a] - faceZ[b]);
-
-    for (let s = 0; s < this.nF; s++) {
-      const t = this.order[s];
-      const a = f[3 * t], b = f[3 * t + 1], d = f[3 * t + 2];
-      const rgb = this.triAvgColor[t] || [205, 175, 160];
-      const l = Math.min(1.15, (this.lit[a] + this.lit[b] + this.lit[d]) / 3);
-      ctx.fillStyle = `rgb(${(rgb[0] * l) | 0},${(rgb[1] * l) | 0},${(rgb[2] * l) | 0})`;
-      ctx.beginPath();
-      ctx.moveTo(this.xs[a], this.ys[a]);
-      ctx.lineTo(this.xs[b], this.ys[b]);
-      ctx.lineTo(this.xs[d], this.ys[d]);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    const projectPt = (x0, y0, z0, jawK) => {
-      let x = x0, y = y0, z = z0;
-      if (jawK > 0) {
-        const c = Math.cos(jawK), s = Math.sin(jawK);
-        const dy = y - jy, dz = z - jz;
-        y = jy + dy * c - dz * s;
-        z = jz + dy * s + dz * c;
-      }
-      const dx = x - px, dy = y - py, dz = z - pz;
-      const rx = m00 * dx + m01 * dy + m02 * dz;
-      const ry = m10 * dx + m11 * dy + m12 * dz;
-      const rz = m20 * dx + m21 * dy + m22 * dz;
-      x = px + rx * cr - ry * sr;
-      y = py + rx * sr + ry * cr;
-      z = pz + rz;
-      const kk = (CAM / Math.max(CAM - z, 0.35)) * k;
-      return [ox + x * kk, oy - y * kk];
-    };
-
-    // Open mouth overlay
-    const open = Math.max(0, Math.min(1, avatar.mouth));
-    if (open >= 0.03 && ch.mouth.length >= 6) {
-      const m = ch.mouth;
-      const nPts = (m.length / 3) | 0;
-      const mcx = (m[0] + m[3 * (nPts - 1)]) / 2;
-      const hw = Math.max((m[3 * (nPts - 1)] - m[0]) / 2, 1e-3);
-      const up = [], lo = [];
-      for (let i = 0; i < nPts; i++) {
-        const x = m[3 * i], y = m[3 * i + 1], z = m[3 * i + 2];
-        const d = Math.abs(x - mcx) / hw;
-        const t = Math.max(0, Math.min(1, (d - 0.55) / 0.5));
-        const corner = 1 - t * t * (3 - 2 * t);
-        up.push(projectPt(x, y, z, 0));
-        lo.push(projectPt(x, y, z, 0.92 * corner * open * JAW_MAX));
-      }
-      ctx.fillStyle = intToCss(ch.mouthColour, 1);
-      ctx.beginPath();
-      ctx.moveTo(up[0][0], up[0][1]);
-      for (let i = 1; i < nPts; i++) ctx.lineTo(up[i][0], up[i][1]);
-      for (let i = nPts - 1; i >= 0; i--) ctx.lineTo(lo[i][0], lo[i][1]);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // Blinking eyelids
-    const close = Math.max(0, Math.min(1, 1 - (1 - avatar.blink) * avatar.lids));
-    if (close >= 0.04) {
-      const seg = 12;
-      for (const e of ch.eyes) {
-        const ct = Math.cos((e.tilt * Math.PI) / 180), st = Math.sin((e.tilt * Math.PI) / 180);
-        const hw = e.hw * 1.12, hh = e.hh * 1.18;
-        const topPts = [], edgePts = [];
-        for (let s = 0; s <= seg; s++) {
-          const th = (Math.PI * s) / seg;
-          const lx0 = hw * Math.cos(th);
-          const lyTop = hh * Math.sin(th);
-          const lyEdge = hh * Math.sin(th) * (1 - 2 * close);
-          topPts.push(projectPt(e.x + lx0 * ct - lyTop * st, e.y + lx0 * st + lyTop * ct, e.z, 0));
-          edgePts.push(projectPt(e.x + lx0 * ct - lyEdge * st, e.y + lx0 * st + lyEdge * ct, e.z, 0));
-        }
-        ctx.fillStyle = intToCss(e.lid, 1);
-        ctx.beginPath();
-        ctx.moveTo(topPts[0][0], topPts[0][1]);
-        for (let s = 1; s <= seg; s++) ctx.lineTo(topPts[s][0], topPts[s][1]);
-        for (let s = seg; s >= 0; s--) ctx.lineTo(edgePts[s][0], edgePts[s][1]);
-        ctx.closePath();
-        ctx.fill();
-      }
-    }
-  }
-}
-
-// ── CartoonRenderer (Port of CartoonAvatar.kt) ──────────────────────────────
-
-export class CartoonRenderer {
-  draw(ctx, avatar, cx, cy, r, primary) {
-    ctx.save();
-    ctx.translate(cx, cy);
-    const scale = r * 0.85;
-    ctx.scale(scale, scale);
-
-    const fx = avatar.yaw * 0.25;
-    const fy = -avatar.pitch * 0.25;
-    const open = Math.max(0, Math.min(1, (1 - avatar.blink) * avatar.lids));
-
-    // Aura
-    const prR = (primary >> 16) & 0xff, prG = (primary >> 8) & 0xff, prB = primary & 0xff;
-    const aura = ctx.createRadialGradient(0, 0, 0.2, 0, 0, 1.45);
-    aura.addColorStop(0, `rgba(${prR},${prG},${prB},${(0.22 + 0.25 * avatar.glow).toFixed(3)})`);
-    aura.addColorStop(1, `rgba(${prR},${prG},${prB},0)`);
-    ctx.fillStyle = aura;
-    ctx.beginPath();
-    ctx.arc(0, 0, 1.45, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Back hair
-    ctx.fillStyle = '#1f1410';
-    ctx.beginPath();
-    ctx.arc(fx * 0.4, -0.25 + fy * 0.4, 0.88, Math.PI, 0);
-    ctx.fill();
-
-    // Neck & shoulders
-    ctx.fillStyle = '#c8926e';
-    ctx.fillRect(-0.24, 0.65, 0.48, 0.45);
-
-    // Head oval
-    const skinGrad = ctx.createRadialGradient(fx - 0.15, fy - 0.2, 0.1, fx, fy + 0.1, 0.95);
-    skinGrad.addColorStop(0, '#f5ccb0');
-    skinGrad.addColorStop(0.7, '#dfb08e');
-    skinGrad.addColorStop(1, '#ba8562');
-    ctx.fillStyle = skinGrad;
-    ctx.beginPath();
-    ctx.ellipse(fx * 0.6, fy * 0.6 + 0.06, 0.72, 0.84, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Eyes
-    for (const s of [-1, 1]) {
-      const ex = s * 0.31 + fx;
-      const ey = -0.04 + fy;
-      const ew = 0.19;
-      const eh = Math.max(0.012, 0.13 * open);
-      ctx.fillStyle = '#fdfbf7';
-      ctx.beginPath();
-      ctx.ellipse(ex, ey, ew, eh, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      if (open > 0.15) {
-        const ix = ex + avatar.gaze[0] * 0.065;
-        const iy = ey + avatar.gaze[1] * 0.04;
-        ctx.fillStyle = '#5e3a24';
-        ctx.beginPath();
-        ctx.arc(ix, iy, Math.min(eh, 0.1), 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#140c0a';
-        ctx.beginPath();
-        ctx.arc(ix, iy, Math.min(eh * 0.6, 0.048), 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(ix - 0.03, iy - 0.03, 0.024, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.strokeStyle = '#1b1210';
-      ctx.lineWidth = 0.028;
-      ctx.beginPath();
-      ctx.ellipse(ex, ey, ew, eh, 0, Math.PI, 0);
-      ctx.stroke();
-    }
-
-    // Glasses
-    ctx.strokeStyle = '#14110f';
-    ctx.lineWidth = 0.048;
-    for (const s of [-1, 1]) {
-      ctx.beginPath();
-      ctx.arc(s * 0.315 + fx, -0.04 + fy, 0.25, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    ctx.beginPath();
-    ctx.moveTo(-0.065 + fx, -0.06 + fy);
-    ctx.lineTo(0.065 + fx, -0.06 + fy);
-    ctx.stroke();
-
-    // Brows
-    const browLift = avatar.brow * 0.06;
-    ctx.strokeStyle = '#2a1b15';
-    ctx.lineWidth = 0.055;
-    ctx.lineCap = 'round';
-    for (const s of [-1, 1]) {
-      ctx.beginPath();
-      ctx.moveTo(s * 0.11 + fx, -0.34 + fy - browLift);
-      ctx.quadraticCurveTo(s * 0.31 + fx, -0.42 + fy - browLift, s * 0.5 + fx, -0.33 + fy - browLift * 0.6);
-      ctx.stroke();
-    }
-
-    // Nose
-    ctx.fillStyle = 'rgba(165, 110, 82, 0.45)';
-    ctx.beginPath();
-    ctx.arc(fx * 1.05, 0.18 + fy, 0.09, 0, Math.PI);
-    ctx.fill();
-
-    // Mouth
-    const mOpen = avatar.mouth;
-    const my = 0.46 + fy;
-    ctx.fillStyle = '#4a1820';
-    ctx.beginPath();
-    ctx.ellipse(fx, my + mOpen * 0.06, 0.22 + avatar.wide * 0.05, 0.025 + mOpen * 0.13, 0, 0, Math.PI * 2);
-    ctx.fill();
-    if (mOpen > 0.08) {
-      ctx.fillStyle = '#f4f0e8';
-      ctx.fillRect(fx - 0.14, my - 0.01, 0.28, Math.min(0.045, mOpen * 0.06));
-    }
-
-    // Front curly hair
-    ctx.fillStyle = '#2b1c16';
-    const curls = [
-      [-0.5, -0.72, 0.22],
-      [-0.25, -0.84, 0.25],
-      [0.05, -0.88, 0.26],
-      [0.35, -0.82, 0.24],
-      [0.55, -0.68, 0.2],
-    ];
-    for (const [cx0, cy0, cr0] of curls) {
-      ctx.beginPath();
-      ctx.arc(cx0 + fx * 0.5, cy0 + fy * 0.4, cr0, 0, Math.PI * 2);
-      ctx.fill();
-    }
 
     ctx.restore();
   }
 }
 
-// ── GlowReactor (Port of JarvisComponents.kt GlowReactor) ───────────────────
+// ── GlowReactor (HUD Reactor Orb when in Reactor mode) ──────────────────────
 
-export function drawGlowReactor(ctx, cx, cy, r, primary, state, outputLevel, timeSec) {
+export function drawGlowReactor(ctx, cx, cy, r, state, outputLevel, timeSec, primary = 0xff00d4ff) {
   const prR = (primary >> 16) & 0xff, prG = (primary >> 8) & 0xff, prB = primary & 0xff;
-  const active = state !== 'ASLEEP' && state !== 'ERROR';
-  const alpha = active ? 1 : 0.28;
-  const voice = Math.max(0, Math.min(1, outputLevel));
+  const pulse =
+    state === 'SPEAKING'
+      ? 1 + 0.25 * outputLevel + 0.06 * Math.sin(timeSec * 12)
+      : state === 'LISTENING'
+      ? 1 + 0.08 * Math.sin(timeSec * 4)
+      : 1 + 0.03 * Math.sin(timeSec * 1.8);
 
-  // Background radial glow
-  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 1.45);
-  grad.addColorStop(0, `rgba(${prR},${prG},${prB},${((0.28 + 0.35 * voice) * alpha).toFixed(3)})`);
-  grad.addColorStop(0.55, `rgba(${prR},${prG},${prB},${(0.1 * alpha).toFixed(3)})`);
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 1.6 * pulse);
+  grad.addColorStop(0, `rgba(${prR},${prG},${prB},0.55)`);
+  grad.addColorStop(0.45, `rgba(${prR},${prG},${prB},0.16)`);
   grad.addColorStop(1, `rgba(${prR},${prG},${prB},0)`);
   ctx.fillStyle = grad;
   ctx.beginPath();
-  ctx.arc(cx, cy, r * 1.45, 0, Math.PI * 2);
+  ctx.arc(cx, cy, r * 1.6 * pulse, 0, Math.PI * 2);
   ctx.fill();
 
-  // Outer gauge ticks
-  ctx.save();
-  ctx.translate(cx, cy);
-  const speed = state === 'THINKING' ? 1.8 : state === 'SPEAKING' ? 1.1 : 0.45;
-  ctx.rotate(timeSec * speed);
-  for (let i = 0; i < 36; i++) {
-    const ang = (i * Math.PI * 2) / 36;
-    const isMajor = i % 3 === 0;
-    const r0 = r * (isMajor ? 0.86 : 0.9);
-    const r1 = r * 0.96;
-    ctx.strokeStyle = `rgba(${prR},${prG},${prB},${((isMajor ? 0.75 : 0.35) * alpha).toFixed(3)})`;
-    ctx.lineWidth = isMajor ? 2.2 : 1.2;
+  for (let ring = 0; ring < 4; ring++) {
+    const rad = r * (0.35 + ring * 0.22) * pulse;
+    ctx.strokeStyle = `rgba(${prR},${prG},${prB},${0.75 - ring * 0.15})`;
+    ctx.lineWidth = ring === 0 ? 3 : 1.5;
     ctx.beginPath();
-    ctx.moveTo(Math.cos(ang) * r0, Math.sin(ang) * r0);
-    ctx.lineTo(Math.cos(ang) * r1, Math.sin(ang) * r1);
+    const start = timeSec * (ring % 2 === 0 ? 0.9 : -0.7) + ring;
+    ctx.arc(cx, cy, rad, start, start + Math.PI * 1.65);
     ctx.stroke();
   }
-  ctx.restore();
-
-  // Counter-rotating segmented arcs
-  for (const [radiusFrac, dir, widthFrac, segs] of [
-    [0.76, -1.2, 0.038, 3],
-    [0.62, 1.6, 0.026, 4],
-  ]) {
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(timeSec * dir * speed);
-    ctx.strokeStyle = `rgba(${prR},${prG},${prB},${(0.75 * alpha).toFixed(3)})`;
-    ctx.lineWidth = Math.max(2, r * widthFrac);
-    ctx.lineCap = 'round';
-    for (let s = 0; s < segs; s++) {
-      const a0 = (s * Math.PI * 2) / segs + 0.18;
-      const a1 = ((s + 1) * Math.PI * 2) / segs - 0.28;
-      ctx.beginPath();
-      ctx.arc(0, 0, r * radiusFrac, a0, a1);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  // Audio waveform spikes around core
-  const bars = 48;
-  const baseR = r * 0.42;
-  ctx.strokeStyle = `rgba(${prR},${prG},${prB},${(0.88 * alpha).toFixed(3)})`;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  for (let i = 0; i < bars; i++) {
-    const a = (i * Math.PI * 2) / bars;
-    const wave = Math.abs(Math.sin(timeSec * 8 + i * 0.45)) * voice * r * 0.16;
-    const rOut = baseR + 3 + wave;
-    ctx.moveTo(cx + Math.cos(a) * baseR, cy + Math.sin(a) * baseR);
-    ctx.lineTo(cx + Math.cos(a) * rOut, cy + Math.sin(a) * rOut);
-  }
-  ctx.stroke();
-
-  // Inner glowing core
-  const coreR = r * (0.28 + 0.08 * voice + 0.02 * Math.sin(timeSec * 3));
-  const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
-  coreGrad.addColorStop(0, `rgba(255,255,255,${(0.92 * alpha).toFixed(3)})`);
-  coreGrad.addColorStop(0.55, `rgba(${prR},${prG},${prB},${(0.85 * alpha).toFixed(3)})`);
-  coreGrad.addColorStop(1, `rgba(${prR},${prG},${prB},0.1)`);
-  ctx.fillStyle = coreGrad;
-  ctx.beginPath();
-  ctx.arc(cx, cy, coreR, 0, Math.PI * 2);
-  ctx.fill();
 }
