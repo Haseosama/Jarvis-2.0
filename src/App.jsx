@@ -61,7 +61,6 @@ export default function App() {
   };
 
   useEffect(() => {
-    configStore.initSecrets();
     const unsub = configStore.subscribe((nextCfg) => {
       setCfg(nextCfg);
     });
@@ -95,7 +94,17 @@ export default function App() {
         if (txt) setStatusText(txt);
       },
       onMessage: (msg) => {
-        setMessages((prev) => [...prev, msg]);
+        setMessages((prev) => {
+          if (msg.append && prev.length > 0) {
+            const idx = prev.findIndex((m) => m.id === msg.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = { ...next[idx], text: next[idx].text + msg.text };
+              return next;
+            }
+          }
+          return [...prev, msg];
+        });
       },
       onViseme: (v) => setViseme(v),
       onAudioLevel: (lvl) => setAudioLevel(lvl),
@@ -105,8 +114,19 @@ export default function App() {
     });
     engineRef.current = engine;
 
+    // Pre-connect Gemini Live WebSocket as soon as secrets/config load, even before mic is activated
+    configStore.initSecrets().then(() => {
+      if (configStore.getActiveApiKey() && configStore.get().voiceMode !== 'offline') {
+        engine.ensureLiveSession().then((ok) => {
+          if (ok && engine.state === 'IDLE') {
+            setStatusText(`Gemini Live connecté (${configStore.get().voiceName}) — Prêt`);
+          }
+        });
+      }
+    });
+
     const unsubPtt = hostBridge.onPushToTalk(() => {
-      if (engineRef.current?.state === 'LISTENING') {
+      if (engineRef.current?.micActive || engineRef.current?.state === 'LISTENING') {
         engineRef.current.stopLiveSession();
       } else {
         engineRef.current?.startLiveSession();
@@ -117,6 +137,7 @@ export default function App() {
       unsub();
       unsubPtt?.();
       engine.stopLiveSession();
+      engine._closeLiveSocketOnly?.();
     };
   }, []);
 
@@ -138,8 +159,10 @@ export default function App() {
 
   const toggleVoice = () => {
     if (!engineRef.current) return;
-    if (aiState === 'LISTENING' || aiState === 'SPEAKING') {
+    if (engineRef.current.micActive || aiState === 'LISTENING') {
       engineRef.current.stopLiveSession();
+    } else if (aiState === 'SPEAKING') {
+      engineRef.current.stopSpeaking();
     } else {
       engineRef.current.startLiveSession();
     }

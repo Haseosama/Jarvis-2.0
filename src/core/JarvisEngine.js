@@ -13,19 +13,48 @@ import { textToVisemes, VISEMES, pcmVisemes } from '../avatar/Visemes.js';
 const LIVE_WS_ENDPOINT =
   'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
 
+const LIVE_MODEL_FALLBACKS = [
+  'models/gemini-2.5-flash-native-audio-preview-12-2025',
+  'models/gemini-3.1-flash-live-preview',
+  'models/gemini-2.0-flash-live-001',
+];
+
 export class JarvisEngine {
   constructor(toolRegistry, callbacks = {}) {
     this.tools = toolRegistry;
     this.cb = callbacks; // { onStateChange, onMessage, onViseme, onAudioLevel, onStatusText }
     this.state = 'IDLE'; // 'IDLE' | 'LISTENING' | 'THINKING' | 'SPEAKING'
     this.ws = null;
+    this.wsReady = false;
+    this.wsVoice = null;
+    this.wsModel = null;
+    this.wsKey = null;
+    this.connectingPromise = null;
+    this.micActive = false;
     this.audioCtx = null;
     this.micStream = null;
     this.micProcessor = null;
     this.nextPlayTime = 0;
+    this.liveAudioSources = [];
+    this.liveVisemeQueue = [];
+    this.liveVisemeTimer = null;
+    this.currentAssistantTurnId = null;
+    this.currentUserTurnId = null;
+    this.suppressNextLiveTranscript = false;
     this.recognition = null;
     this.ttsTimer = null;
     this.chatHistory = [];
+
+    // Reconnect Gemini Live automatically whenever voiceName or API key changes
+    this._unsubConfig = configStore.subscribe((cfg) => {
+      const activeKey = configStore.getActiveApiKey();
+      if (this.ws && (this.wsVoice !== cfg.voiceName || this.wsKey !== activeKey)) {
+        this._closeLiveSocketOnly();
+        if (activeKey && cfg.voiceMode !== 'offline') {
+          this.ensureLiveSession(cfg.voiceName).catch(() => {});
+        }
+      }
+    });
   }
 
   setCallbacks(cb) {
@@ -79,35 +108,40 @@ export class JarvisEngine {
 
     this._setState('THINKING', 'Analyse de la demande...');
 
-    // If Gemini Live WebSocket is open, send clientContent turn
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(
-        JSON.stringify({
-          clientContent: {
-            turns: [{ role: 'user', parts: [{ text: clean }] }],
-            turnComplete: true,
-          },
-        })
-      );
-      return;
-    }
-
     const apiKey = configStore.getActiveApiKey();
     const mode = configStore.get().voiceMode;
 
-    // Try Gemini REST with ModelLadder if API key is configured and not forced offline
+    // 1. Always prefer Gemini Live WebSocket (even when microphone is NOT active!) so the response
+    //    is spoken with the real Gemini Live 24 kHz voice (Aoede, Kore, Fenrir, Puck, etc.)
+    if (apiKey && mode !== 'offline' && !imageBase64) {
+      const liveReady = await this.ensureLiveSession();
+      if (liveReady && this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.suppressNextLiveTranscript = false;
+        this.currentAssistantTurnId = null;
+        this.ws.send(
+          JSON.stringify({
+            clientContent: {
+              turns: [{ role: 'user', parts: [{ text: clean }] }],
+              turnComplete: true,
+            },
+          })
+        );
+        return;
+      }
+    }
+
+    // 2. Try Gemini REST with ModelLadder if API key is configured and not forced offline
     if (apiKey && mode !== 'offline') {
       try {
         const reply = await this._runRestWithLadder(clean, imageBase64);
         this._deliverAssistantReply(reply, speakReply);
         return;
       } catch (err) {
-        // Fall through to local intent engine if quota/network error
         console.warn('REST fallback to local engine:', err);
       }
     }
 
-    // Local / Offline Intent Engine (works 100% without API key!)
+    // 3. Local / Offline Intent Engine (works 100% without API key!)
     const localReply = await this._runLocalIntent(clean);
     this._deliverAssistantReply(localReply, speakReply);
   }
@@ -124,11 +158,11 @@ export class JarvisEngine {
     if (speak && configStore.get().ttsEnabled) {
       this.speakTextWithLipSync(text);
     } else {
-      this._setState('IDLE', 'Prêt');
+      this._setState(this.micActive ? 'LISTENING' : 'IDLE', this.micActive ? 'À l’écoute...' : 'Prêt');
     }
   }
 
-  // ── Speech Synthesis (Gemini 24kHz TTS + Local Voice Profiles) + 3D Lip-Sync ──
+  // ── Speech Synthesis (Gemini Live 24kHz -> Gemini TTS 24kHz -> Offline Profile) ──
 
   async speakTextWithLipSync(text, voiceOverride = null) {
     this.stopSpeaking();
@@ -141,17 +175,47 @@ export class JarvisEngine {
       .slice(0, 1800);
 
     if (!cleanForSpeech) {
-      this._setState('IDLE', 'Prêt');
+      this._setState(this.micActive ? 'LISTENING' : 'IDLE', 'Prêt');
       return;
     }
 
     const cfg = configStore.get();
     const voiceName = voiceOverride || cfg.voiceName || 'Aoede';
     const profile = VOICE_PROFILES[voiceName] || { gender: 'female', pitch: 1.0, rate: 1.05, idx: 0 };
-
-    // 1. If a Gemini API key is configured, try Gemini 24 kHz TTS (prebuiltVoiceConfig.voiceName)
     const apiKey = configStore.getActiveApiKey();
+
+    // 1. Even when the microphone is NOT active, use Gemini Live WebSocket first!
     if (apiKey && cfg.voiceMode !== 'offline') {
+      try {
+        this._setState('SPEAKING', `Gemini Live (${voiceName})...`);
+        const liveReady = await this.ensureLiveSession(voiceName);
+        if (liveReady && this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.suppressNextLiveTranscript = true;
+          this.currentAssistantTurnId = null;
+          this.ws.send(
+            JSON.stringify({
+              clientContent: {
+                turns: [
+                  {
+                    role: 'user',
+                    parts: [
+                      {
+                        text: `[Lis exactement cette phrase à voix haute en français, sans ajouter aucun autre mot ni commentaire : "${cleanForSpeech}"]`,
+                      },
+                    ],
+                  },
+                ],
+                turnComplete: true,
+              },
+            })
+          );
+          return;
+        }
+      } catch {
+        // Fall through to Gemini REST TTS
+      }
+
+      // 2. Fallback to Gemini 24 kHz REST TTS (models/gemini-2.5-flash-preview-tts)
       try {
         this._setState('SPEAKING', `Synthèse vocale Gemini (${voiceName})...`);
         const ttsModel = cfg.ttsModel || DEFAULT_TTS_MODEL;
@@ -184,8 +248,8 @@ export class JarvisEngine {
       }
     }
 
-    // 2. Local PC Speech Synthesis with per-voice gender, pitch & rate profile
-    this._setState('SPEAKING', `Jarvis parle (${voiceName})...`);
+    // 3. Offline / Local PC Speech Synthesis (only when no API key or offline mode)
+    this._setState('SPEAKING', `Voix hors ligne (${voiceName})...`);
     const pairs = textToVisemes(cleanForSpeech);
     const frames = [];
     for (const [vKey, dur] of pairs) {
@@ -292,6 +356,7 @@ export class JarvisEngine {
       }
       this.activeTtsSource = null;
     }
+    this._flushLiveAudio();
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try {
         window.speechSynthesis.cancel();
@@ -302,8 +367,27 @@ export class JarvisEngine {
     this.cb.onViseme?.({ jaw: 0, width: 0, round: 0, close: 0, teeth: 0 });
     this.cb.onAudioLevel?.(0);
     if (this.state === 'SPEAKING') {
-      this._setState('IDLE', 'Prêt');
+      this._setState(this.micActive ? 'LISTENING' : 'IDLE', this.micActive ? 'À l’écoute...' : 'Prêt');
     }
+  }
+
+  _flushLiveAudio() {
+    if (this.liveVisemeTimer) {
+      clearInterval(this.liveVisemeTimer);
+      this.liveVisemeTimer = null;
+    }
+    this.liveVisemeQueue = [];
+    if (this.liveAudioSources && this.liveAudioSources.length > 0) {
+      for (const s of this.liveAudioSources) {
+        try {
+          s.stop();
+        } catch {
+          // ignore
+        }
+      }
+      this.liveAudioSources = [];
+    }
+    this.nextPlayTime = 0;
   }
 
   // ── Gemini REST ModelLadder + Tool Calling Loop ────────────────────────────
@@ -407,32 +491,106 @@ export class JarvisEngine {
     throw lastErr || new Error('Aucun modèle REST disponible');
   }
 
-  // ── Gemini Live Bidirectional WebSocket Session ────────────────────────────
+  // ── Gemini Live Bidirectional WebSocket Session (Always-On for Text & Mic) ──
 
-  async startLiveSession() {
+  async ensureLiveSession(voiceOverride = null) {
+    const cfg = configStore.get();
+    if (cfg.voiceMode === 'offline') return false;
     const apiKey = configStore.getActiveApiKey();
-    if (!apiKey) {
-      // Fall back to Web Speech Recognition + Local/REST engine
-      return this.startVoiceRecognition();
+    if (!apiKey) return false;
+
+    const targetVoice = voiceOverride || cfg.voiceName || 'Aoede';
+
+    // Already connected and ready with the right voice & key
+    if (
+      this.ws &&
+      this.ws.readyState === WebSocket.OPEN &&
+      this.wsReady &&
+      this.wsVoice === targetVoice &&
+      this.wsKey === apiKey
+    ) {
+      return true;
     }
 
-    try {
-      this._setState('LISTENING', 'Connexion à Gemini Live...');
-      const cfg = configStore.get();
-      const wsUrl = `${LIVE_WS_ENDPOINT}?key=${encodeURIComponent(apiKey)}`;
-      const ws = new WebSocket(wsUrl);
-      this.ws = ws;
+    // Close stale socket if voice or key changed
+    if (this.ws && (this.wsVoice !== targetVoice || this.wsKey !== apiKey || !this.wsReady)) {
+      this._closeLiveSocketOnly();
+    }
 
-      ws.onopen = async () => {
+    if (this.connectingPromise) {
+      return this.connectingPromise;
+    }
+
+    this.connectingPromise = (async () => {
+      try {
+        const preferredModel = cfg.liveModel || 'models/gemini-2.5-flash-native-audio-preview-12-2025';
+        const candidates = [
+          preferredModel,
+          ...LIVE_MODEL_FALLBACKS.filter((m) => m !== preferredModel),
+        ];
+
+        for (const modelId of candidates) {
+          const ok = await this._connectLiveSocketOnce(apiKey, modelId, targetVoice);
+          if (ok) return true;
+        }
+
+        // Try rotating API key if another key slot is configured
+        if (configStore.rotateApiKey()) {
+          const nextKey = configStore.getActiveApiKey();
+          for (const modelId of candidates) {
+            const ok = await this._connectLiveSocketOnce(nextKey, modelId, targetVoice);
+            if (ok) return true;
+          }
+        }
+        return false;
+      } finally {
+        this.connectingPromise = null;
+      }
+    })();
+
+    return this.connectingPromise;
+  }
+
+  _connectLiveSocketOnce(apiKey, rawModelId, voiceName) {
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (ok) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(ok);
+        }
+      };
+
+      const modelId = rawModelId.startsWith('models/') ? rawModelId : `models/${rawModelId}`;
+      const wsUrl = `${LIVE_WS_ENDPOINT}?key=${encodeURIComponent(apiKey)}`;
+      let ws;
+      try {
+        ws = new WebSocket(wsUrl);
+      } catch {
+        finish(false);
+        return;
+      }
+
+      const timer = setTimeout(() => {
+        if (!settled) {
+          try {
+            ws.close();
+          } catch {}
+          finish(false);
+        }
+      }, 7000);
+
+      ws.onopen = () => {
         const setupFrame = {
           setup: {
-            model: cfg.liveModel || 'models/gemini-2.5-flash-native-audio-preview-12-2025',
+            model: modelId,
             generationConfig: {
               responseModalities: ['AUDIO'],
               speechConfig: {
                 voiceConfig: {
                   prebuiltVoiceConfig: {
-                    voiceName: cfg.voiceName || 'Aoede',
+                    voiceName: voiceName || 'Aoede',
                   },
                 },
               },
@@ -441,11 +599,15 @@ export class JarvisEngine {
               parts: [{ text: this.buildSystemPrompt() }],
             },
             tools: [{ functionDeclarations: this.tools.getDeclarations() }],
+            outputAudioTranscription: {},
+            inputAudioTranscription: {},
           },
         };
-        ws.send(JSON.stringify(setupFrame));
-        await this._startMicPcmStream();
-        this._setState('LISTENING', `Gemini Live actif (${cfg.voiceName})`);
+        try {
+          ws.send(JSON.stringify(setupFrame));
+        } catch {
+          finish(false);
+        }
       };
 
       ws.onmessage = async (event) => {
@@ -460,25 +622,90 @@ export class JarvisEngine {
           return;
         }
 
-        // Handle incoming 24kHz PCM audio from Gemini Live
-        const parts = msg.serverContent?.modelTurn?.parts || [];
-        for (const p of parts) {
-          if (p.inlineData?.data && String(p.inlineData.mimeType || '').startsWith('audio/pcm')) {
-            this._playPcm24kBase64(p.inlineData.data);
+        // 1. Handshake setupComplete
+        if (msg.setupComplete !== undefined) {
+          this.ws = ws;
+          this.wsReady = true;
+          this.wsVoice = voiceName;
+          this.wsModel = modelId;
+          this.wsKey = apiKey;
+          finish(true);
+          return;
+        }
+
+        // 2. Server Content (24kHz Audio, Transcriptions, Interruption, TurnComplete)
+        const sc = msg.serverContent;
+        if (sc) {
+          if (sc.interrupted) {
+            this._flushLiveAudio();
           }
-          if (p.text) {
+
+          // Input speech transcription (when microphone is active)
+          const inText = sc.inputTranscription?.text;
+          if (inText) {
+            if (!this.currentUserTurnId) {
+              this.currentUserTurnId = `u_live_${Date.now()}`;
+            }
             this.cb.onMessage?.({
-              id: `live_${Date.now()}`,
-              role: 'assistant',
-              text: p.text,
+              id: this.currentUserTurnId,
+              role: 'user',
+              text: inText,
+              append: true,
               timestamp: Date.now(),
             });
           }
+
+          // Output speech transcription from Gemini Live
+          const outText = sc.outputTranscription?.text;
+          if (outText && !this.suppressNextLiveTranscript) {
+            if (!this.currentAssistantTurnId) {
+              this.currentAssistantTurnId = `a_live_${Date.now()}`;
+            }
+            this.cb.onMessage?.({
+              id: this.currentAssistantTurnId,
+              role: 'assistant',
+              text: outText,
+              append: true,
+              timestamp: Date.now(),
+            });
+          }
+
+          // Incoming 24kHz PCM audio chunks
+          const parts = sc.modelTurn?.parts || [];
+          for (const p of parts) {
+            if (p.inlineData?.data) {
+              this._playPcm24kBase64(p.inlineData.data);
+            } else if (p.text && !outText && !this.suppressNextLiveTranscript) {
+              if (!this.currentAssistantTurnId) {
+                this.currentAssistantTurnId = `a_live_${Date.now()}`;
+              }
+              this.cb.onMessage?.({
+                id: this.currentAssistantTurnId,
+                role: 'assistant',
+                text: p.text,
+                append: true,
+                timestamp: Date.now(),
+              });
+            }
+          }
+
+          if (sc.turnComplete) {
+            this.currentAssistantTurnId = null;
+            this.currentUserTurnId = null;
+            this.suppressNextLiveTranscript = false;
+            if (this.liveVisemeQueue.length === 0 && this.state === 'THINKING') {
+              this._setState(
+                this.micActive ? 'LISTENING' : 'IDLE',
+                this.micActive ? `Gemini Live à l’écoute (${this.wsVoice})` : `Gemini Live prêt (${this.wsVoice})`
+              );
+            }
+          }
         }
 
-        // Handle tool calls from Gemini Live
+        // 3. Tool calls from Gemini Live
         const fnCalls = msg.toolCall?.functionCalls || [];
         if (fnCalls.length > 0) {
+          this._setState('THINKING', `Exécution d’action (${fnCalls[0].name})...`);
           const functionResponses = [];
           for (const fc of fnCalls) {
             const result = await this.tools.execute(fc.name, fc.args || {});
@@ -486,7 +713,7 @@ export class JarvisEngine {
             functionResponses.push({
               id: fc.id,
               name: fc.name,
-              response: { result },
+              response: { result: typeof result === 'string' ? result : JSON.stringify(result) },
             });
           }
           if (ws.readyState === WebSocket.OPEN) {
@@ -496,29 +723,52 @@ export class JarvisEngine {
       };
 
       ws.onerror = () => {
-        this.stopLiveSession();
-        this.startVoiceRecognition();
+        finish(false);
       };
 
       ws.onclose = () => {
-        this.ws = null;
-        this._stopMicPcmStream();
-        if (this.state !== 'IDLE') this._setState('IDLE', 'Prêt');
+        if (this.ws === ws) {
+          this.ws = null;
+          this.wsReady = false;
+        }
+        finish(false);
       };
-    } catch {
-      this.startVoiceRecognition();
-    }
+    });
   }
 
-  stopLiveSession() {
+  _closeLiveSocketOnly() {
     if (this.ws) {
+      const old = this.ws;
+      this.ws = null;
+      this.wsReady = false;
       try {
-        this.ws.close();
+        old.close();
       } catch {
         // ignore
       }
-      this.ws = null;
     }
+  }
+
+  async startLiveSession() {
+    const apiKey = configStore.getActiveApiKey();
+    if (!apiKey || configStore.get().voiceMode === 'offline') {
+      return this.startVoiceRecognition();
+    }
+
+    this._setState('LISTENING', 'Connexion au microphone Gemini Live...');
+    const ready = await this.ensureLiveSession();
+    if (!ready) {
+      return this.startVoiceRecognition();
+    }
+
+    this.micActive = true;
+    await this._startMicPcmStream();
+    this._setState('LISTENING', `Microphone Gemini Live actif (${this.wsVoice})`);
+  }
+
+  stopLiveSession() {
+    // Stop microphone capture & current speech, while keeping the Gemini Live WebSocket ready for text & TTS!
+    this.micActive = false;
     this._stopMicPcmStream();
     if (this.recognition) {
       try {
@@ -529,28 +779,47 @@ export class JarvisEngine {
       this.recognition = null;
     }
     this.stopSpeaking();
-    this._setState('IDLE', 'Prêt');
+    this._setState(
+      'IDLE',
+      this.wsReady ? `Gemini Live prêt (${this.wsVoice})` : 'Prêt'
+    );
   }
 
   async _startMicPcmStream() {
     try {
+      this._stopMicPcmStream();
       this.audioCtx = this.audioCtx || new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-      this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (this.audioCtx.state === 'suspended') {
+        await this.audioCtx.resume().catch(() => {});
+      }
+      this.micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       const source = this.audioCtx.createMediaStreamSource(this.micStream);
       const processor = this.audioCtx.createScriptProcessor(4096, 1, 1);
       this.micProcessor = processor;
 
       processor.onaudioprocess = (e) => {
-        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        if (!this.micActive || !this.ws || this.ws.readyState !== WebSocket.OPEN || !this.wsReady) return;
+        // Half-duplex protection: while Jarvis is speaking out loud, do not feed speaker echo back into the mic
+        if (this.state === 'SPEAKING' || this.liveVisemeQueue.length > 0) return;
+
         const input = e.inputBuffer.getChannelData(0);
-        const pcm16 = new Int16Array(input.length);
+        const inRate = e.inputBuffer.sampleRate || 16000;
+        const ratio = inRate / 16000;
+        const outLen = Math.floor(input.length / ratio);
+        const pcm16 = new Int16Array(outLen);
         let sumSq = 0;
-        for (let i = 0; i < input.length; i++) {
-          const s = Math.max(-1, Math.min(1, input[i]));
+        for (let i = 0; i < outLen; i++) {
+          const s = Math.max(-1, Math.min(1, input[Math.floor(i * ratio)]));
           sumSq += s * s;
           pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
         }
-        const rms = Math.sqrt(sumSq / input.length);
+        const rms = Math.sqrt(sumSq / Math.max(1, outLen));
         if (this.state === 'LISTENING') {
           this.cb.onAudioLevel?.(Math.min(1, rms * 6));
         }
@@ -563,7 +832,10 @@ export class JarvisEngine {
         this.ws.send(
           JSON.stringify({
             realtimeInput: {
-              mediaChunks: [{ mimeType: 'audio/pcm;rate=16000', data: b64 }],
+              audio: {
+                data: b64,
+                mimeType: 'audio/pcm;rate=16000',
+              },
             },
           })
         );
@@ -594,6 +866,9 @@ export class JarvisEngine {
   _playPcm24kBase64(b64) {
     try {
       this.audioCtx = this.audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume().catch(() => {});
+      }
       const bin = atob(b64);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -602,12 +877,34 @@ export class JarvisEngine {
       const float32 = new Float32Array(pcm16.length);
       for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768.0;
 
-      // Compute real-time F1/F2 formants from PCM to drive 3D avatar lip-sync!
+      // Queue 50 FPS (20ms) F1/F2 formant viseme frames for the entire duration of the audio chunk
       const visFrames = pcmVisemes(float32, 24000);
-      const vis = visFrames[0] || { open: 0.35, wide: 0 };
-      this._setState('SPEAKING', 'Gemini Live parle...');
-      this.cb.onViseme?.({ jaw: vis.open, open: vis.open, width: vis.wide, wide: vis.wide });
-      this.cb.onAudioLevel?.(Math.min(1, (vis.open || 0.25) * 0.9 + 0.1));
+      for (const vf of visFrames) {
+        this.liveVisemeQueue.push(vf);
+      }
+
+      this._setState('SPEAKING', `Gemini Live parle (${this.wsVoice || configStore.get().voiceName})...`);
+
+      if (!this.liveVisemeTimer) {
+        this.liveVisemeTimer = setInterval(() => {
+          if (this.liveVisemeQueue.length > 0) {
+            const vf = this.liveVisemeQueue.shift();
+            this.cb.onViseme?.({ jaw: vf.open, open: vf.open, width: vf.wide, wide: vf.wide });
+            this.cb.onAudioLevel?.(Math.min(1, (vf.level || vf.open || 0.2) * 0.95));
+          } else if (!this.audioCtx || this.audioCtx.currentTime >= (this.nextPlayTime || 0)) {
+            clearInterval(this.liveVisemeTimer);
+            this.liveVisemeTimer = null;
+            this.cb.onViseme?.({ jaw: 0, width: 0, round: 0, close: 0, teeth: 0 });
+            this.cb.onAudioLevel?.(0);
+            if (this.state === 'SPEAKING') {
+              this._setState(
+                this.micActive ? 'LISTENING' : 'IDLE',
+                this.micActive ? `Gemini Live à l’écoute (${this.wsVoice})` : `Gemini Live prêt (${this.wsVoice})`
+              );
+            }
+          }
+        }, 20);
+      }
 
       const audioBuffer = this.audioCtx.createBuffer(1, float32.length, 24000);
       audioBuffer.getChannelData(0).set(float32);
@@ -617,6 +914,10 @@ export class JarvisEngine {
       const startAt = Math.max(this.audioCtx.currentTime, this.nextPlayTime || 0);
       src.start(startAt);
       this.nextPlayTime = startAt + audioBuffer.duration;
+      this.liveAudioSources.push(src);
+      src.onended = () => {
+        this.liveAudioSources = this.liveAudioSources.filter((s) => s !== src);
+      };
     } catch {
       // ignore
     }
