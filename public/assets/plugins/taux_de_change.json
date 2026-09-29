@@ -14,5 +14,10 @@
     }
   ],
   "type": "http",
-  "url": "https://api.frankfurter.dev/v1/latest?base={base}&symbols={cible}"
+  "url": "https://api.frankfurter.dev/v1/latest?base={base}&symbols={cible}",
+  "result_fields": [
+    "date",
+    "base",
+    "rates"
+  ]
 }

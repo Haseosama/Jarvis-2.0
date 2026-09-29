@@ -7,14 +7,10 @@ Adaptation complète sur PC (Windows / Desktop autonome) de **[Jarvis-Android v0
 ## ✨ Fonctionnalités principales
 
 ### 1. 🎭 Avatar 3D Temps Réel & Synchronisation Labiale (60 FPS)
-- **Visages & Bustes 3D** :
-  - **Léa** (`head_mesh_lea.bin` — maillage 3D `JHM2` avec suivi du regard, paupières, sourcils, mâchoire)
-  - **Marc** (`head_mesh_marc.bin` — maillage 3D `JHM2` masculin)
-  - **Adam & Mei** (`characters/adam`, `characters/mei` — bustes 3D texturés `JCH1`/`JCH2` avec atlas WebP)
-  - **Classique**, **Cartoon 2D Expressif** et **Réacteur HUD**
-- **23 Coiffures 3D (`JHR1`) & 10 Teintes de Cheveux** : adaptation radiale sur le crâne (`fitOn`), physique ressort (`HoloAvatar`) et recoloration dynamique.
-- **2 Styles de rendu** : **Hologramme Cyan** (filaire + surface + balayage) ou **Peau 3D réaliste** avec éclairage et maquillage.
-- **Lip-Sync Temps Réel** : analyse formantique FFT F1/F2 sur flux audio PCM 24 kHz (`pcmVisemes`) et génération phonétique française (`textToVisemes`).
+- **Trois visages 3D** : Classique (`84 555 polygones` par défaut), Léa et Marc. Les avatars Cartoon, Adam et Mei ne sont pas inclus.
+- **Densité réglable** : sélecteur Éco, Léger, Standard, Haute Définition et Ultra; le compteur de polygones s’actualise sur l’avatar.
+- **Circuits PCB activables ou désactivables**, styles hologramme/peau, 23 coiffures 3D (`JHR1`), 11 teintes de cheveux et 5 teintes de lèvres.
+- **Lip-sync audio-locked** : analyse formantique FFT F1/F2 sur PCM 24 kHz, phonèmes français et synchronisation des visèmes avec l’horloge de lecture audio.
 
 ### 2. 🎙️ Voix Gemini Live (24 kHz), ModelLadder REST & Moteur Local Hors-Ligne
 - **Gemini Live WebSocket** (`BidiGenerateContent`) : flux audio bidirectionnel temps réel (entrée micro 16 kHz PCM16, sortie 24 kHz PCM16) avec appel d'outils en direct.
@@ -32,7 +28,9 @@ Adaptation complète sur PC (Windows / Desktop autonome) de **[Jarvis-Android v0
 
 ### 4. 🌍 Espace, Voûte Céleste & Carte du Monde Interactive
 - **Carte vectorielle mondiale** (`land.bin`, `borders.bin`, `cities.tsv`) avec zoom/déplacement, terminateur Jour/Nuit en temps réel et position sub-solaire.
-- **Suivi Orbital Temps Réel** : **ISS (Zarya)**, **Tiangong (CSS)** et **Hubble** avec traces au sol et empreinte de visibilité.
+- **Vols en direct** : avions détectés par ADS-B dans un rayon de 250 NM autour du centre de carte (source adsb.fi, repli airplanes.live). Survolez la zone en glissant la carte pour charger un autre secteur.
+- **Satellites** : cibles ISS, Tiangong et Hubble, plus un catalogue TLE CelesTrak (stations, navigation, météo, science, Starlink et militaire). Les TLE sont propagés localement par un modèle Kepler/J2 approché; l’ISS utilise aussi sa télémétrie publique en direct.
+- **Fiches interactives** : cliquez sur un avion pour consulter télémétrie, immatriculation, type, opérateur, route/trace et sources lorsqu’elles sont disponibles; cliquez sur un satellite pour afficher NORAD, éléments orbitaux, position, altitude, vitesse et visibilité locale.
 - **Voûte Céleste Nocturne** (`stars.tsv`, catalogue Yale Bright Star) : dôme polaire interactif avec constellations, Soleil, phase de la Lune et planètes (Mercure, Vénus, Mars, Jupiter, Saturne).
 - **Lancements Spatiaux, Séismes USGS M4.5+ & Aurores Boréales (Kp)**.
 
@@ -44,7 +42,7 @@ Adaptation complète sur PC (Windows / Desktop autonome) de **[Jarvis-Android v0
 ### 6. ✅ Productivité, Générateur de Documents & 82 Plugins JSON
 - **Créateur de Documents sans serveur** (`create_document`) : génération native de fichiers **PDF (`.pdf`)**, **Word (`.docx`)**, **Excel (`.xlsx`)**, **CSV (`.csv`)**, **Markdown (`.md`)** et **Texte (`.txt`)** dans `~/Documents/Jarvis`, plus intégration **Obsidian**.
 - **Organisation & Vie quotidienne** : listes de tâches/courses, agenda, minuteurs, dépenses, budgets, abonnements, habitudes (streaks), recettes, suivi de colis, anniversaires, mémoire à long terme, briefing du matin (`wake_briefing`), météo Open-Meteo, pluie dans l'heure, qualité de l'air/pollens et prix des carburants en France.
-- **82 Plugins JSON déclaratifs** (`public/assets/plugins/`) : *SNCF, RATP, EDF Tempo, RTE EcoWatt, Vigicrues, Allociné, Programme TV, Ligue 1, Top 14, Formule 1, Hacker News, ArXiv, PubMed, NASA APOD, Crypto, Taux de change, Wikipédia, OpenFoodFacts, Steam, GitHub Trending...*
+- **82 Plugins JSON déclaratifs réparés** (`public/assets/plugins/`) : les réponses sont décodées par chemins/collections de résultats, les paramètres manquants sont signalés et les routines Android ont été remplacées par leurs équivalents PC (fenêtres, lecteur multimédia, volume, luminosité, agenda/tâches et minuteurs). Les appels web passent par le pont réseau de l’application, sans serveur backend à installer.
 
 ---
 

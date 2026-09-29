@@ -9,5 +9,12 @@
     }
   ],
   "type": "http",
-  "url": "https://openlibrary.org/search.json?q={titre}&limit=3&fields=title,author_name,first_publish_year"
+  "url": "https://openlibrary.org/search.json?q={titre}&limit=3&fields=title,author_name,first_publish_year",
+  "result_items": "docs",
+  "result_fields": [
+    "title",
+    "author_name",
+    "first_publish_year"
+  ],
+  "result_max": 3
 }

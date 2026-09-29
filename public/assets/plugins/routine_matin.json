@@ -1,6 +1,6 @@
 {
   "name": "routine_matin",
-  "description": "Prépare la journée : météo de la ville, événements du jour de l'agenda et rappels à venir. À utiliser pour « ma routine du matin », « prépare ma journée ».",
+  "description": "Prépare la journée sur le PC : météo de la ville, agenda et liste de tâches à faire.",
   "parameters": [
     {
       "name": "ville",
@@ -11,7 +11,7 @@
   "type": "routine",
   "steps": [
     {
-      "tool": "weather_report",
+      "tool": "weather",
       "args": {
         "city": "{ville}"
       }
@@ -24,9 +24,10 @@
       }
     },
     {
-      "tool": "reminder",
+      "tool": "tasks",
       "args": {
-        "mode": "list"
+        "action": "list",
+        "list_name": "todo"
       }
     }
   ]

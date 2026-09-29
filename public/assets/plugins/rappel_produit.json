@@ -9,5 +9,12 @@
     }
   ],
   "type": "http",
-  "url": "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso-v2-gtin-espaces/records?where=%22{terme}%22&limit=3&order_by=date_publication%20desc&select=marque_produit,motif_rappel,date_publication"
+  "url": "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso-v2-gtin-espaces/records?where=%22{terme}%22&limit=3&order_by=date_publication%20desc&select=marque_produit,motif_rappel,date_publication",
+  "result_items": "results",
+  "result_fields": [
+    "marque_produit",
+    "motif_rappel",
+    "date_publication"
+  ],
+  "result_max": 3
 }

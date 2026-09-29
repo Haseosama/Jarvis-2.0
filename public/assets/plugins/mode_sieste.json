@@ -1,6 +1,6 @@
 {
   "name": "mode_sieste",
-  "description": "Une sieste : pas de dérangement et un minuteur pour se réveiller. Pour « je fais une sieste de 20 minutes », « réveille-moi dans une demi-heure ».",
+  "description": "Prépare une pause sur le PC : met le lecteur multimédia en pause et lance un minuteur de réveil.",
   "parameters": [
     {
       "name": "duree",
@@ -16,19 +16,17 @@
   "type": "routine",
   "steps": [
     {
-      "tool": "quiet_mode",
+      "tool": "device_settings",
       "args": {
-        "action": "start",
-        "minutes": "{minutes}",
-        "reason": "sieste"
+        "setting": "media_pause"
       }
     },
     {
-      "tool": "timer",
+      "tool": "set_timer",
       "args": {
-        "action": "create",
-        "duration": "{duree}",
-        "label": "Fin de la sieste"
+        "action": "start",
+        "minutes": "{minutes}",
+        "label": "Fin de la sieste ({duree})"
       }
     }
   ]

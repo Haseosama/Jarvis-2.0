@@ -1,6 +1,6 @@
 {
   "name": "mode_voiture",
-  "description": "Prépare le téléphone pour conduire : monte le volume puis ouvre Google Maps. À utiliser pour « mode voiture » ou « je prends la route ».",
+  "description": "Prépare le PC avant de prendre la route : règle le volume et ouvre Google Maps dans le navigateur.",
   "parameters": [
     {
       "name": "volume",
@@ -13,7 +13,7 @@
     {
       "tool": "device_settings",
       "args": {
-        "action": "set_volume",
+        "setting": "volume",
         "value": "{volume}"
       }
     },

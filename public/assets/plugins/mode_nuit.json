@@ -1,6 +1,6 @@
 {
   "name": "mode_nuit",
-  "description": "Prépare le téléphone pour la nuit : baisse le volume puis ouvre les réglages d'affichage. À utiliser pour « mode nuit » ou « je vais dormir ».",
+  "description": "Prépare le PC pour la nuit : baisse le volume, réduit la luminosité si l’écran le permet et met le lecteur multimédia en pause.",
   "parameters": [
     {
       "name": "volume",
@@ -13,15 +13,21 @@
     {
       "tool": "device_settings",
       "args": {
-        "action": "set_volume",
+        "setting": "volume",
         "value": "{volume}"
       }
     },
     {
       "tool": "device_settings",
       "args": {
-        "action": "open_settings",
-        "page": "display"
+        "setting": "brightness",
+        "value": "25"
+      }
+    },
+    {
+      "tool": "device_settings",
+      "args": {
+        "setting": "media_pause"
       }
     }
   ]

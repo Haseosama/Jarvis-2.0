@@ -9,5 +9,16 @@
     }
   ],
   "type": "http",
-  "url": "https://geocoding-api.open-meteo.com/v1/search?name={ville}&count=1&language=fr"
+  "url": "https://geocoding-api.open-meteo.com/v1/search?name={ville}&count=1&language=fr",
+  "result_items": "results",
+  "result_fields": [
+    "name",
+    "country",
+    "admin1",
+    "latitude",
+    "longitude",
+    "elevation",
+    "timezone"
+  ],
+  "result_max": 1
 }

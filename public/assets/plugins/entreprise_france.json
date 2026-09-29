@@ -9,5 +9,15 @@
     }
   ],
   "type": "http",
-  "url": "https://recherche-entreprises.api.gouv.fr/search?q={nom}&per_page=1"
+  "url": "https://recherche-entreprises.api.gouv.fr/search?q={nom}&per_page=1",
+  "result_items": "results",
+  "result_fields": [
+    "nom_complet",
+    "siren",
+    "siege.adresse",
+    "siege.code_postal",
+    "siege.libelle_commune",
+    "activite_principale"
+  ],
+  "result_max": 1
 }

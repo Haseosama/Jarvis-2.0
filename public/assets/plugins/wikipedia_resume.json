@@ -10,5 +10,10 @@
   ],
   "type": "http",
   "url": "https://fr.wikipedia.org/api/rest_v1/page/summary/{sujet}",
-  "result_path": "extract"
+  "result_path": "extract",
+  "result_fields": [
+    "title",
+    "description",
+    "extract"
+  ]
 }

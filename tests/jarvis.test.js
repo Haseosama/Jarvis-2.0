@@ -20,9 +20,14 @@ import {
   solarSystemObjects,
   satelliteStateAt,
   DEFAULT_SATELLITES,
+  parseTleCatalog,
+  tleStateAt,
   moonPhase,
 } from '../src/space/SpaceEngine.js';
 import { hostBridge } from '../src/core/hostBridge.js';
+import { PluginEngine } from '../src/core/PluginEngine.js';
+import { ToolRegistry } from '../src/actions/ToolRegistry.js';
+import { normalizeAircraft, haversineDistanceKm } from '../src/space/TrackingService.js';
 import { configStore, ALL_VOICES, VOICE_PROFILES, normalizeFaceId } from '../src/core/ConfigStore.js';
 
 const ASSETS_DIR = path.resolve(process.cwd(), 'public/assets');
@@ -112,6 +117,36 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     assert.ok(phase.lit >= 0 && phase.lit <= 1);
   });
 
+  it('normalizes live ADS-B aircraft into selectable flight telemetry', () => {
+    const plane = normalizeAircraft({
+      hex: 'a0b1c2', flight: 'AFR123', lat: 44.8, lon: -0.6, alt_baro: 35000,
+      gs: 420, track: 180, baro_rate: -512, t: 'A320', r: 'F-GKXY', squawk: '7000', messages: 1300,
+    }, 'adsb.fi');
+    assert.equal(plane.icao24, 'a0b1c2');
+    assert.equal(plane.category, 'commercial');
+    assert.equal(plane.altitudeM, 35000 * 0.3048);
+    assert.equal(plane.speedKnots, 420);
+    assert.equal(plane.verticalRateFpm, -512);
+    assert.ok(haversineDistanceKm(44.84, -0.58, 48.86, 2.35) > 400);
+  });
+
+  it('parses live TLE catalog lines and propagates a selectable satellite position', () => {
+    const tle = [
+      'ISS (ZARYA)',
+      '1 25544U 98067A   24146.40251785  .00015505  00000-0  27885-3 0  9997',
+      '2 25544  51.6402 189.7042 0004381 334.8091 106.8778 15.50091157455243',
+    ].join('\n');
+    const [iss] = parseTleCatalog(tle, 'science');
+    assert.equal(iss.norad, 25544);
+    assert.equal(iss.name, 'ISS (ZARYA)');
+    assert.ok(iss.meanMotionRevDay > 15);
+    assert.ok(iss.apogeeAltKm > iss.perigeeAltKm);
+    const position = tleStateAt(iss, iss.epoch + 60 * 60_000);
+    assert.ok(position.lat >= -90 && position.lat <= 90);
+    assert.ok(position.lon >= -180 && position.lon <= 180);
+    assert.ok(position.altKm > 200 && position.altKm < 1000);
+  });
+
   it('validates all 82 bundled JSON plugins', () => {
     const index = JSON.parse(fs.readFileSync(path.join(ASSETS_DIR, 'plugins/index.json'), 'utf8'));
     assert.equal(index.length, 82);
@@ -195,5 +230,58 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     assert.equal(configStore.get().avatarCircuits, false);
     assert.equal(configStore.get().avatarPolygonLevel, 'low');
     assert.equal(configStore.get().voiceName, 'Fenrir');
+  });
+
+  it('checks bundled plugin definitions, parameter placeholders, desktop routines and JSON/index sync', () => {
+    const index = JSON.parse(fs.readFileSync(path.join(ASSETS_DIR, 'plugins/index.json'), 'utf8'));
+    const tools = new Set([...new ToolRegistry().tools.keys()]);
+    assert.equal(index.length, 82);
+    for (const entry of index) {
+      const spec = entry.spec || entry;
+      assert.ok(spec.name && spec.description, `Plugin ${entry.fileName} has metadata`);
+      const disk = JSON.parse(fs.readFileSync(path.join(ASSETS_DIR, `plugins/${entry.fileName}`), 'utf8'));
+      assert.deepEqual(spec, disk, `${spec.name} index entry matches its JSON file`);
+      const declared = new Set((spec.parameters || []).map((p) => p.name));
+      const templates = [spec.url, spec.uri, spec.body, spec.body_template, ...(spec.steps || []).flatMap((step) => Object.values(step.args || {}))]
+        .filter((value) => typeof value === 'string').join(' ');
+      for (const [, key] of templates.matchAll(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g)) {
+        assert.ok(declared.has(key), `${spec.name} uses declared placeholder ${key}`);
+      }
+      if (spec.type === 'routine') {
+        assert.ok(spec.steps?.length > 0, `${spec.name} has routine steps`);
+        for (const step of spec.steps) assert.ok(tools.has(step.tool), `${spec.name} uses PC tool ${step.tool}`);
+      }
+      if (spec.type === 'http') assert.ok(spec.url.startsWith('https://'), `${spec.name} uses HTTPS`);
+    }
+  });
+
+  it('formats nested JSON, array fields, and missing required plugin parameters safely', async () => {
+    const engine = new PluginEngine();
+    engine.loaded = true;
+    engine.catalog = [{
+      name: 'meteo_test', description: 'Météo de test.', type: 'http',
+      parameters: [{ name: 'ville', description: 'Ville requise', required: true }],
+      url: 'https://example.com/weather?city={ville}', result_fields: ['current.temperature', 'current.wind_speed'],
+    }];
+    const originalFetch = hostBridge.httpFetch;
+    const calls = [];
+    hostBridge.httpFetch = async (payload) => {
+      calls.push(payload);
+      return { ok: true, status: 200, text: '{"current":{"temperature":21,"wind_speed":9}}', json: { current: { temperature: 21, wind_speed: 9 } } };
+    };
+    try {
+      const missing = await engine.runPlugin('meteo_test', {});
+      assert.match(missing, /ville/);
+      const result = await engine.runPlugin('meteo_test', { ville: 'Saint Étienne' });
+      assert.match(calls[0].url, /Saint%20%C3%89tienne/);
+      assert.match(result, /temperature : 21/);
+      assert.match(result, /wind_speed : 9/);
+      assert.match(result, /Données externes/);
+      assert.equal(engine.formatResponse({ result_items: 'rows', result_fields: ['name', 'nested.value'] }, '', { rows: [{ name: 'Avion', nested: { value: 12 } }] }), '1. Avion — 12');
+      assert.match(engine.formatResponse({ name: 'wikipedia_recherche' }, '', ['Jarvis', ['Jarvis'], ['Assistant personnel'], ['https://fr.wikipedia.org/wiki/Jarvis']]), /Assistant personnel/);
+      assert.match(engine.formatResponse({ name: 'asteroides_du_jour' }, '', { near_earth_objects: { today: [{ name: '2026 AB', close_approach_data: [{ close_approach_date: '2026-09-29', miss_distance: { kilometers: '123456' } }], estimated_diameter: { kilometers: { estimated_diameter_max: 0.3 } } }] } }), /2026 AB.*123.456 km/);
+    } finally {
+      hostBridge.httpFetch = originalFetch;
+    }
   });
 });

@@ -113,11 +113,28 @@ export const hostBridge = {
 
   async openExternal(url) {
     if (!url) return false;
+    let target = String(url).trim();
+    // Adapt Android-style geo: / sms: / intent: schemes into PC browser URLs
+    if (/^geo:/i.test(target)) {
+      const qMatch = /[?&]q=([^&]+)/i.exec(target);
+      if (qMatch) {
+        target = `https://www.google.com/maps/search/${qMatch[1]}`;
+      } else {
+        const coords = target.replace(/^geo:/i, '').split('?')[0];
+        target = `https://www.google.com/maps/place/${encodeURIComponent(coords)}`;
+      }
+    } else if (/^sms:/i.test(target)) {
+      const bodyMatch = /[?&]body=([^&]+)/i.exec(target);
+      const phone = target.replace(/^sms:/i, '').split('?')[0].replace(/[^0-9+]/g, '');
+      target = `https://web.whatsapp.com/send?phone=${encodeURIComponent(phone)}${bodyMatch ? `&text=${bodyMatch[1]}` : ''}`;
+    }
     try {
       if (hasElectron() && typeof window.jarvisHost.openExternal === 'function') {
-        return await window.jarvisHost.openExternal(url);
+        return await window.jarvisHost.openExternal(target);
       }
-      window.open(url, '_blank', 'noopener,noreferrer');
+      if (typeof window !== 'undefined' && typeof window.open === 'function') {
+        window.open(target, '_blank', 'noopener,noreferrer');
+      }
       return true;
     } catch {
       return false;
@@ -257,11 +274,18 @@ export const hostBridge = {
         spotify: 'https://open.spotify.com',
         github: 'https://github.com',
         chrome: 'https://www.google.com',
+        maps: 'https://www.google.com/maps',
+        'google maps': 'https://www.google.com/maps',
+        waze: 'https://www.waze.com/live-map',
+        calendar: 'https://calendar.google.com',
+        agenda: 'https://calendar.google.com',
       };
       const url =
         webMap[lower] || Object.entries(webMap).find(([k]) => lower.includes(k))?.[1];
       if (url) {
-        window.open(url, '_blank', 'noopener,noreferrer');
+        if (typeof window !== 'undefined' && typeof window.open === 'function') {
+          window.open(url, '_blank', 'noopener,noreferrer');
+        }
         return { ok: true, message: `Application ouverte : ${appName}` };
       }
       return {
@@ -273,17 +297,28 @@ export const hostBridge = {
     }
   },
 
-  async setDeviceSetting({ setting, value } = {}) {
-    const s = String(setting || '').toLowerCase();
-    let payload = { action: s, level: value };
-    if (s === 'volume') payload = { action: 'set_volume', level: Number(value ?? 60) };
+  async setDeviceSetting({ setting, action, value, page, command } = {}) {
+    const rawKey = String(setting || action || '').toLowerCase();
+    const s =
+      rawKey === 'set_volume'
+        ? 'volume'
+        : rawKey === 'set_brightness'
+        ? 'brightness'
+        : rawKey === 'open_settings'
+        ? String(page || 'display').toLowerCase()
+        : rawKey === 'media'
+        ? `media_${String(command || 'play_pause').toLowerCase()}`
+        : rawKey;
+    const numericVal = value !== undefined && value !== '' ? Number(value) : undefined;
+    let payload = { action: s, level: numericVal };
+    if (s === 'volume') payload = { action: 'set_volume', level: Number(numericVal ?? 60) };
     else if (s === 'mute' || s === 'unmute') payload = { action: 'volume_Step', command: 'mute' };
     else if (s === 'volume_up') payload = { action: 'volume_Step', command: 'up' };
     else if (s === 'volume_down') payload = { action: 'volume_Step', command: 'down' };
-    else if (s === 'brightness') payload = { action: 'set_brightness', level: Number(value ?? 80) };
+    else if (s === 'brightness') payload = { action: 'set_brightness', level: Number(numericVal ?? 80) };
     else if (s.startsWith('media_')) {
       const cmd = s.replace('media_', '');
-      payload = { action: 'media', command: cmd === 'play_pause' ? 'toggle' : cmd };
+      payload = { action: 'media', command: cmd === 'play_pause' || cmd === 'play' || cmd === 'pause' ? 'toggle' : cmd };
     } else if (s === 'lock') payload = { action: 'lock_screen' };
     else if (s === 'display_off') payload = { action: 'display_off' };
     else if (s === 'empty_recycle_bin') payload = { action: 'empty_recycle_bin' };
@@ -321,9 +356,9 @@ export const hostBridge = {
     return {
       ok: true,
       message:
-        value !== undefined
-          ? `Réglage PC « ${setting} » fixé à ${value}%.`
-          : `Commande système « ${setting} » exécutée.`,
+        numericVal !== undefined && !Number.isNaN(numericVal)
+          ? `Réglage PC « ${s} » fixé à ${numericVal}%.`
+          : `Commande système « ${s} » exécutée.`,
     };
   },
 
@@ -556,6 +591,38 @@ export const hostBridge = {
           text,
           json: safeJsonParse(text, null),
         };
+      }
+
+      // Try local embedded proxy (Vite server, Electron asset server, or Jarvis-2.0.exe C# HttpListener)
+      if (typeof window !== 'undefined' && /^https?:\/\//i.test(window.location?.protocol || '')) {
+        try {
+          const proxyUrl = `/__jarvis_proxy__?url=${encodeURIComponent(url)}&method=${encodeURIComponent(method)}`;
+          const pController = new AbortController();
+          const pTimer = setTimeout(() => pController.abort(), timeoutMs);
+          try {
+            const pRes = await fetch(proxyUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url, method, headers, body, timeoutMs }),
+              signal: pController.signal,
+            });
+            if (pRes.ok) {
+              const pData = await pRes.json();
+              if (pData && typeof pData.text === 'string' && pData.status !== 0) {
+                return {
+                  ok: Boolean(pData.ok),
+                  status: pData.status || 200,
+                  text: pData.text,
+                  json: safeJsonParse(pData.text, null),
+                };
+              }
+            }
+          } finally {
+            clearTimeout(pTimer);
+          }
+        } catch {
+          // Fall through to direct fetch
+        }
       }
 
       const controller = new AbortController();

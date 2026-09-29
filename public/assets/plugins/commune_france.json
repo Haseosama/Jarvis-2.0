@@ -9,5 +9,12 @@
     }
   ],
   "type": "http",
-  "url": "https://geo.api.gouv.fr/communes?nom={ville}&fields=nom,code,codesPostaux,population,departement&limit=1"
+  "url": "https://geo.api.gouv.fr/communes?nom={ville}&fields=nom,code,codesPostaux,population,departement&limit=1",
+  "result_fields": [
+    "nom",
+    "code",
+    "codesPostaux",
+    "population",
+    "departement.nom"
+  ]
 }

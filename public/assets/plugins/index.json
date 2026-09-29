@@ -127,12 +127,12 @@
     "json": "{\n  \"name\": \"asteroides_du_jour\",\n  \"description\": \"Donne le nombre d'astéroïdes qui passent près de la Terre aujourd'hui (source : NASA NeoWs, clé de démonstration limitée). Pour « y a-t-il des astéroïdes aujourd'hui ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://api.nasa.gov/neo/rest/v1/feed/today?api_key=DEMO_KEY\",\n  \"result_path\": \"element_count\"\n}\n"
   },
   {
-    "fileName": "bilan_telephone.json",
-    "name": "bilan_telephone",
-    "description": "Fait le point sur le téléphone : batterie, stockage libre et dernières notifications. À utiliser pour « comment va mon téléphone », « qu'est-ce que j'ai raté ».",
+    "fileName": "bilan_pc.json",
+    "name": "bilan_pc",
+    "description": "Fait le point sur le PC : état processeur, mémoire, stockage, fenêtres ouvertes et tâches à faire. Pour « comment va mon PC ? », « fais-moi le bilan du bureau ».",
     "spec": {
-      "name": "bilan_telephone",
-      "description": "Fait le point sur le téléphone : batterie, stockage libre et dernières notifications. À utiliser pour « comment va mon téléphone », « qu'est-ce que j'ai raté ».",
+      "name": "bilan_pc",
+      "description": "Fait le point sur le PC : état processeur, mémoire, stockage, fenêtres ouvertes et tâches à faire. Pour « comment va mon PC ? », « fais-moi le bilan du bureau ».",
       "parameters": [],
       "type": "routine",
       "steps": [
@@ -141,14 +141,21 @@
           "args": {}
         },
         {
-          "tool": "notifications",
+          "tool": "pc_control",
           "args": {
-            "limit": "5"
+            "action": "list_windows"
+          }
+        },
+        {
+          "tool": "tasks",
+          "args": {
+            "action": "list",
+            "list_name": "todo"
           }
         }
       ]
     },
-    "json": "{\n  \"name\": \"bilan_telephone\",\n  \"description\": \"Fait le point sur le téléphone : batterie, stockage libre et dernières notifications. À utiliser pour « comment va mon téléphone », « qu'est-ce que j'ai raté ».\",\n  \"parameters\": [],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"system_monitor\",\n      \"args\": {}\n    },\n    {\n      \"tool\": \"notifications\",\n      \"args\": {\n        \"limit\": \"5\"\n      }\n    }\n  ]\n}\n"
+    "json": "{\n  \"name\": \"bilan_pc\",\n  \"description\": \"Fait le point sur le PC : état processeur, mémoire, stockage, fenêtres ouvertes et tâches à faire. Pour « comment va mon PC ? », « fais-moi le bilan du bureau ».\",\n  \"parameters\": [],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"system_monitor\",\n      \"args\": {}\n    },\n    {\n      \"tool\": \"pc_control\",\n      \"args\": {\n        \"action\": \"list_windows\"\n      }\n    },\n    {\n      \"tool\": \"tasks\",\n      \"args\": {\n        \"action\": \"list\",\n        \"list_name\": \"todo\"\n      }\n    }\n  ]\n}\n"
   },
   {
     "fileName": "blague.json",
@@ -245,9 +252,13 @@
       "description": "Donne une citation au hasard avec son auteur, en anglais (source : zenquotes.io). Pour « une citation », « motive-moi ».",
       "parameters": [],
       "type": "http",
-      "url": "https://zenquotes.io/api/random"
+      "url": "https://zenquotes.io/api/random",
+      "result_fields": [
+        "q",
+        "a"
+      ]
     },
-    "json": "{\n  \"name\": \"citation\",\n  \"description\": \"Donne une citation au hasard avec son auteur, en anglais (source : zenquotes.io). Pour « une citation », « motive-moi ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://zenquotes.io/api/random\"\n}\n"
+    "json": "{\n  \"name\": \"citation\",\n  \"description\": \"Donne une citation au hasard avec son auteur, en anglais (source : zenquotes.io). Pour « une citation », « motive-moi ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://zenquotes.io/api/random\",\n  \"result_fields\": [\n    \"q\",\n    \"a\"\n  ]\n}\n"
   },
   {
     "fileName": "classement_f1.json",
@@ -258,9 +269,19 @@
       "description": "Donne le classement actuel du championnat de Formule 1 des pilotes : les 3 premiers avec points et victoires (source : Jolpica, successeur d'Ergast). Pour « qui mène en F1 ».",
       "parameters": [],
       "type": "http",
-      "url": "https://api.jolpi.ca/ergast/f1/current/driverStandings.json?limit=3"
+      "url": "https://api.jolpi.ca/ergast/f1/current/driverStandings.json?limit=3",
+      "result_items": "MRData.StandingsTable.StandingsLists[0].DriverStandings",
+      "result_fields": [
+        "position",
+        "Driver.givenName",
+        "Driver.familyName",
+        "Constructors[0].name",
+        "points",
+        "wins"
+      ],
+      "result_max": 3
     },
-    "json": "{\n  \"name\": \"classement_f1\",\n  \"description\": \"Donne le classement actuel du championnat de Formule 1 des pilotes : les 3 premiers avec points et victoires (source : Jolpica, successeur d'Ergast). Pour « qui mène en F1 ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://api.jolpi.ca/ergast/f1/current/driverStandings.json?limit=3\"\n}\n"
+    "json": "{\n  \"name\": \"classement_f1\",\n  \"description\": \"Donne le classement actuel du championnat de Formule 1 des pilotes : les 3 premiers avec points et victoires (source : Jolpica, successeur d'Ergast). Pour « qui mène en F1 ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://api.jolpi.ca/ergast/f1/current/driverStandings.json?limit=3\",\n  \"result_items\": \"MRData.StandingsTable.StandingsLists[0].DriverStandings\",\n  \"result_fields\": [\n    \"position\",\n    \"Driver.givenName\",\n    \"Driver.familyName\",\n    \"Constructors[0].name\",\n    \"points\",\n    \"wins\"\n  ],\n  \"result_max\": 3\n}\n"
   },
   {
     "fileName": "cocktail_hasard.json",
@@ -271,9 +292,17 @@
       "description": "Propose un cocktail au hasard : nom, catégorie, verre et préparation, en anglais (source : thecocktaildb.com). Pour « un cocktail pour ce soir ».",
       "parameters": [],
       "type": "http",
-      "url": "https://www.thecocktaildb.com/api/json/v1/1/random.php"
+      "url": "https://www.thecocktaildb.com/api/json/v1/1/random.php",
+      "result_items": "drinks",
+      "result_fields": [
+        "strDrink",
+        "strCategory",
+        "strGlass",
+        "strInstructions"
+      ],
+      "result_max": 1
     },
-    "json": "{\n  \"name\": \"cocktail_hasard\",\n  \"description\": \"Propose un cocktail au hasard : nom, catégorie, verre et préparation, en anglais (source : thecocktaildb.com). Pour « un cocktail pour ce soir ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://www.thecocktaildb.com/api/json/v1/1/random.php\"\n}\n"
+    "json": "{\n  \"name\": \"cocktail_hasard\",\n  \"description\": \"Propose un cocktail au hasard : nom, catégorie, verre et préparation, en anglais (source : thecocktaildb.com). Pour « un cocktail pour ce soir ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://www.thecocktaildb.com/api/json/v1/1/random.php\",\n  \"result_items\": \"drinks\",\n  \"result_fields\": [\n    \"strDrink\",\n    \"strCategory\",\n    \"strGlass\",\n    \"strInstructions\"\n  ],\n  \"result_max\": 1\n}\n"
   },
   {
     "fileName": "code_postal_ville.json",
@@ -329,9 +358,16 @@
         }
       ],
       "type": "http",
-      "url": "https://geo.api.gouv.fr/communes?nom={ville}&fields=nom,code,codesPostaux,population,departement&limit=1"
+      "url": "https://geo.api.gouv.fr/communes?nom={ville}&fields=nom,code,codesPostaux,population,departement&limit=1",
+      "result_fields": [
+        "nom",
+        "code",
+        "codesPostaux",
+        "population",
+        "departement.nom"
+      ]
     },
-    "json": "{\n  \"name\": \"commune_france\",\n  \"description\": \"Donne les informations d'une commune française : code INSEE, codes postaux, population et département (source : geo.api.gouv.fr). Pour « combien d'habitants à… », « dans quel département est… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ville\",\n      \"description\": \"Nom de la commune\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://geo.api.gouv.fr/communes?nom={ville}&fields=nom,code,codesPostaux,population,departement&limit=1\"\n}\n"
+    "json": "{\n  \"name\": \"commune_france\",\n  \"description\": \"Donne les informations d'une commune française : code INSEE, codes postaux, population et département (source : geo.api.gouv.fr). Pour « combien d'habitants à… », « dans quel département est… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ville\",\n      \"description\": \"Nom de la commune\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://geo.api.gouv.fr/communes?nom={ville}&fields=nom,code,codesPostaux,population,departement&limit=1\",\n  \"result_fields\": [\n    \"nom\",\n    \"code\",\n    \"codesPostaux\",\n    \"population\",\n    \"departement.nom\"\n  ]\n}\n"
   },
   {
     "fileName": "comparer_prix.json",
@@ -443,9 +479,19 @@
         }
       ],
       "type": "http",
-      "url": "https://recherche-entreprises.api.gouv.fr/search?q={nom}&per_page=1"
+      "url": "https://recherche-entreprises.api.gouv.fr/search?q={nom}&per_page=1",
+      "result_items": "results",
+      "result_fields": [
+        "nom_complet",
+        "siren",
+        "siege.adresse",
+        "siege.code_postal",
+        "siege.libelle_commune",
+        "activite_principale"
+      ],
+      "result_max": 1
     },
-    "json": "{\n  \"name\": \"entreprise_france\",\n  \"description\": \"Retrouve une entreprise française par son nom : raison sociale, numéro SIREN, adresse du siège, activité (source : recherche-entreprises.api.gouv.fr). Donne la meilleure correspondance du nom : mieux vaut le nom complet. Pour « c'est quoi cette société », « le SIREN de… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"nom\",\n      \"description\": \"Nom complet de l'entreprise\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://recherche-entreprises.api.gouv.fr/search?q={nom}&per_page=1\"\n}\n"
+    "json": "{\n  \"name\": \"entreprise_france\",\n  \"description\": \"Retrouve une entreprise française par son nom : raison sociale, numéro SIREN, adresse du siège, activité (source : recherche-entreprises.api.gouv.fr). Donne la meilleure correspondance du nom : mieux vaut le nom complet. Pour « c'est quoi cette société », « le SIREN de… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"nom\",\n      \"description\": \"Nom complet de l'entreprise\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://recherche-entreprises.api.gouv.fr/search?q={nom}&per_page=1\",\n  \"result_items\": \"results\",\n  \"result_fields\": [\n    \"nom_complet\",\n    \"siren\",\n    \"siege.adresse\",\n    \"siege.code_postal\",\n    \"siege.libelle_commune\",\n    \"activite_principale\"\n  ],\n  \"result_max\": 1\n}\n"
   },
   {
     "fileName": "fait_insolite.json",
@@ -554,9 +600,17 @@
       "description": "Propose un plat au hasard : nom, catégorie, pays d'origine et début de la recette, en anglais (source : themealdb.com). Pour « qu'est-ce que je mange ce soir ? ».",
       "parameters": [],
       "type": "http",
-      "url": "https://www.themealdb.com/api/json/v1/1/random.php"
+      "url": "https://www.themealdb.com/api/json/v1/1/random.php",
+      "result_items": "meals",
+      "result_fields": [
+        "strMeal",
+        "strCategory",
+        "strArea",
+        "strInstructions"
+      ],
+      "result_max": 1
     },
-    "json": "{\n  \"name\": \"idee_repas\",\n  \"description\": \"Propose un plat au hasard : nom, catégorie, pays d'origine et début de la recette, en anglais (source : themealdb.com). Pour « qu'est-ce que je mange ce soir ? ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://www.themealdb.com/api/json/v1/1/random.php\"\n}\n"
+    "json": "{\n  \"name\": \"idee_repas\",\n  \"description\": \"Propose un plat au hasard : nom, catégorie, pays d'origine et début de la recette, en anglais (source : themealdb.com). Pour « qu'est-ce que je mange ce soir ? ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://www.themealdb.com/api/json/v1/1/random.php\",\n  \"result_items\": \"meals\",\n  \"result_fields\": [\n    \"strMeal\",\n    \"strCategory\",\n    \"strArea\",\n    \"strInstructions\"\n  ],\n  \"result_max\": 1\n}\n"
   },
   {
     "fileName": "image_astronomie.json",
@@ -649,9 +703,20 @@
         }
       ],
       "type": "http",
-      "url": "https://geocoding-api.open-meteo.com/v1/search?name={ville}&count=1&language=fr"
+      "url": "https://geocoding-api.open-meteo.com/v1/search?name={ville}&count=1&language=fr",
+      "result_items": "results",
+      "result_fields": [
+        "name",
+        "country",
+        "admin1",
+        "latitude",
+        "longitude",
+        "elevation",
+        "timezone"
+      ],
+      "result_max": 1
     },
-    "json": "{\n  \"name\": \"infos_ville_monde\",\n  \"description\": \"Donne les informations d'une ville du monde : pays, latitude, longitude, altitude, fuseau horaire et population (source : Open-Meteo). Pour « où est… », « quel fuseau horaire à… », « combien d'habitants à… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ville\",\n      \"description\": \"Nom de la ville\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://geocoding-api.open-meteo.com/v1/search?name={ville}&count=1&language=fr\"\n}\n"
+    "json": "{\n  \"name\": \"infos_ville_monde\",\n  \"description\": \"Donne les informations d'une ville du monde : pays, latitude, longitude, altitude, fuseau horaire et population (source : Open-Meteo). Pour « où est… », « quel fuseau horaire à… », « combien d'habitants à… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ville\",\n      \"description\": \"Nom de la ville\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://geocoding-api.open-meteo.com/v1/search?name={ville}&count=1&language=fr\",\n  \"result_items\": \"results\",\n  \"result_fields\": [\n    \"name\",\n    \"country\",\n    \"admin1\",\n    \"latitude\",\n    \"longitude\",\n    \"elevation\",\n    \"timezone\"\n  ],\n  \"result_max\": 1\n}\n"
   },
   {
     "fileName": "itineraire.json",
@@ -768,9 +833,16 @@
         }
       ],
       "type": "http",
-      "url": "https://openlibrary.org/search.json?q={titre}&limit=3&fields=title,author_name,first_publish_year"
+      "url": "https://openlibrary.org/search.json?q={titre}&limit=3&fields=title,author_name,first_publish_year",
+      "result_items": "docs",
+      "result_fields": [
+        "title",
+        "author_name",
+        "first_publish_year"
+      ],
+      "result_max": 3
     },
-    "json": "{\n  \"name\": \"livre_infos\",\n  \"description\": \"Cherche un livre et donne jusqu'à 3 résultats avec auteur et année de première publication (source : Open Library). Pour « qui a écrit… », « en quelle année est sorti… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"titre\",\n      \"description\": \"Titre ou mots du titre\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://openlibrary.org/search.json?q={titre}&limit=3&fields=title,author_name,first_publish_year\"\n}\n"
+    "json": "{\n  \"name\": \"livre_infos\",\n  \"description\": \"Cherche un livre et donne jusqu'à 3 résultats avec auteur et année de première publication (source : Open Library). Pour « qui a écrit… », « en quelle année est sorti… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"titre\",\n      \"description\": \"Titre ou mots du titre\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://openlibrary.org/search.json?q={titre}&limit=3&fields=title,author_name,first_publish_year\",\n  \"result_items\": \"docs\",\n  \"result_fields\": [\n    \"title\",\n    \"author_name\",\n    \"first_publish_year\"\n  ],\n  \"result_max\": 3\n}\n"
   },
   {
     "fileName": "livres_recherche.json",
@@ -794,10 +866,10 @@
   {
     "fileName": "meteo_aeroport.json",
     "name": "meteo_aeroport",
-    "description": "Donne le dernier bulletin météo d'un aéroport au format METAR (source : aviationweather.gov) : à décoder et à expliquer (vent, visibilité, température, pression). Pour « le temps à l'aéroport de… », « la météo de Roissy ».",
+    "description": "Récupère le METAR brut d’un aéroport (observation météo aviation), code OACI requis.",
     "spec": {
       "name": "meteo_aeroport",
-      "description": "Donne le dernier bulletin météo d'un aéroport au format METAR (source : aviationweather.gov) : à décoder et à expliquer (vent, visibilité, température, pression). Pour « le temps à l'aéroport de… », « la météo de Roissy ».",
+      "description": "Récupère le METAR brut d’un aéroport (observation météo aviation), code OACI requis.",
       "parameters": [
         {
           "name": "icao",
@@ -806,9 +878,10 @@
         }
       ],
       "type": "http",
-      "url": "https://aviationweather.gov/api/data/metar?ids={icao}&format=raw"
+      "url": "https://aviationweather.gov/api/data/metar?ids={icao}&format=raw",
+      "result_fields": []
     },
-    "json": "{\n  \"name\": \"meteo_aeroport\",\n  \"description\": \"Donne le dernier bulletin météo d'un aéroport au format METAR (source : aviationweather.gov) : à décoder et à expliquer (vent, visibilité, température, pression). Pour « le temps à l'aéroport de… », « la météo de Roissy ».\",\n  \"parameters\": [\n    {\n      \"name\": \"icao\",\n      \"description\": \"Code OACI de l'aéroport à 4 lettres : LFPG Paris-CDG, LFPO Orly, LFML Marseille, LFLL Lyon, LFBO Toulouse, LFMN Nice, EGLL Londres, KJFK New York\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://aviationweather.gov/api/data/metar?ids={icao}&format=raw\"\n}\n"
+    "json": "{\n  \"name\": \"meteo_aeroport\",\n  \"description\": \"Récupère le METAR brut d’un aéroport (observation météo aviation), code OACI requis.\",\n  \"parameters\": [\n    {\n      \"name\": \"icao\",\n      \"description\": \"Code OACI de l'aéroport à 4 lettres : LFPG Paris-CDG, LFPO Orly, LFML Marseille, LFLL Lyon, LFBO Toulouse, LFMN Nice, EGLL Londres, KJFK New York\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://aviationweather.gov/api/data/metar?ids={icao}&format=raw\",\n  \"result_fields\": []\n}\n"
   },
   {
     "fileName": "meteo_marine.json",
@@ -843,45 +916,52 @@
   {
     "fileName": "mode_cinema.json",
     "name": "mode_cinema",
-    "description": "Prépare le téléphone pour une séance : plus de notifications pendant la durée du film, luminosité basse. Pour « mode cinéma », « je suis au cinéma ».",
+    "description": "Prépare le PC pour une séance : réduit la luminosité quand l’écran le permet, met le son en sourdine et lance un minuteur. Équivalent bureau du mode cinéma mobile.",
     "spec": {
       "name": "mode_cinema",
-      "description": "Prépare le téléphone pour une séance : plus de notifications pendant la durée du film, luminosité basse. Pour « mode cinéma », « je suis au cinéma ».",
+      "description": "Prépare le PC pour une séance : réduit la luminosité quand l’écran le permet, met le son en sourdine et lance un minuteur. Équivalent bureau du mode cinéma mobile.",
       "parameters": [
         {
           "name": "minutes",
           "description": "Durée en minutes (60 par défaut)",
-          "required": false
+          "required": false,
+          "default": "60"
         }
       ],
       "type": "routine",
       "steps": [
         {
-          "tool": "quiet_mode",
+          "tool": "device_settings",
           "args": {
-            "action": "start",
-            "minutes": "{minutes}",
-            "reason": "cinéma"
+            "setting": "brightness",
+            "value": "25"
           }
         },
         {
           "tool": "device_settings",
           "args": {
-            "action": "set_brightness",
-            "value": "10"
+            "setting": "mute"
+          }
+        },
+        {
+          "tool": "set_timer",
+          "args": {
+            "action": "start",
+            "minutes": "{minutes}",
+            "label": "Fin du mode cinéma"
           }
         }
       ]
     },
-    "json": "{\n  \"name\": \"mode_cinema\",\n  \"description\": \"Prépare le téléphone pour une séance : plus de notifications pendant la durée du film, luminosité basse. Pour « mode cinéma », « je suis au cinéma ».\",\n  \"parameters\": [\n    {\n      \"name\": \"minutes\",\n      \"description\": \"Durée en minutes (60 par défaut)\",\n      \"required\": false\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"quiet_mode\",\n      \"args\": {\n        \"action\": \"start\",\n        \"minutes\": \"{minutes}\",\n        \"reason\": \"cinéma\"\n      }\n    },\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"set_brightness\",\n        \"value\": \"10\"\n      }\n    }\n  ]\n}\n"
+    "json": "{\n  \"name\": \"mode_cinema\",\n  \"description\": \"Prépare le PC pour une séance : réduit la luminosité quand l’écran le permet, met le son en sourdine et lance un minuteur. Équivalent bureau du mode cinéma mobile.\",\n  \"parameters\": [\n    {\n      \"name\": \"minutes\",\n      \"description\": \"Durée en minutes (60 par défaut)\",\n      \"required\": false,\n      \"default\": \"60\"\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"setting\": \"brightness\",\n        \"value\": \"25\"\n      }\n    },\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"setting\": \"mute\"\n      }\n    },\n    {\n      \"tool\": \"set_timer\",\n      \"args\": {\n        \"action\": \"start\",\n        \"minutes\": \"{minutes}\",\n        \"label\": \"Fin du mode cinéma\"\n      }\n    }\n  ]\n}\n"
   },
   {
     "fileName": "mode_lecture.json",
     "name": "mode_lecture",
-    "description": "Prépare le téléphone pour lire : règle la luminosité puis le volume. À utiliser pour « mode lecture », « je vais lire ».",
+    "description": "Prépare le PC pour lire : ajuste la luminosité de l’écran si elle est contrôlable et règle le volume.",
     "spec": {
       "name": "mode_lecture",
-      "description": "Prépare le téléphone pour lire : règle la luminosité puis le volume. À utiliser pour « mode lecture », « je vais lire ».",
+      "description": "Prépare le PC pour lire : ajuste la luminosité de l’écran si elle est contrôlable et règle le volume.",
       "parameters": [
         {
           "name": "luminosite",
@@ -899,28 +979,28 @@
         {
           "tool": "device_settings",
           "args": {
-            "action": "set_brightness",
+            "setting": "brightness",
             "value": "{luminosite}"
           }
         },
         {
           "tool": "device_settings",
           "args": {
-            "action": "set_volume",
+            "setting": "volume",
             "value": "{volume}"
           }
         }
       ]
     },
-    "json": "{\n  \"name\": \"mode_lecture\",\n  \"description\": \"Prépare le téléphone pour lire : règle la luminosité puis le volume. À utiliser pour « mode lecture », « je vais lire ».\",\n  \"parameters\": [\n    {\n      \"name\": \"luminosite\",\n      \"description\": \"Luminosité en pourcentage (0 à 100)\",\n      \"required\": true\n    },\n    {\n      \"name\": \"volume\",\n      \"description\": \"Volume en pourcentage (0 à 100)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"set_brightness\",\n        \"value\": \"{luminosite}\"\n      }\n    },\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"set_volume\",\n        \"value\": \"{volume}\"\n      }\n    }\n  ]\n}\n"
+    "json": "{\n  \"name\": \"mode_lecture\",\n  \"description\": \"Prépare le PC pour lire : ajuste la luminosité de l’écran si elle est contrôlable et règle le volume.\",\n  \"parameters\": [\n    {\n      \"name\": \"luminosite\",\n      \"description\": \"Luminosité en pourcentage (0 à 100)\",\n      \"required\": true\n    },\n    {\n      \"name\": \"volume\",\n      \"description\": \"Volume en pourcentage (0 à 100)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"setting\": \"brightness\",\n        \"value\": \"{luminosite}\"\n      }\n    },\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"setting\": \"volume\",\n        \"value\": \"{volume}\"\n      }\n    }\n  ]\n}\n"
   },
   {
     "fileName": "mode_nuit.json",
     "name": "mode_nuit",
-    "description": "Prépare le téléphone pour la nuit : baisse le volume puis ouvre les réglages d'affichage. À utiliser pour « mode nuit » ou « je vais dormir ».",
+    "description": "Prépare le PC pour la nuit : baisse le volume, réduit la luminosité si l’écran le permet et met le lecteur multimédia en pause.",
     "spec": {
       "name": "mode_nuit",
-      "description": "Prépare le téléphone pour la nuit : baisse le volume puis ouvre les réglages d'affichage. À utiliser pour « mode nuit » ou « je vais dormir ».",
+      "description": "Prépare le PC pour la nuit : baisse le volume, réduit la luminosité si l’écran le permet et met le lecteur multimédia en pause.",
       "parameters": [
         {
           "name": "volume",
@@ -933,28 +1013,34 @@
         {
           "tool": "device_settings",
           "args": {
-            "action": "set_volume",
+            "setting": "volume",
             "value": "{volume}"
           }
         },
         {
           "tool": "device_settings",
           "args": {
-            "action": "open_settings",
-            "page": "display"
+            "setting": "brightness",
+            "value": "25"
+          }
+        },
+        {
+          "tool": "device_settings",
+          "args": {
+            "setting": "media_pause"
           }
         }
       ]
     },
-    "json": "{\n  \"name\": \"mode_nuit\",\n  \"description\": \"Prépare le téléphone pour la nuit : baisse le volume puis ouvre les réglages d'affichage. À utiliser pour « mode nuit » ou « je vais dormir ».\",\n  \"parameters\": [\n    {\n      \"name\": \"volume\",\n      \"description\": \"Volume en pourcentage (0 à 100)\",\n      \"required\": false\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"set_volume\",\n        \"value\": \"{volume}\"\n      }\n    },\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"open_settings\",\n        \"page\": \"display\"\n      }\n    }\n  ]\n}\n"
+    "json": "{\n  \"name\": \"mode_nuit\",\n  \"description\": \"Prépare le PC pour la nuit : baisse le volume, réduit la luminosité si l’écran le permet et met le lecteur multimédia en pause.\",\n  \"parameters\": [\n    {\n      \"name\": \"volume\",\n      \"description\": \"Volume en pourcentage (0 à 100)\",\n      \"required\": false\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"setting\": \"volume\",\n        \"value\": \"{volume}\"\n      }\n    },\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"setting\": \"brightness\",\n        \"value\": \"25\"\n      }\n    },\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"setting\": \"media_pause\"\n      }\n    }\n  ]\n}\n"
   },
   {
     "fileName": "mode_reunion.json",
     "name": "mode_reunion",
-    "description": "Prépare le téléphone pour une réunion : coupe la musique puis met le volume à zéro. À utiliser pour « mode réunion » ou « je suis en réunion ».",
+    "description": "Prépare le PC pour une réunion : met le lecteur multimédia en pause et coupe le son du PC.",
     "spec": {
       "name": "mode_reunion",
-      "description": "Prépare le téléphone pour une réunion : coupe la musique puis met le volume à zéro. À utiliser pour « mode réunion » ou « je suis en réunion ».",
+      "description": "Prépare le PC pour une réunion : met le lecteur multimédia en pause et coupe le son du PC.",
       "type": "routine",
       "steps": [
         {
@@ -967,21 +1053,20 @@
         {
           "tool": "device_settings",
           "args": {
-            "action": "set_volume",
-            "value": "0"
+            "setting": "mute"
           }
         }
       ]
     },
-    "json": "{\n  \"name\": \"mode_reunion\",\n  \"description\": \"Prépare le téléphone pour une réunion : coupe la musique puis met le volume à zéro. À utiliser pour « mode réunion » ou « je suis en réunion ».\",\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"media\",\n        \"command\": \"pause\"\n      }\n    },\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"set_volume\",\n        \"value\": \"0\"\n      }\n    }\n  ]\n}\n"
+    "json": "{\n  \"name\": \"mode_reunion\",\n  \"description\": \"Prépare le PC pour une réunion : met le lecteur multimédia en pause et coupe le son du PC.\",\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"media\",\n        \"command\": \"pause\"\n      }\n    },\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"setting\": \"mute\"\n      }\n    }\n  ]\n}\n"
   },
   {
     "fileName": "mode_sieste.json",
     "name": "mode_sieste",
-    "description": "Une sieste : pas de dérangement et un minuteur pour se réveiller. Pour « je fais une sieste de 20 minutes », « réveille-moi dans une demi-heure ».",
+    "description": "Prépare une pause sur le PC : met le lecteur multimédia en pause et lance un minuteur de réveil.",
     "spec": {
       "name": "mode_sieste",
-      "description": "Une sieste : pas de dérangement et un minuteur pour se réveiller. Pour « je fais une sieste de 20 minutes », « réveille-moi dans une demi-heure ».",
+      "description": "Prépare une pause sur le PC : met le lecteur multimédia en pause et lance un minuteur de réveil.",
       "parameters": [
         {
           "name": "duree",
@@ -997,32 +1082,30 @@
       "type": "routine",
       "steps": [
         {
-          "tool": "quiet_mode",
+          "tool": "device_settings",
           "args": {
-            "action": "start",
-            "minutes": "{minutes}",
-            "reason": "sieste"
+            "setting": "media_pause"
           }
         },
         {
-          "tool": "timer",
+          "tool": "set_timer",
           "args": {
-            "action": "create",
-            "duration": "{duree}",
-            "label": "Fin de la sieste"
+            "action": "start",
+            "minutes": "{minutes}",
+            "label": "Fin de la sieste ({duree})"
           }
         }
       ]
     },
-    "json": "{\n  \"name\": \"mode_sieste\",\n  \"description\": \"Une sieste : pas de dérangement et un minuteur pour se réveiller. Pour « je fais une sieste de 20 minutes », « réveille-moi dans une demi-heure ».\",\n  \"parameters\": [\n    {\n      \"name\": \"duree\",\n      \"description\": \"Durée de la sieste, par exemple « 20 minutes »\",\n      \"required\": true\n    },\n    {\n      \"name\": \"minutes\",\n      \"description\": \"La même durée, en minutes\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"quiet_mode\",\n      \"args\": {\n        \"action\": \"start\",\n        \"minutes\": \"{minutes}\",\n        \"reason\": \"sieste\"\n      }\n    },\n    {\n      \"tool\": \"timer\",\n      \"args\": {\n        \"action\": \"create\",\n        \"duration\": \"{duree}\",\n        \"label\": \"Fin de la sieste\"\n      }\n    }\n  ]\n}\n"
+    "json": "{\n  \"name\": \"mode_sieste\",\n  \"description\": \"Prépare une pause sur le PC : met le lecteur multimédia en pause et lance un minuteur de réveil.\",\n  \"parameters\": [\n    {\n      \"name\": \"duree\",\n      \"description\": \"Durée de la sieste, par exemple « 20 minutes »\",\n      \"required\": true\n    },\n    {\n      \"name\": \"minutes\",\n      \"description\": \"La même durée, en minutes\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"setting\": \"media_pause\"\n      }\n    },\n    {\n      \"tool\": \"set_timer\",\n      \"args\": {\n        \"action\": \"start\",\n        \"minutes\": \"{minutes}\",\n        \"label\": \"Fin de la sieste ({duree})\"\n      }\n    }\n  ]\n}\n"
   },
   {
     "fileName": "mode_sport.json",
     "name": "mode_sport",
-    "description": "Prépare le téléphone pour le sport : règle le volume puis lance la musique. À utiliser pour « mode sport », « je vais courir ».",
+    "description": "Prépare le PC pour le sport : règle le volume et lance/reprend la lecture multimédia.",
     "spec": {
       "name": "mode_sport",
-      "description": "Prépare le téléphone pour le sport : règle le volume puis lance la musique. À utiliser pour « mode sport », « je vais courir ».",
+      "description": "Prépare le PC pour le sport : règle le volume et lance/reprend la lecture multimédia.",
       "parameters": [
         {
           "name": "volume",
@@ -1035,7 +1118,7 @@
         {
           "tool": "device_settings",
           "args": {
-            "action": "set_volume",
+            "setting": "volume",
             "value": "{volume}"
           }
         },
@@ -1048,15 +1131,15 @@
         }
       ]
     },
-    "json": "{\n  \"name\": \"mode_sport\",\n  \"description\": \"Prépare le téléphone pour le sport : règle le volume puis lance la musique. À utiliser pour « mode sport », « je vais courir ».\",\n  \"parameters\": [\n    {\n      \"name\": \"volume\",\n      \"description\": \"Volume en pourcentage (0 à 100)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"set_volume\",\n        \"value\": \"{volume}\"\n      }\n    },\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"media\",\n        \"command\": \"play\"\n      }\n    }\n  ]\n}\n"
+    "json": "{\n  \"name\": \"mode_sport\",\n  \"description\": \"Prépare le PC pour le sport : règle le volume et lance/reprend la lecture multimédia.\",\n  \"parameters\": [\n    {\n      \"name\": \"volume\",\n      \"description\": \"Volume en pourcentage (0 à 100)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"setting\": \"volume\",\n        \"value\": \"{volume}\"\n      }\n    },\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"media\",\n        \"command\": \"play\"\n      }\n    }\n  ]\n}\n"
   },
   {
     "fileName": "mode_voiture.json",
     "name": "mode_voiture",
-    "description": "Prépare le téléphone pour conduire : monte le volume puis ouvre Google Maps. À utiliser pour « mode voiture » ou « je prends la route ».",
+    "description": "Prépare le PC avant de prendre la route : règle le volume et ouvre Google Maps dans le navigateur.",
     "spec": {
       "name": "mode_voiture",
-      "description": "Prépare le téléphone pour conduire : monte le volume puis ouvre Google Maps. À utiliser pour « mode voiture » ou « je prends la route ».",
+      "description": "Prépare le PC avant de prendre la route : règle le volume et ouvre Google Maps dans le navigateur.",
       "parameters": [
         {
           "name": "volume",
@@ -1069,7 +1152,7 @@
         {
           "tool": "device_settings",
           "args": {
-            "action": "set_volume",
+            "setting": "volume",
             "value": "{volume}"
           }
         },
@@ -1081,7 +1164,7 @@
         }
       ]
     },
-    "json": "{\n  \"name\": \"mode_voiture\",\n  \"description\": \"Prépare le téléphone pour conduire : monte le volume puis ouvre Google Maps. À utiliser pour « mode voiture » ou « je prends la route ».\",\n  \"parameters\": [\n    {\n      \"name\": \"volume\",\n      \"description\": \"Volume en pourcentage (0 à 100)\",\n      \"required\": false\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"set_volume\",\n        \"value\": \"{volume}\"\n      }\n    },\n    {\n      \"tool\": \"open_app\",\n      \"args\": {\n        \"app_name\": \"Maps\"\n      }\n    }\n  ]\n}\n"
+    "json": "{\n  \"name\": \"mode_voiture\",\n  \"description\": \"Prépare le PC avant de prendre la route : règle le volume et ouvre Google Maps dans le navigateur.\",\n  \"parameters\": [\n    {\n      \"name\": \"volume\",\n      \"description\": \"Volume en pourcentage (0 à 100)\",\n      \"required\": false\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"setting\": \"volume\",\n        \"value\": \"{volume}\"\n      }\n    },\n    {\n      \"tool\": \"open_app\",\n      \"args\": {\n        \"app_name\": \"Maps\"\n      }\n    }\n  ]\n}\n"
   },
   {
     "fileName": "mon_ip.json",
@@ -1283,9 +1366,16 @@
         }
       ],
       "type": "http",
-      "url": "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso-v2-gtin-espaces/records?where=%22{terme}%22&limit=3&order_by=date_publication%20desc&select=marque_produit,motif_rappel,date_publication"
+      "url": "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso-v2-gtin-espaces/records?where=%22{terme}%22&limit=3&order_by=date_publication%20desc&select=marque_produit,motif_rappel,date_publication",
+      "result_items": "results",
+      "result_fields": [
+        "marque_produit",
+        "motif_rappel",
+        "date_publication"
+      ],
+      "result_max": 3
     },
-    "json": "{\n  \"name\": \"rappel_produit\",\n  \"description\": \"Cherche si un produit ou une marque a fait l'objet d'un rappel en France (source : RappelConso) : marque, motif, date. Pour « est-ce que le fromage X est rappelé ».\",\n  \"parameters\": [\n    {\n      \"name\": \"terme\",\n      \"description\": \"Nom du produit ou de la marque\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso-v2-gtin-espaces/records?where=%22{terme}%22&limit=3&order_by=date_publication%20desc&select=marque_produit,motif_rappel,date_publication\"\n}\n"
+    "json": "{\n  \"name\": \"rappel_produit\",\n  \"description\": \"Cherche si un produit ou une marque a fait l'objet d'un rappel en France (source : RappelConso) : marque, motif, date. Pour « est-ce que le fromage X est rappelé ».\",\n  \"parameters\": [\n    {\n      \"name\": \"terme\",\n      \"description\": \"Nom du produit ou de la marque\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso-v2-gtin-espaces/records?where=%22{terme}%22&limit=3&order_by=date_publication%20desc&select=marque_produit,motif_rappel,date_publication\",\n  \"result_items\": \"results\",\n  \"result_fields\": [\n    \"marque_produit\",\n    \"motif_rappel\",\n    \"date_publication\"\n  ],\n  \"result_max\": 3\n}\n"
   },
   {
     "fileName": "rappels_recents.json",
@@ -1296,9 +1386,17 @@
       "description": "Donne les 4 derniers rappels de produits de consommation en France : catégorie, marque, motif et date (source : RappelConso, data.economie.gouv.fr). Pour « y a-t-il des rappels de produits », « un produit dangereux ».",
       "parameters": [],
       "type": "http",
-      "url": "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso-v2-gtin-espaces/records?limit=4&order_by=date_publication%20desc&select=categorie_produit,marque_produit,motif_rappel,date_publication"
+      "url": "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso-v2-gtin-espaces/records?limit=4&order_by=date_publication%20desc&select=categorie_produit,marque_produit,motif_rappel,date_publication",
+      "result_items": "results",
+      "result_fields": [
+        "categorie_produit",
+        "marque_produit",
+        "motif_rappel",
+        "date_publication"
+      ],
+      "result_max": 4
     },
-    "json": "{\n  \"name\": \"rappels_recents\",\n  \"description\": \"Donne les 4 derniers rappels de produits de consommation en France : catégorie, marque, motif et date (source : RappelConso, data.economie.gouv.fr). Pour « y a-t-il des rappels de produits », « un produit dangereux ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso-v2-gtin-espaces/records?limit=4&order_by=date_publication%20desc&select=categorie_produit,marque_produit,motif_rappel,date_publication\"\n}\n"
+    "json": "{\n  \"name\": \"rappels_recents\",\n  \"description\": \"Donne les 4 derniers rappels de produits de consommation en France : catégorie, marque, motif et date (source : RappelConso, data.economie.gouv.fr). Pour « y a-t-il des rappels de produits », « un produit dangereux ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso-v2-gtin-espaces/records?limit=4&order_by=date_publication%20desc&select=categorie_produit,marque_produit,motif_rappel,date_publication\",\n  \"result_items\": \"results\",\n  \"result_fields\": [\n    \"categorie_produit\",\n    \"marque_produit\",\n    \"motif_rappel\",\n    \"date_publication\"\n  ],\n  \"result_max\": 4\n}\n"
   },
   {
     "fileName": "recette.json",
@@ -1334,9 +1432,15 @@
         }
       ],
       "type": "http",
-      "url": "https://www.themealdb.com/api/json/v1/1/filter.php?i={ingredient}"
+      "url": "https://www.themealdb.com/api/json/v1/1/filter.php?i={ingredient}",
+      "result_items": "meals",
+      "result_fields": [
+        "strMeal",
+        "strMealThumb"
+      ],
+      "result_max": 8
     },
-    "json": "{\n  \"name\": \"recettes_ingredient\",\n  \"description\": \"Liste des plats qui utilisent un ingrédient (noms et pays d'origine, en anglais, source : themealdb.com). Pour « que faire avec du poulet », « des idées avec des œufs ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ingredient\",\n      \"description\": \"Ingrédient en anglais, par exemple chicken, beef, salmon, eggs, rice\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://www.themealdb.com/api/json/v1/1/filter.php?i={ingredient}\"\n}\n"
+    "json": "{\n  \"name\": \"recettes_ingredient\",\n  \"description\": \"Liste des plats qui utilisent un ingrédient (noms et pays d'origine, en anglais, source : themealdb.com). Pour « que faire avec du poulet », « des idées avec des œufs ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ingredient\",\n      \"description\": \"Ingrédient en anglais, par exemple chicken, beef, salmon, eggs, rice\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://www.themealdb.com/api/json/v1/1/filter.php?i={ingredient}\",\n  \"result_items\": \"meals\",\n  \"result_fields\": [\n    \"strMeal\",\n    \"strMealThumb\"\n  ],\n  \"result_max\": 8\n}\n"
   },
   {
     "fileName": "resultats_sport.json",
@@ -1360,10 +1464,10 @@
   {
     "fileName": "routine_matin.json",
     "name": "routine_matin",
-    "description": "Prépare la journée : météo de la ville, événements du jour de l'agenda et rappels à venir. À utiliser pour « ma routine du matin », « prépare ma journée ».",
+    "description": "Prépare la journée sur le PC : météo de la ville, agenda et liste de tâches à faire.",
     "spec": {
       "name": "routine_matin",
-      "description": "Prépare la journée : météo de la ville, événements du jour de l'agenda et rappels à venir. À utiliser pour « ma routine du matin », « prépare ma journée ».",
+      "description": "Prépare la journée sur le PC : météo de la ville, agenda et liste de tâches à faire.",
       "parameters": [
         {
           "name": "ville",
@@ -1374,7 +1478,7 @@
       "type": "routine",
       "steps": [
         {
-          "tool": "weather_report",
+          "tool": "weather",
           "args": {
             "city": "{ville}"
           }
@@ -1387,14 +1491,15 @@
           }
         },
         {
-          "tool": "reminder",
+          "tool": "tasks",
           "args": {
-            "mode": "list"
+            "action": "list",
+            "list_name": "todo"
           }
         }
       ]
     },
-    "json": "{\n  \"name\": \"routine_matin\",\n  \"description\": \"Prépare la journée : météo de la ville, événements du jour de l'agenda et rappels à venir. À utiliser pour « ma routine du matin », « prépare ma journée ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ville\",\n      \"description\": \"Ville pour la météo (« ici » pour la position du téléphone)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"weather_report\",\n      \"args\": {\n        \"city\": \"{ville}\"\n      }\n    },\n    {\n      \"tool\": \"calendar\",\n      \"args\": {\n        \"action\": \"list\",\n        \"days\": \"1\"\n      }\n    },\n    {\n      \"tool\": \"reminder\",\n      \"args\": {\n        \"mode\": \"list\"\n      }\n    }\n  ]\n}\n"
+    "json": "{\n  \"name\": \"routine_matin\",\n  \"description\": \"Prépare la journée sur le PC : météo de la ville, agenda et liste de tâches à faire.\",\n  \"parameters\": [\n    {\n      \"name\": \"ville\",\n      \"description\": \"Ville pour la météo (« ici » pour la position du téléphone)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"weather\",\n      \"args\": {\n        \"city\": \"{ville}\"\n      }\n    },\n    {\n      \"tool\": \"calendar\",\n      \"args\": {\n        \"action\": \"list\",\n        \"days\": \"1\"\n      }\n    },\n    {\n      \"tool\": \"tasks\",\n      \"args\": {\n        \"action\": \"list\",\n        \"list_name\": \"todo\"\n      }\n    }\n  ]\n}\n"
   },
   {
     "fileName": "serie_infos.json",
@@ -1453,9 +1558,20 @@
       "description": "Donne la position actuelle de la Station spatiale internationale : latitude, longitude, altitude en km, vitesse en km/h, et si elle est éclairée par le soleil ou dans l'ombre (source : wheretheiss.at). Pour « où est l'ISS ? ».",
       "parameters": [],
       "type": "http",
-      "url": "https://api.wheretheiss.at/v1/satellites/25544"
+      "url": "https://api.wheretheiss.at/v1/satellites/25544",
+      "result_fields": [
+        "name",
+        "latitude",
+        "longitude",
+        "altitude",
+        "velocity",
+        "visibility",
+        "footprint",
+        "solar_lat",
+        "solar_lon"
+      ]
     },
-    "json": "{\n  \"name\": \"station_spatiale\",\n  \"description\": \"Donne la position actuelle de la Station spatiale internationale : latitude, longitude, altitude en km, vitesse en km/h, et si elle est éclairée par le soleil ou dans l'ombre (source : wheretheiss.at). Pour « où est l'ISS ? ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://api.wheretheiss.at/v1/satellites/25544\"\n}\n"
+    "json": "{\n  \"name\": \"station_spatiale\",\n  \"description\": \"Donne la position actuelle de la Station spatiale internationale : latitude, longitude, altitude en km, vitesse en km/h, et si elle est éclairée par le soleil ou dans l'ombre (source : wheretheiss.at). Pour « où est l'ISS ? ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://api.wheretheiss.at/v1/satellites/25544\",\n  \"result_fields\": [\n    \"name\",\n    \"latitude\",\n    \"longitude\",\n    \"altitude\",\n    \"velocity\",\n    \"visibility\",\n    \"footprint\",\n    \"solar_lat\",\n    \"solar_lon\"\n  ]\n}\n"
   },
   {
     "fileName": "suivi_colis.json",
@@ -1515,9 +1631,14 @@
         }
       ],
       "type": "http",
-      "url": "https://api.frankfurter.dev/v1/latest?base={base}&symbols={cible}"
+      "url": "https://api.frankfurter.dev/v1/latest?base={base}&symbols={cible}",
+      "result_fields": [
+        "date",
+        "base",
+        "rates"
+      ]
     },
-    "json": "{\n  \"name\": \"taux_de_change\",\n  \"description\": \"Donne le taux de change du jour entre deux devises (source : Banque centrale européenne). Pour « combien font 50 euros en dollars ».\",\n  \"parameters\": [\n    {\n      \"name\": \"base\",\n      \"description\": \"Devise de départ, code en majuscules : EUR, USD, GBP…\",\n      \"required\": true\n    },\n    {\n      \"name\": \"cible\",\n      \"description\": \"Devise d'arrivée, code en majuscules\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://api.frankfurter.dev/v1/latest?base={base}&symbols={cible}\"\n}\n"
+    "json": "{\n  \"name\": \"taux_de_change\",\n  \"description\": \"Donne le taux de change du jour entre deux devises (source : Banque centrale européenne). Pour « combien font 50 euros en dollars ».\",\n  \"parameters\": [\n    {\n      \"name\": \"base\",\n      \"description\": \"Devise de départ, code en majuscules : EUR, USD, GBP…\",\n      \"required\": true\n    },\n    {\n      \"name\": \"cible\",\n      \"description\": \"Devise d'arrivée, code en majuscules\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://api.frankfurter.dev/v1/latest?base={base}&symbols={cible}\",\n  \"result_fields\": [\n    \"date\",\n    \"base\",\n    \"rates\"\n  ]\n}\n"
   },
   {
     "fileName": "tempo_edf.json",
@@ -1625,9 +1746,16 @@
         }
       ],
       "type": "http",
-      "url": "https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-calendrier-scolaire/records?where=zones%3D%22{zone}%22%20AND%20end_date%3E%3Dnow()&order_by=start_date&limit=2&select=description,start_date,end_date"
+      "url": "https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-calendrier-scolaire/records?where=zones%3D%22{zone}%22%20AND%20end_date%3E%3Dnow()&order_by=start_date&limit=2&select=description,start_date,end_date",
+      "result_items": "results",
+      "result_fields": [
+        "description",
+        "start_date",
+        "end_date"
+      ],
+      "result_max": 2
     },
-    "json": "{\n  \"name\": \"vacances_scolaires\",\n  \"description\": \"Donne les 2 prochaines périodes de vacances scolaires d'une zone (A, B ou C), avec dates de début et de fin en UTC : en France, ajouter 1 h (hiver) ou 2 h (été) donne minuit local (source : data.education.gouv.fr). Pour « quand sont les prochaines vacances ».\",\n  \"parameters\": [\n    {\n      \"name\": \"zone\",\n      \"description\": \"Zone A, Zone B ou Zone C (écrire exactement ainsi)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-calendrier-scolaire/records?where=zones%3D%22{zone}%22%20AND%20end_date%3E%3Dnow()&order_by=start_date&limit=2&select=description,start_date,end_date\"\n}\n"
+    "json": "{\n  \"name\": \"vacances_scolaires\",\n  \"description\": \"Donne les 2 prochaines périodes de vacances scolaires d'une zone (A, B ou C), avec dates de début et de fin en UTC : en France, ajouter 1 h (hiver) ou 2 h (été) donne minuit local (source : data.education.gouv.fr). Pour « quand sont les prochaines vacances ».\",\n  \"parameters\": [\n    {\n      \"name\": \"zone\",\n      \"description\": \"Zone A, Zone B ou Zone C (écrire exactement ainsi)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-calendrier-scolaire/records?where=zones%3D%22{zone}%22%20AND%20end_date%3E%3Dnow()&order_by=start_date&limit=2&select=description,start_date,end_date\",\n  \"result_items\": \"results\",\n  \"result_fields\": [\n    \"description\",\n    \"start_date\",\n    \"end_date\"\n  ],\n  \"result_max\": 2\n}\n"
   },
   {
     "fileName": "vinted_recherche.json",
@@ -1682,9 +1810,14 @@
       "parameters": [],
       "type": "http",
       "url": "https://fr.wikipedia.org/api/rest_v1/page/random/summary",
-      "result_path": "extract"
+      "result_path": "extract",
+      "result_fields": [
+        "title",
+        "description",
+        "extract"
+      ]
     },
-    "json": "{\n  \"name\": \"wikipedia_hasard\",\n  \"description\": \"Lit le résumé d'un article de Wikipédia en français tiré au hasard. Pour « apprends-moi quelque chose », « raconte-moi un truc au hasard ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://fr.wikipedia.org/api/rest_v1/page/random/summary\",\n  \"result_path\": \"extract\"\n}\n"
+    "json": "{\n  \"name\": \"wikipedia_hasard\",\n  \"description\": \"Lit le résumé d'un article de Wikipédia en français tiré au hasard. Pour « apprends-moi quelque chose », « raconte-moi un truc au hasard ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://fr.wikipedia.org/api/rest_v1/page/random/summary\",\n  \"result_path\": \"extract\",\n  \"result_fields\": [\n    \"title\",\n    \"description\",\n    \"extract\"\n  ]\n}\n"
   },
   {
     "fileName": "wikipedia_recherche.json",
@@ -1721,9 +1854,14 @@
       ],
       "type": "http",
       "url": "https://fr.wikipedia.org/api/rest_v1/page/summary/{sujet}",
-      "result_path": "extract"
+      "result_path": "extract",
+      "result_fields": [
+        "title",
+        "description",
+        "extract"
+      ]
     },
-    "json": "{\n  \"name\": \"wikipedia_resume\",\n  \"description\": \"Donne le résumé d'un sujet sur Wikipédia en français (personne, lieu, notion). Pour « c'est quoi… », « qui est… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"sujet\",\n      \"description\": \"Titre de l'article Wikipédia, par exemple Tour Eiffel\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://fr.wikipedia.org/api/rest_v1/page/summary/{sujet}\",\n  \"result_path\": \"extract\"\n}\n"
+    "json": "{\n  \"name\": \"wikipedia_resume\",\n  \"description\": \"Donne le résumé d'un sujet sur Wikipédia en français (personne, lieu, notion). Pour « c'est quoi… », « qui est… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"sujet\",\n      \"description\": \"Titre de l'article Wikipédia, par exemple Tour Eiffel\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://fr.wikipedia.org/api/rest_v1/page/summary/{sujet}\",\n  \"result_path\": \"extract\",\n  \"result_fields\": [\n    \"title\",\n    \"description\",\n    \"extract\"\n  ]\n}\n"
   },
   {
     "fileName": "youtube_recherche.json",

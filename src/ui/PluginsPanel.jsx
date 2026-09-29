@@ -8,13 +8,27 @@ export default function PluginsPanel({ onClose, onRunPluginResult }) {
   const [paramValues, setParamValues] = useState({});
   const [output, setOutput] = useState('');
   const [running, setRunning] = useState(false);
+  const [loadingCatalog, setLoadingCatalog] = useState(true);
+  const [catalogError, setCatalogError] = useState('');
 
-  useEffect(() => {
-    pluginEngine.loadCatalog().then(() => {
+  const loadPlugins = async (force = false) => {
+    setLoadingCatalog(true);
+    setCatalogError('');
+    try {
+      await pluginEngine.loadCatalog({ force });
       const all = pluginEngine.getAllPlugins();
       setPlugins(all);
-      if (all.length > 0) selectPlugin(all[0]);
-    });
+      if (all.length > 0 && !selected) selectPlugin(all[0]);
+      if (all.length === 0) setCatalogError(pluginEngine.loadError || 'Le catalogue de plugins est vide.');
+    } catch (error) {
+      setCatalogError(error.message || 'Impossible de charger les plugins.');
+    } finally {
+      setLoadingCatalog(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPlugins();
   }, []);
 
   const selectPlugin = (p) => {
@@ -58,17 +72,29 @@ export default function PluginsPanel({ onClose, onRunPluginResult }) {
       <div className="space-header">
         <div className="space-tabs">
           <span className="space-tab active">
-            🧩 Catalogue de Plugins ({plugins.length} extensions JSON actives)
+            🧩 Catalogue de Plugins ({loadingCatalog ? 'chargement…' : `${plugins.length} disponibles`})
           </span>
         </div>
-        {onClose && (
-          <button className="space-close-btn" onClick={onClose}>
-            ✕
+        <div className="space-header-right">
+          <button className="space-mini-btn" onClick={() => loadPlugins(true)} disabled={loadingCatalog} title="Recharger les plugins">
+            {loadingCatalog ? '⏳' : '↻'} Actualiser
           </button>
-        )}
+          {onClose && (
+            <button className="space-close-btn" onClick={onClose}>
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="prod-body">
+        {catalogError && (
+          <div className="space-card plugin-catalog-error">
+            <strong>Catalogue indisponible</strong>
+            <span>{catalogError}</span>
+            <span>Vérifiez que les fichiers de <code>assets/plugins</code> sont installés dans l’application.</span>
+          </div>
+        )}
         <div className="plugins-layout">
           {/* Left column: Searchable list of 82 plugins */}
           <div className="plugins-sidebar">

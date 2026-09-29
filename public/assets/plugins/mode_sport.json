@@ -1,6 +1,6 @@
 {
   "name": "mode_sport",
-  "description": "Prépare le téléphone pour le sport : règle le volume puis lance la musique. À utiliser pour « mode sport », « je vais courir ».",
+  "description": "Prépare le PC pour le sport : règle le volume et lance/reprend la lecture multimédia.",
   "parameters": [
     {
       "name": "volume",
@@ -13,7 +13,7 @@
     {
       "tool": "device_settings",
       "args": {
-        "action": "set_volume",
+        "setting": "volume",
         "value": "{volume}"
       }
     },

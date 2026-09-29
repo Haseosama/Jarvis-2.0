@@ -46,6 +46,37 @@ function startEmbeddedAssetServer() {
     const distRoot = path.join(__dirname, '../dist');
     const server = http.createServer((req, res) => {
       try {
+        if ((req.url || '').startsWith('/__jarvis_proxy__')) {
+          let rawBody = '';
+          req.on('data', (chunk) => {
+            rawBody += chunk;
+          });
+          req.on('end', async () => {
+            try {
+              const payload = rawBody ? JSON.parse(rawBody) : {};
+              const { url, method = 'GET', headers = {}, body = null, timeoutMs = 15000 } = payload;
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), timeoutMs);
+              try {
+                const upstream = await fetch(url, {
+                  method,
+                  headers: { 'User-Agent': 'Jarvis-PC/2.0', ...headers },
+                  body: method !== 'GET' && method !== 'HEAD' ? body : undefined,
+                  signal: controller.signal,
+                });
+                const text = await upstream.text();
+                res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ ok: upstream.ok, status: upstream.status, text }));
+              } finally {
+                clearTimeout(timer);
+              }
+            } catch (err) {
+              res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+              res.end(JSON.stringify({ ok: false, status: 0, error: String(err), text: '' }));
+            }
+          });
+          return;
+        }
         const rawUrl = decodeURIComponent((req.url || '/').split('?')[0]);
         const relPath = rawUrl === '/' ? 'index.html' : rawUrl.replace(/^\/+/, '');
         const filePath = path.join(distRoot, relPath);

@@ -449,3 +449,109 @@ export function satelliteTrack(sat, timeMs, minutes = 92) {
   if (cur.length > 1) segs.push(cur);
   return segs;
 }
+
+const EARTH_MU_KM3_S2 = 398600.4418;
+const EARTH_RADIUS_KM = 6371.0;
+const EARTH_J2 = 1.08262668e-3;
+
+export function parseTleCatalog(text, category = 'other') {
+  const lines = String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const entries = [];
+  for (let i = 0; i < lines.length - 2; i++) {
+    if (!lines[i + 1].startsWith('1 ') || !lines[i + 2].startsWith('2 ')) continue;
+    const name = lines[i].replace(/^0\s+/, '').trim();
+    const line1 = lines[i + 1];
+    const line2 = lines[i + 2];
+    try {
+      const norad = Number(line1.slice(2, 7).trim());
+      const epochYearShort = Number(line1.slice(18, 20));
+      const epochDay = Number(line1.slice(20, 32));
+      const year = epochYearShort < 57 ? 2000 + epochYearShort : 1900 + epochYearShort;
+      const epoch = Date.UTC(year, 0, 1) + (epochDay - 1) * 86400000;
+      const incDeg = Number(line2.slice(8, 16));
+      const raanDeg = Number(line2.slice(17, 25));
+      const eccentricity = Number(`0.${line2.slice(26, 33).trim()}`);
+      const argumentPerigeeDeg = Number(line2.slice(34, 42));
+      const meanAnomalyDeg = Number(line2.slice(43, 51));
+      const meanMotionRevDay = Number(line2.slice(52, 63));
+      if (![norad, epoch, incDeg, raanDeg, eccentricity, argumentPerigeeDeg, meanAnomalyDeg, meanMotionRevDay].every(Number.isFinite) || meanMotionRevDay <= 0 || eccentricity >= 1) continue;
+      const meanMotionRadSec = meanMotionRevDay * TWO_PI / 86400;
+      const semiMajorKm = Math.cbrt(EARTH_MU_KM3_S2 / (meanMotionRadSec * meanMotionRadSec));
+      const apogeeKm = semiMajorKm * (1 + eccentricity) - EARTH_RADIUS_KM;
+      const perigeeKm = semiMajorKm * (1 - eccentricity) - EARTH_RADIUS_KM;
+      const upper = name.toUpperCase();
+      const color = category === 'military' ? '#ff5252' : category === 'navigation' ? '#448aff' : category === 'comms' ? '#00e676' : category === 'earth_obs' ? '#90ee90' : category === 'science' ? '#ffd700' : '#7fd8ff';
+      entries.push({
+        name,
+        norad,
+        incDeg,
+        raanDeg,
+        eccentricity,
+        argumentPerigeeDeg,
+        meanAnomalyDeg,
+        meanMotionRevDay,
+        epoch,
+        semiMajorKm,
+        altKm: (apogeeKm + perigeeKm) / 2,
+        apogeeAltKm: apogeeKm,
+        perigeeAltKm: perigeeKm,
+        mission: category === 'comms' ? 'Communications' : category === 'navigation' ? 'Navigation' : category === 'earth_obs' ? 'Observation de la Terre' : category === 'military' ? 'Militaire' : category === 'science' ? 'Science spatiale' : upper.includes('DEB') ? 'Débris' : 'Satellite actif',
+        category,
+        color,
+        tle: { line1, line2 },
+        tleEpoch: epoch,
+        source: 'CelesTrak TLE · propagation Kepler/J2',
+      });
+    } catch {
+      // Ignore malformed records but continue parsing the rest of the catalogue.
+    }
+    i += 2;
+  }
+  return entries;
+}
+
+export function tleStateAt(satellite, timeMs) {
+  const tle = satellite?.tle;
+  if (!tle) return satelliteStateAt(satellite, timeMs);
+  const dt = (timeMs - satellite.epoch) / 1000;
+  const inc = satellite.incDeg * DEG;
+  const raan0 = satellite.raanDeg * DEG;
+  const arg0 = satellite.argumentPerigeeDeg * DEG;
+  const e = satellite.eccentricity;
+  const a = satellite.semiMajorKm;
+  const meanMotion = satellite.meanMotionRevDay * TWO_PI / 86400;
+  const p = a * (1 - e * e);
+  const raanRate = -1.5 * EARTH_J2 * (EARTH_RADIUS_KM / p) ** 2 * meanMotion * Math.cos(inc);
+  const argRate = 0.75 * EARTH_J2 * (EARTH_RADIUS_KM / p) ** 2 * meanMotion * (5 * Math.cos(inc) ** 2 - 1);
+  const raan = raan0 + raanRate * dt;
+  const arg = arg0 + argRate * dt;
+  const mean = satellite.meanAnomalyDeg * DEG + meanMotion * dt;
+  let eccentricAnomaly = mean;
+  for (let k = 0; k < 10; k++) eccentricAnomaly -= (eccentricAnomaly - e * Math.sin(eccentricAnomaly) - mean) / (1 - e * Math.cos(eccentricAnomaly));
+  const xOrb = a * (Math.cos(eccentricAnomaly) - e);
+  const yOrb = a * Math.sqrt(1 - e * e) * Math.sin(eccentricAnomaly);
+  const co = Math.cos(arg), so = Math.sin(arg), cn = Math.cos(raan), sn = Math.sin(raan), ci = Math.cos(inc), si = Math.sin(inc);
+  const x = (co * cn - so * sn * ci) * xOrb + (-so * cn - co * sn * ci) * yOrb;
+  const y = (co * sn + so * cn * ci) * xOrb + (-so * sn + co * cn * ci) * yOrb;
+  const z = so * si * xOrb + co * si * yOrb;
+  const ecef = temeToEcef(x, y, z, timeMs);
+  const sub = subPoint(ecef);
+  return { x, y, z, ecef, ...sub };
+}
+
+export function tleSatelliteTrack(satellite, timeMs, minutes = 92) {
+  const segments = [];
+  let current = [];
+  let lastLon = null;
+  for (let minute = -15; minute <= minutes; minute += 1) {
+    const pos = tleStateAt(satellite, timeMs + minute * 60_000);
+    if (lastLon !== null && Math.abs(pos.lon - lastLon) > 180) {
+      if (current.length > 1) segments.push(current);
+      current = [];
+    }
+    current.push([pos.lat, pos.lon]);
+    lastLon = pos.lon;
+  }
+  if (current.length > 1) segments.push(current);
+  return segments;
+}

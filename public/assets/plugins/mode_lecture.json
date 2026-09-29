@@ -1,6 +1,6 @@
 {
   "name": "mode_lecture",
-  "description": "Prépare le téléphone pour lire : règle la luminosité puis le volume. À utiliser pour « mode lecture », « je vais lire ».",
+  "description": "Prépare le PC pour lire : ajuste la luminosité de l’écran si elle est contrôlable et règle le volume.",
   "parameters": [
     {
       "name": "luminosite",
@@ -18,14 +18,14 @@
     {
       "tool": "device_settings",
       "args": {
-        "action": "set_brightness",
+        "setting": "brightness",
         "value": "{luminosite}"
       }
     },
     {
       "tool": "device_settings",
       "args": {
-        "action": "set_volume",
+        "setting": "volume",
         "value": "{volume}"
       }
     }

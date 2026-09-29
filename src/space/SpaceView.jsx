@@ -12,10 +12,19 @@ import {
   DEFAULT_SATELLITES,
   satelliteStateAt,
   satelliteTrack,
+  parseTleCatalog,
+  tleSatelliteTrack,
+  tleStateAt,
   lookAt,
   moonPhase,
 } from './SpaceEngine.js';
 import { hostBridge } from '../core/hostBridge.js';
+import {
+  fetchAircraftDetails,
+  fetchFlightsNear,
+  fetchSatelliteLiveState,
+  haversineDistanceKm,
+} from './TrackingService.js';
 
 export default function SpaceView({
   mode = 'map', // 'map' | 'sky'
@@ -31,6 +40,20 @@ export default function SpaceView({
   const [centerLon, setCenterLon] = useState(observer.lonDeg || 2.3522);
   const [centerLat, setCenterLat] = useState(observer.latDeg || 46.5);
   const [selectedSat, setSelectedSat] = useState(DEFAULT_SATELLITES[0]);
+  const [satelliteCatalog, setSatelliteCatalog] = useState([]);
+  const [satelliteFeed, setSatelliteFeed] = useState('');
+  const [loadingSatellites, setLoadingSatellites] = useState(false);
+  const [showCatalogSatellites, setShowCatalogSatellites] = useState(true);
+  const [flights, setFlights] = useState([]);
+  const [flightSource, setFlightSource] = useState('');
+  const [flightError, setFlightError] = useState('');
+  const [loadingFlights, setLoadingFlights] = useState(false);
+  const [showFlights, setShowFlights] = useState(true);
+  const [selectedFlight, setSelectedFlight] = useState(null);
+  const [flightDetails, setFlightDetails] = useState(null);
+  const [loadingFlightDetails, setLoadingFlightDetails] = useState(false);
+  const [entityPanel, setEntityPanel] = useState(null);
+  const [liveSatellites, setLiveSatellites] = useState({});
   const [showTerminator, setShowTerminator] = useState(true);
   const [showAurora, setShowAurora] = useState(false);
   const [showQuakes, setShowQuakes] = useState(true);
@@ -39,7 +62,12 @@ export default function SpaceView({
   const [kpIndex, setKpIndex] = useState(3.3);
   const [selectedObject, setSelectedObject] = useState(null);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [feedRefreshKey, setFeedRefreshKey] = useState(0);
   const dragRef = useRef(null);
+  const justDraggedRef = useRef(false);
+  const mapHitsRef = useRef([]);
+  const mapViewRef = useRef({ centerLat, centerLon });
+  mapViewRef.current = { centerLat, centerLon };
 
   useEffect(() => {
     setActiveTab(mode === 'sky' ? 'sky' : 'map');
@@ -54,6 +82,83 @@ export default function SpaceView({
     const id = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  // Nearby ADS-B snapshot only (250 NM); panning fetches another region instead of polling the whole world.
+  useEffect(() => {
+    if (activeTab !== 'map') return undefined;
+    let cancelled = false;
+    const refresh = async () => {
+      const view = mapViewRef.current;
+      setLoadingFlights(true);
+      const result = await fetchFlightsNear(view.centerLat, view.centerLon, 250);
+      if (cancelled) return;
+      setFlights(result.flights);
+      setFlightSource(result.source);
+      setFlightError(result.error);
+      setLoadingFlights(false);
+    };
+    refresh();
+    const id = setInterval(refresh, 45_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [activeTab, feedRefreshKey]);
+
+  // Fetch a live TLE catalogue for stations, navigation, weather, science, Starlink and military satellites.
+  useEffect(() => {
+    if (activeTab !== 'map') return undefined;
+    let cancelled = false;
+    const refresh = async () => {
+      setLoadingSatellites(true);
+      const groups = [
+        ['stations', 'science'],
+        ['gps-ops', 'navigation'],
+        ['weather', 'earth_obs'],
+        ['science', 'science'],
+        ['starlink', 'comms'],
+        ['military', 'military'],
+      ];
+      const results = await Promise.all(groups.map(async ([group, category]) => {
+        const response = await hostBridge.httpFetch(
+          `https://celestrak.org/NORAD/elements/gp.php?GROUP=${encodeURIComponent(group)}&FORMAT=tle`,
+          { timeoutMs: 22000 }
+        );
+        return response.ok && response.text ? parseTleCatalog(response.text, category) : [];
+      }));
+      if (cancelled) return;
+      const byNorad = new Map();
+      for (const item of results.flat()) if (!byNorad.has(item.norad)) byNorad.set(item.norad, item);
+      const catalog = [...byNorad.values()];
+      setSatelliteCatalog(catalog);
+      setSatelliteFeed(catalog.length ? `CelesTrak · ${catalog.length.toLocaleString('fr-FR')} TLE` : 'Catalogue TLE indisponible');
+      setLoadingSatellites(false);
+    };
+    refresh();
+    const id = setInterval(refresh, 60 * 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [activeTab, feedRefreshKey]);
+
+  // Live ISS position, altitude and speed; other satellites use their fresh TLE.
+  useEffect(() => {
+    if (![25544, 48274, 20580].includes(Number(selectedSat?.norad))) return undefined;
+    let cancelled = false;
+    const refresh = async () => {
+      const state = await fetchSatelliteLiveState(selectedSat.norad);
+      if (!cancelled && state) setLiveSatellites((current) => ({ ...current, [selectedSat.norad]: state }));
+    };
+    refresh();
+    const id = setInterval(refresh, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [selectedSat?.norad]);
+
+  useEffect(() => {
+    if (!selectedFlight) { setFlightDetails(null); setLoadingFlightDetails(false); return undefined; }
+    let cancelled = false;
+    setFlightDetails(null);
+    setLoadingFlightDetails(true);
+    fetchAircraftDetails(selectedFlight)
+      .then((details) => { if (!cancelled) setFlightDetails(details); })
+      .finally(() => { if (!cancelled) setLoadingFlightDetails(false); });
+    return () => { cancelled = true; };
+  }, [selectedFlight?.icao24, selectedFlight?.callsign]);
 
   // Load live USGS earthquakes & NOAA Kp & upcoming launches (with graceful fallback)
   useEffect(() => {
@@ -129,6 +234,16 @@ export default function SpaceView({
   );
 
   const phase = useMemo(() => moonPhase(nowMs), [Math.floor(nowMs / 60000)]);
+  const mapSatellites = useMemo(() => {
+    const byNorad = new Map(DEFAULT_SATELLITES.map((satellite) => [satellite.norad, satellite]));
+    if (showCatalogSatellites) {
+      for (const satellite of satelliteCatalog) {
+        if (!byNorad.has(satellite.norad)) byNorad.set(satellite.norad, satellite);
+        if (byNorad.size >= 703) break;
+      }
+    }
+    return [...byNorad.values()];
+  }, [satelliteCatalog, showCatalogSatellites]);
 
   // Render Map or Sky on Canvas
   useEffect(() => {
@@ -146,7 +261,7 @@ export default function SpaceView({
     ctx.scale(dpr, dpr);
 
     if (activeTab === 'map') {
-      drawWorldMap(ctx, w, h, {
+      mapHitsRef.current = drawWorldMap(ctx, w, h, {
         mapData,
         zoom,
         centerLon,
@@ -154,6 +269,12 @@ export default function SpaceView({
         observer,
         nowMs,
         selectedSat,
+        satellites: mapSatellites,
+        liveSatellites,
+        flights,
+        showFlights,
+        selectedFlight,
+        flightDetails,
         showTerminator,
         showAurora,
         showQuakes,
@@ -180,8 +301,13 @@ export default function SpaceView({
     observer,
     nowMs,
     selectedSat,
+    mapSatellites,
+    liveSatellites,
+    flights,
+    showFlights,
+    selectedFlight,
+    flightDetails,
     showTerminator,
-    showAurora,
     showQuakes,
     quakes,
     markers,
@@ -192,6 +318,7 @@ export default function SpaceView({
 
   const handleMouseDown = (e) => {
     if (activeTab !== 'map') return;
+    justDraggedRef.current = false;
     dragRef.current = { x: e.clientX, y: e.clientY, lon: centerLon, lat: centerLat };
   };
 
@@ -199,6 +326,7 @@ export default function SpaceView({
     if (!dragRef.current || activeTab !== 'map') return;
     const dx = e.clientX - dragRef.current.x;
     const dy = e.clientY - dragRef.current.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) justDraggedRef.current = true;
     const scale = 360 / (600 * zoom);
     let nextLon = dragRef.current.lon - dx * scale;
     if (nextLon > 180) nextLon -= 360;
@@ -210,6 +338,38 @@ export default function SpaceView({
 
   const handleMouseUp = () => {
     dragRef.current = null;
+    if (justDraggedRef.current) {
+      const view = mapViewRef.current;
+      fetchFlightsNear(view.centerLat, view.centerLon, 250).then((result) => {
+        setFlights(result.flights);
+        setFlightSource(result.source);
+        setFlightError(result.error);
+        setLoadingFlights(false);
+      });
+    }
+  };
+
+  const handleCanvasClick = (e) => {
+    if (activeTab !== 'map') return;
+    if (justDraggedRef.current) { justDraggedRef.current = false; return; }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const target = mapHitsRef.current
+      .map((hit) => ({ hit, distance: Math.hypot(hit.x - x, hit.y - y) }))
+      .filter((item) => item.distance <= (item.hit.type === 'flight' ? 17 : 18))
+      .sort((a, b) => a.distance - b.distance)[0]?.hit;
+    if (!target) { setEntityPanel(null); setSelectedFlight(null); return; }
+    if (target.type === 'flight') {
+      setSelectedFlight(target.flight);
+      setEntityPanel({ type: 'flight', key: target.key });
+    } else if (target.type === 'satellite') {
+      setSelectedFlight(null);
+      setSelectedSat(target.satellite);
+      setEntityPanel({ type: 'satellite', key: String(target.satellite.norad) });
+      setCenterLat(target.position.lat);
+      setCenterLon(target.position.lon);
+    }
   };
 
   const handleWheel = (e) => {
@@ -219,7 +379,11 @@ export default function SpaceView({
     setZoom((z) => Math.max(1.0, Math.min(12.0, z * factor)));
   };
 
-  const satPos = satelliteStateAt(selectedSat, nowMs);
+  const modeledSatPos = getSatelliteState(selectedSat, nowMs);
+  const liveSelectedSat = liveSatellites[selectedSat.norad];
+  const satPos = liveSelectedSat
+    ? { ...modeledSatPos, lat: liveSelectedSat.latitude, lon: liveSelectedSat.longitude, altKm: liveSelectedSat.altitudeKm ?? modeledSatPos.altKm, ecef: livePositionEcef(liveSelectedSat) }
+    : modeledSatPos;
   const satLook = lookAt(observer, satPos.ecef);
 
   return (
@@ -249,6 +413,14 @@ export default function SpaceView({
           <span className="space-badge">
             📍 {observer.label || 'Observateur'} ({observer.latDeg.toFixed(2)}°N, {observer.lonDeg.toFixed(2)}°E)
           </span>
+          <button
+            className="space-mini-btn"
+            onClick={() => setFeedRefreshKey((key) => key + 1)}
+            disabled={loadingFlights || loadingSatellites}
+            title="Actualiser les vols ADS-B et le catalogue satellite CelesTrak"
+          >
+            {loadingFlights || loadingSatellites ? '⏳' : '↻'} Flux
+          </button>
           {onClose && (
             <button className="space-close-btn" onClick={onClose} title="Fermer">
               ✕
@@ -315,8 +487,15 @@ export default function SpaceView({
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
+            onClick={handleCanvasClick}
             onWheel={handleWheel}
           />
+          {activeTab === 'map' && entityPanel?.type === 'flight' && selectedFlight && (
+            <FlightInfoCard flight={selectedFlight} details={flightDetails} loading={loadingFlightDetails} onClose={() => { setEntityPanel(null); setSelectedFlight(null); }} />
+          )}
+          {activeTab === 'map' && entityPanel?.type === 'satellite' && (
+            <SatelliteInfoCard satellite={selectedSat} position={satPos} look={satLook} live={liveSatellites[selectedSat.norad]} onClose={() => setEntityPanel(null)} />
+          )}
           <div className="space-controls-bar">
             {activeTab === 'map' && (
               <>
@@ -337,6 +516,20 @@ export default function SpaceView({
                   ))}
                 </div>
                 <div className="space-toggles">
+                  <label title="Afficher les satellites actifs issus des éléments orbitaux CelesTrak">
+                    <input type="checkbox" checked={showCatalogSatellites} onChange={(e) => setShowCatalogSatellites(e.target.checked)} />
+                    🛰️ Catalogue ({loadingSatellites ? '…' : satelliteCatalog.length})
+                  </label>
+                  <span className="space-feed-status" title={satelliteFeed || 'Chargement du catalogue TLE'}>
+                    {loadingSatellites ? '● Chargement TLE…' : satelliteFeed || '● Catalogue local'}
+                  </span>
+                  <label title="Avions ADS-B dans un rayon de 250 NM autour du centre de carte">
+                    <input type="checkbox" checked={showFlights} onChange={(e) => setShowFlights(e.target.checked)} />
+                    ✈️ Vols ({loadingFlights ? '…' : flights.length})
+                  </label>
+                  <span className="space-feed-status" title={flightError || `Flux ADS-B : ${flightSource || 'connexion…'}`}>
+                    {flightError ? '⚠ Flux hors ligne' : flightSource ? `● ${flightSource}` : '● Connexion…'}
+                  </span>
                   <label>
                     <input
                       type="checkbox"
@@ -387,6 +580,142 @@ export default function SpaceView({
   );
 }
 
+function getSatelliteState(satellite, timeMs) {
+  return satellite?.tle ? tleStateAt(satellite, timeMs) : satelliteStateAt(satellite, timeMs);
+}
+
+function getSatelliteTrack(satellite, timeMs, minutes) {
+  return satellite?.tle ? tleSatelliteTrack(satellite, timeMs, minutes) : satelliteTrack(satellite, timeMs, minutes);
+}
+
+function livePositionEcef(live) {
+  const radius = 6371 + (live.altitudeKm || 0);
+  const lat = (live.latitude * Math.PI) / 180;
+  const lon = (live.longitude * Math.PI) / 180;
+  return [radius * Math.cos(lat) * Math.cos(lon), radius * Math.cos(lat) * Math.sin(lon), radius * Math.sin(lat)];
+}
+
+function displayValue(value, suffix = '') {
+  if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) return 'Indisponible';
+  return `${value}${suffix}`;
+}
+
+function FlightInfoCard({ flight, details, loading, onClose }) {
+  const aircraft = details?.aircraft || {};
+  const route = details?.route;
+  const origin = route?.origin;
+  const destination = route?.destination;
+  const currentToDestination = destination?.lat != null && destination?.lon != null
+    ? haversineDistanceKm(flight.lat, flight.lon, destination.lat, destination.lon)
+    : null;
+  const fullRoute = origin?.lat != null && destination?.lat != null
+    ? haversineDistanceKm(origin.lat, origin.lon, destination.lat, destination.lon)
+    : null;
+  const etaMinutes = currentToDestination != null && flight.speedKnots > 40
+    ? Math.round(currentToDestination / (flight.speedKnots * 1.852) * 60)
+    : null;
+  const rows = [
+    ['Statut', flight.ground ? 'Au sol' : 'En vol'],
+    ['Catégorie', ({ commercial: 'Commercial', private: 'Privé / aviation générale', jet: 'Jet d’affaires', military: 'Militaire' })[flight.category] || flight.category],
+    ['Compagnie / exploitant', aircraft.operator || route?.airline || route?.airlineIcao],
+    ['Indicatif', flight.callsign],
+    ['ICAO24', flight.icao24],
+    ['Immatriculation', aircraft.registration || flight.registration],
+    ['Constructeur', aircraft.manufacturer],
+    ['Modèle', aircraft.model || flight.type],
+    ['Code OACI', aircraft.typeCode],
+    ['Altitude', flight.altitudeM == null ? null : `${Math.round(flight.altitudeM).toLocaleString('fr-FR')} m (${Math.round(flight.altitudeFt || 0).toLocaleString('fr-FR')} ft)`],
+    ['Vitesse sol', flight.speedKnots == null ? null : `${Math.round(flight.speedKnots)} kt (${Math.round(flight.speedKnots * 1.852)} km/h)`],
+    ['Cap', flight.heading == null ? null : `${Math.round(flight.heading)}°`],
+    ['Vitesse verticale', flight.verticalRateFpm == null ? null : `${Math.round(flight.verticalRateFpm)} ft/min`],
+    ['Squawk', flight.squawk],
+    ['Latitude / longitude', `${flight.lat.toFixed(5)}°, ${flight.lon.toFixed(5)}°`],
+    ['Distance destination', currentToDestination == null ? null : `${Math.round(currentToDestination).toLocaleString('fr-FR')} km`],
+    ['Distance de route', fullRoute == null ? null : `${Math.round(fullRoute).toLocaleString('fr-FR')} km`],
+    ['ETA estimée', etaMinutes == null ? null : `${Math.floor(etaMinutes / 60)} h ${etaMinutes % 60} min (estimation)`],
+    ['Points de trace réelle', details?.track?.length ? `${details.track.length} points` : null],
+    ['Messages ADS-B', flight.messages],
+    ['Âge du relevé', flight.seenSeconds == null ? null : `${Math.round(flight.seenSeconds)} s`],
+    ['Source position', flight.source],
+    ['Sources détails', details?.sources?.join(', ')],
+  ];
+  const airportName = (airport) => airport ? [airport.code, airport.city, airport.name, airport.country].filter(Boolean).join(' · ') : null;
+  const externalUrl = flight.callsign ? `https://www.flightaware.com/live/flight/${encodeURIComponent(flight.callsign.trim())}` : null;
+  return (
+    <div className="space-entity-card" onClick={(e) => e.stopPropagation()}>
+      <div className="space-entity-head">
+        <div><strong>✈️ {flight.callsign || flight.icao24 || 'Aéronef'}</strong><div className="space-sub">Données ADS-B en direct • détail à la demande</div></div>
+        <button className="space-close-btn" onClick={onClose} aria-label="Fermer">✕</button>
+      </div>
+      {loading && <div className="space-entity-loading">Recherche de la route, de l’aéronef et de sa trace réelle…</div>}
+      {route && <div className="space-route-line"><b>{airportName(origin) || 'Départ inconnu'}</b><span>→</span><b>{airportName(destination) || 'Arrivée inconnue'}</b></div>}
+      <div className="space-info-grid">
+        {rows.map(([label, value]) => value !== null && value !== undefined && value !== '' && (
+          <div className="space-info-cell" key={label}><span>{label}</span><strong>{value}</strong></div>
+        ))}
+      </div>
+      {details?.warnings?.length > 0 && <div className="space-sub">Certains enrichissements ne sont pas disponibles ; la télémétrie ADS-B reste affichée.</div>}
+      <div className="space-entity-actions">
+        {externalUrl && <button className="space-mini-btn" onClick={() => hostBridge.openExternal(externalUrl)}>Ouvrir FlightAware ↗</button>}
+        {flight.icao24 && <button className="space-mini-btn" onClick={() => hostBridge.openExternal(`https://adsb.lol/?icao=${encodeURIComponent(flight.icao24)}`)}>Voir ADS-B ↗</button>}
+      </div>
+    </div>
+  );
+}
+
+function SatelliteInfoCard({ satellite, position, look, live, onClose }) {
+  const periodMinutes = 1440 / satellite.meanMotionRevDay;
+  const orbitalSpeed = live?.velocityKmh != null
+    ? `${Math.round(live.velocityKmh).toLocaleString('fr-FR')} km/h`
+    : `${((2 * Math.PI * (6371 + position.altKm)) / (periodMinutes * 60)).toFixed(2)} km/s (estimée)`;
+  const mission = satellite.mission || (satellite.norad === 25544 ? 'Station spatiale habitée' : satellite.norad === 48274 ? 'Station spatiale Tiangong' : satellite.norad === 20580 ? 'Télescope spatial Hubble' : 'Satellite actif');
+  const rows = [
+    ['Mission / catégorie', mission],
+    ['NORAD ID', satellite.norad],
+    ['Identifiant', satellite.name],
+    ['Latitude sub-satellite', `${position.lat.toFixed(4)}°`],
+    ['Longitude sub-satellite', `${position.lon.toFixed(4)}°`],
+    ['Altitude instantanée', `${Math.round(position.altKm).toLocaleString('fr-FR')} km`],
+    ['Vitesse orbitale', orbitalSpeed],
+    ['Inclinaison', `${satellite.incDeg.toFixed(2)}°`],
+    ['RAAN / nœud ascendant', satellite.raanDeg == null ? null : `${satellite.raanDeg.toFixed(2)}°`],
+    ['Argument périgée', satellite.argumentPerigeeDeg == null ? null : `${satellite.argumentPerigeeDeg.toFixed(2)}°`],
+    ['Anomalie moyenne', satellite.meanAnomalyDeg == null ? null : `${satellite.meanAnomalyDeg.toFixed(2)}°`],
+    ['Période orbitale', `${Math.floor(periodMinutes / 60)} h ${Math.round(periodMinutes % 60)} min`],
+    ['Tours par jour', satellite.meanMotionRevDay.toFixed(2)],
+    ['Apogée / périgée', satellite.apogeeAltKm == null ? null : `${Math.round(satellite.apogeeAltKm)} / ${Math.round(satellite.perigeeAltKm)} km`],
+    ['Excentricité', satellite.eccentricity == null ? null : satellite.eccentricity.toFixed(5)],
+    ['Époque TLE', satellite.epoch ? new Date(satellite.epoch).toLocaleString('fr-FR') : null],
+    ['Classe d’orbite', position.altKm < 2000 ? 'LEO · orbite terrestre basse' : position.altKm < 35000 ? 'MEO · orbite moyenne' : 'GEO/HEO · orbite haute'],
+    ['Modèle orbital', satellite.source || (satellite.tle ? 'TLE Kepler/J2 (approximation)' : 'Propagation simplifiée')],
+    ['Élévation depuis l’observateur', `${look.elevationDeg.toFixed(1)}°`],
+    ['Azimut depuis l’observateur', `${look.azimuthDeg.toFixed(1)}°`],
+    ['Distance oblique', `${Math.round(look.rangeKm).toLocaleString('fr-FR')} km`],
+    ['Visibilité orbitale', live?.visibility],
+    ['Empreinte au sol', live?.footprintKm == null ? null : `${Math.round(live.footprintKm).toLocaleString('fr-FR')} km`],
+    ['Sous-point solaire', live?.solarLatitude == null ? null : `${live.solarLatitude.toFixed(2)}°, ${live.solarLongitude.toFixed(2)}°`],
+    ['Horodatage source', live?.timestamp ? new Date(live.timestamp * 1000).toLocaleString('fr-FR') : null],
+    ['Source position', live?.source || 'Propagation orbitale locale · estimation'],
+  ];
+  return (
+    <div className="space-entity-card" onClick={(e) => e.stopPropagation()}>
+      <div className="space-entity-head">
+        <div><strong>🛰️ {satellite.name}</strong><div className="space-sub">Éléments orbitaux & position observée</div></div>
+        <button className="space-close-btn" onClick={onClose} aria-label="Fermer">✕</button>
+      </div>
+      <div className="space-info-grid">
+        {rows.map(([label, value]) => value !== null && value !== undefined && value !== '' && (
+          <div className="space-info-cell" key={label}><span>{label}</span><strong>{value}</strong></div>
+        ))}
+      </div>
+      <div className="space-entity-actions">
+        <button className="space-mini-btn" onClick={() => hostBridge.openExternal(`https://www.n2yo.com/satellite/?s=${satellite.norad}`)}>Suivre sur N2YO ↗</button>
+        <button className="space-mini-btn" onClick={() => hostBridge.openExternal(`https://celestrak.org/NORAD/elements/gp.php?CATNR=${satellite.norad}&FORMAT=tle`)}>TLE CelesTrak ↗</button>
+      </div>
+    </div>
+  );
+}
+
 // ── World Map Canvas Renderer ────────────────────────────────────────────────
 
 function drawWorldMap(
@@ -401,6 +730,12 @@ function drawWorldMap(
     observer,
     nowMs,
     selectedSat,
+    satellites = DEFAULT_SATELLITES,
+    liveSatellites = {},
+    flights = [],
+    showFlights = true,
+    selectedFlight = null,
+    flightDetails = null,
     showTerminator,
     showAurora,
     showQuakes,
@@ -423,6 +758,7 @@ function drawWorldMap(
     const dy = mercY(lat) - cy;
     return [w / 2 + dx * mapSize, h / 2 + dy * mapSize];
   };
+  const hitTargets = [];
 
   // Grid lines
   ctx.strokeStyle = 'rgba(0, 212, 255, 0.08)';
@@ -585,9 +921,9 @@ function drawWorldMap(
   ctx.arc(ox, oy, 2.5, 0, Math.PI * 2);
   ctx.fill();
 
-  // Selected Satellite Ground Track & Live Position
+  // Draw the selected satellite's predicted ground track.
   if (selectedSat) {
-    const trackSegs = satelliteTrack(selectedSat, nowMs, 92);
+    const trackSegs = getSatelliteTrack(selectedSat, nowMs, 92);
     ctx.strokeStyle = selectedSat.color || '#ffd54f';
     ctx.lineWidth = 1.6;
     ctx.setLineDash([4, 4]);
@@ -596,37 +932,75 @@ function drawWorldMap(
       let prevX = null;
       seg.forEach(([lat, lon], idx) => {
         const [px, py] = project(lon, lat);
-        if (idx === 0 || (prevX !== null && Math.abs(px - prevX) > mapSize * 0.4)) {
-          ctx.moveTo(px, py);
-        } else {
-          ctx.lineTo(px, py);
-        }
+        if (idx === 0 || (prevX !== null && Math.abs(px - prevX) > mapSize * 0.4)) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
         prevX = px;
       });
       ctx.stroke();
     }
     ctx.setLineDash([]);
-
-    const pos = satelliteStateAt(selectedSat, nowMs);
-    const [sx, sy] = project(pos.lon, pos.lat);
-    // Footprint circle
-    ctx.strokeStyle = 'rgba(255, 213, 79, 0.32)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.arc(sx, sy, 26 * Math.sqrt(zoom), 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.fillStyle = selectedSat.color || '#ffd54f';
-    ctx.beginPath();
-    ctx.arc(sx, sy, 5.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.font = 'bold 11px "JetBrains Mono", monospace';
-    ctx.fillText(
-      `${selectedSat.name} (${pos.lat.toFixed(1)}°, ${pos.lon.toFixed(1)}° • ${pos.altKm.toFixed(0)} km)`,
-      sx + 9,
-      sy - 6
-    );
   }
+
+  // Three default targets are individually selectable; ISS uses its live feed when available.
+  for (const satellite of satellites) {
+    const modeled = getSatelliteState(satellite, nowMs);
+    const live = liveSatellites[satellite.norad];
+    const pos = live ? { ...modeled, lat: live.latitude, lon: live.longitude, altKm: live.altitudeKm ?? modeled.altKm } : modeled;
+    const [sx, sy] = project(pos.lon, pos.lat);
+    const selected = selectedSat?.norad === satellite.norad;
+    if (selected) {
+      ctx.strokeStyle = `${satellite.color || '#ffd54f'}66`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(sx, sy, 24 * Math.sqrt(zoom), 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.fillStyle = satellite.color || '#ffd54f';
+    ctx.beginPath(); ctx.arc(sx, sy, selected ? 6.5 : 5, 0, Math.PI * 2); ctx.fill();
+    ctx.font = `${selected ? 'bold ' : ''}11px "JetBrains Mono", monospace`;
+    ctx.fillStyle = selected ? '#fff' : (satellite.color || '#ffd54f');
+    ctx.fillText(`${satellite.name.split(' ')[0]} · ${pos.altKm.toFixed(0)} km`, sx + 9, sy - 6);
+    hitTargets.push({ type: 'satellite', satellite, position: pos, x: sx, y: sy });
+  }
+
+  // Enriched actual flown path and scheduled route, drawn only for the selected aircraft.
+  if (selectedFlight && flightDetails) {
+    const drawGeoLine = (points, color, dash = []) => {
+      if (!points || points.length < 2) return;
+      ctx.beginPath(); ctx.setLineDash(dash);
+      let prevX = null;
+      points.forEach((point) => {
+        if (!Number.isFinite(point.lat) || !Number.isFinite(point.lon)) return;
+        const [px, py] = project(point.lon, point.lat);
+        if (prevX === null || Math.abs(px - prevX) > mapSize * 0.4) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        prevX = px;
+      });
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
+    };
+    drawGeoLine(flightDetails.track || [], 'rgba(255,255,255,0.82)');
+    const route = flightDetails.route;
+    if (route?.origin?.lat != null && route?.destination?.lat != null) {
+      drawGeoLine([route.origin, route.destination], 'rgba(255,193,7,0.58)', [5, 5]);
+    }
+  }
+
+  // Live ADS-B aircraft in the current 250 NM map region.
+  if (showFlights) {
+    for (const flight of flights) {
+      const [fx, fy] = project(flight.lon, flight.lat);
+      if (fx < -18 || fx > w + 18 || fy < -18 || fy > h + 18) continue;
+      const key = flight.icao24 || flight.callsign;
+      const selected = selectedFlight && (selectedFlight.icao24 || selectedFlight.callsign) === key;
+      const color = flight.category === 'military' ? '#ff5252' : flight.category === 'jet' ? '#e040fb' : flight.category === 'private' ? '#ffd54f' : '#00e5ff';
+      ctx.save(); ctx.translate(fx, fy); ctx.rotate(((flight.heading ?? 0) * Math.PI) / 180);
+      ctx.fillStyle = color; ctx.strokeStyle = selected ? '#fff' : 'rgba(255,255,255,0.65)'; ctx.lineWidth = selected ? 1.8 : 0.8;
+      ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(5.5, 6); ctx.lineTo(0, 3.5); ctx.lineTo(-5.5, 6); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+      if (selected || zoom >= 2.7) {
+        ctx.font = '10px "JetBrains Mono", monospace'; ctx.fillStyle = selected ? '#fff' : color;
+        ctx.fillText(flight.callsign || flight.icao24 || 'Avion', fx + 8, fy - 8);
+      }
+      hitTargets.push({ type: 'flight', key, flight, x: fx, y: fy });
+    }
+  }
+  return hitTargets;
 }
 
 // ── Night Sky Polar Dome Renderer ────────────────────────────────────────────
@@ -732,7 +1106,7 @@ function drawNightSky(ctx, w, h, { observer, nowMs, solarBodies, visibleStars, s
 
   // Satellite if above horizon
   if (selectedSat) {
-    const st = satelliteStateAt(selectedSat, nowMs);
+    const st = getSatelliteState(selectedSat, nowMs);
     const look = lookAt(observer, st.ecef);
     if (look.elevationDeg > 0) {
       const [sx, sy] = projectAltAz(look.elevationDeg, look.azimuthDeg);

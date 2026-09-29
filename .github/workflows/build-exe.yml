@@ -37,7 +37,7 @@ jobs:
         run: |
           $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
           if (Test-Path $csc) {
-            & $csc /nologo /target:winexe /out:"release\Jarvis-2.0-Windows-Portable\Jarvis-2.0.exe" "release\Jarvis-2.0-Windows-Portable\JarvisLauncher.cs"
+            & $csc /nologo /target:winexe /reference:System.Windows.Forms.dll /reference:"$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\System.Web.Extensions.dll" /out:"release\Jarvis-2.0-Windows-Portable\Jarvis-2.0.exe" "release\Jarvis-2.0-Windows-Portable\JarvisLauncher.cs"
           }
           Compress-Archive -Path "release\Jarvis-2.0-Windows-Portable\*" -DestinationPath "release\Jarvis-2.0-Windows-Portable.zip" -Force
 
@@ -83,11 +83,12 @@ jobs:
           - **`Jarvis-2.0-Windows-Portable.zip`** : Archive portable autonome contenant `Jarvis-2.0.exe` et toutes les ressources 3D/spatiales/plugins.
 
           ### ✨ Nouveautés & Fonctionnalités
-          - **Avatar 3D Temps Réel (60 FPS) & Lip-Sync** : Léa, Marc, Adam (buste 3D texturé), Mei (buste 3D texturé), Classique, Cartoon 2D, Réacteur HUD, 23 coiffures 3D (`JHR1`), 10 teintes de cheveux, rendu Hologramme ou Peau 3D.
-          - **Audio & IA** : Gemini Live WebSocket (24 kHz PCM + analyse formantique F1/F2), ModelLadder REST avec rotation automatique sur 3 clés API, 30 voix Gemini, et moteur local fonctionnant même sans clé API.
-          - **Contrôle PC & Vision** : lancement d'applications PC, contrôle souris/clavier/fenêtres Windows, volume/luminosité/média/verrouillage, capture d'écran, webcam en direct, WhatsApp Web/Desktop & Email.
-          - **Espace & Voûte Céleste** : carte mondiale vectorielle, suivi orbital ISS/Tiangong/Hubble, carte du ciel nocturne (étoiles, constellations, Lune, planètes), lancements spatiaux, séismes USGS et aurores boréales.
-          - **Médias, Productivité & 82 Plugins JSON** : radios en direct (France Inter, FIP, Radio Browser, mode Sommeil), podcasts, YouTube, générateur de documents sans serveur (PDF, Word `.docx`, Excel `.xlsx`, CSV, Markdown), coffre Obsidian, tâches, agenda, dépenses, habitudes et 82 plugins JSON intégrés.
+          - **Avatar 3D & Lip-Sync** : Classique, Léa et Marc; densité réglable de 20k à 148k polygones, circuits PCB ON/OFF, 23 coiffures, 11 teintes de cheveux, hologramme/peau et lip-sync synchronisé sur l'audio.
+          - **Audio & IA** : Gemini Live WebSocket (24 kHz PCM + analyse formantique F1/F2), repli REST avec rotation de clés, 30 voix Gemini, et moteur local même sans clé API.
+          - **Contrôle PC & Vision** : applications, souris/clavier/fenêtres, volume/luminosité/média, gestionnaire de fenêtres/processus, capture d'écran, webcam, WhatsApp Web & Email.
+          - **Carte monde, vols & satellites** : avions ADS-B cliquables avec télémétrie, route et identification lorsqu'elles sont disponibles; catalogue CelesTrak TLE avec fiches détaillées, ISS/Tiangong/Hubble, carte du ciel, lancements, séismes et aurores.
+          - **Plugins corrigés** : 82 plugins JSON avec rendu des structures de réponses, validation des paramètres et routines PC; catalogue rechargable dans l'interface.
+          - **Médias & Productivité** : radios, podcasts, YouTube, génération de PDF/Word/Excel/CSV/Markdown, Obsidian, tâches, agenda, minuteurs, dépenses et habitudes.
           "@
           $exists = gh release view v2.0.0 2>$null
           if ($LASTEXITCODE -eq 0) {
