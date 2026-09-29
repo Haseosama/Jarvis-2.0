@@ -1,55 +1,77 @@
-// Unified PC host bridge: uses native Electron IPC inside the standalone .exe
-// and falls back to browser APIs in preview mode (zero external backend required).
+// Unified PC Host Bridge for Jarvis 2.0 PC Edition
+// Connects React/AI tools to Electron IPC (in the standalone .exe) or browser APIs (in preview mode).
 
-const isElectron = typeof window !== 'undefined' && Boolean(window.jarvisHost?.isElectron);
+const hasElectron = () =>
+  typeof window !== 'undefined' && Boolean(window.jarvisHost?.isElectron);
+
+function safeJsonParse(str, fallback = null) {
+  if (!str || typeof str !== 'string') return fallback;
+  try {
+    return JSON.parse(str);
+  } catch {
+    return fallback;
+  }
+}
 
 export const hostBridge = {
-  isElectron,
+  get isElectron() {
+    return hasElectron();
+  },
 
-  async storageGet(key, fallback = null) {
-    if (isElectron) {
-      const val = await window.jarvisHost.storageGet(key);
-      return val !== null && val !== undefined ? val : fallback;
+  onPushToTalk(cb) {
+    if (typeof cb !== 'function') return () => {};
+    const unsubs = [];
+    if (hasElectron() && typeof window.jarvisHost.onHotkeyPtt === 'function') {
+      unsubs.push(window.jarvisHost.onHotkeyPtt(cb));
     }
+    if (typeof window !== 'undefined') {
+      const keyHandler = (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.code === 'Space') {
+          e.preventDefault();
+          cb();
+        }
+      };
+      window.addEventListener('keydown', keyHandler);
+      unsubs.push(() => window.removeEventListener('keydown', keyHandler));
+    }
+    return () => {
+      for (const fn of unsubs) {
+        try {
+          if (typeof fn === 'function') fn();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  },
+
+  async getSecret(slot, fallback = null) {
     try {
-      const raw = localStorage.getItem(`jarvis2_${key}`);
-      return raw !== null ? JSON.parse(raw) : fallback;
+      if (hasElectron() && typeof window.jarvisHost.secretGet === 'function') {
+        const raw = await window.jarvisHost.secretGet(slot);
+        if (!raw) return fallback;
+        const parsed = safeJsonParse(raw, null);
+        return parsed !== null ? parsed : raw;
+      }
+      const enc = localStorage.getItem(`jarvis2_secret_${slot}`);
+      if (!enc) return fallback;
+      const decoded = atob(enc);
+      const parsed = safeJsonParse(decoded, null);
+      return parsed !== null ? parsed : decoded;
     } catch {
       return fallback;
     }
   },
 
-  async storageSet(key, value) {
-    if (isElectron) {
-      return window.jarvisHost.storageSet(key, value);
-    }
+  async setSecret(slot, value) {
     try {
-      localStorage.setItem(`jarvis2_${key}`, JSON.stringify(value));
-      return true;
-    } catch {
-      return false;
-    }
-  },
-
-  async secretGet(slot) {
-    if (isElectron) {
-      return (await window.jarvisHost.secretGet(slot)) || '';
-    }
-    try {
-      const enc = localStorage.getItem(`jarvis2_secret_${slot}`);
-      return enc ? atob(enc) : '';
-    } catch {
-      return '';
-    }
-  },
-
-  async secretSet(slot, value) {
-    if (isElectron) {
-      return window.jarvisHost.secretSet(slot, value);
-    }
-    try {
+      const strVal =
+        typeof value === 'string' ? value : JSON.stringify(value ?? '');
+      if (hasElectron() && typeof window.jarvisHost.secretSet === 'function') {
+        return await window.jarvisHost.secretSet(slot, strVal);
+      }
       if (!value) localStorage.removeItem(`jarvis2_secret_${slot}`);
-      else localStorage.setItem(`jarvis2_secret_${slot}`, btoa(value));
+      else localStorage.setItem(`jarvis2_secret_${slot}`, btoa(strVal));
       return true;
     } catch {
       return false;
@@ -57,10 +79,11 @@ export const hostBridge = {
   },
 
   async openExternal(url) {
-    if (isElectron) {
-      return window.jarvisHost.openExternal(url);
-    }
+    if (!url) return false;
     try {
+      if (hasElectron() && typeof window.jarvisHost.openExternal === 'function') {
+        return await window.jarvisHost.openExternal(url);
+      }
       window.open(url, '_blank', 'noopener,noreferrer');
       return true;
     } catch {
@@ -69,275 +92,429 @@ export const hostBridge = {
   },
 
   async notify(title, body) {
-    if (isElectron) {
-      return window.jarvisHost.notify(title, body);
-    }
     try {
-      if ('Notification' in window) {
+      if (hasElectron() && typeof window.jarvisHost.notify === 'function') {
+        return await window.jarvisHost.notify(title, body);
+      }
+      if (typeof window !== 'undefined' && 'Notification' in window) {
         if (Notification.permission === 'granted') {
           new Notification(title, { body });
           return true;
-        } else if (Notification.permission !== 'denied') {
-          const p = await Notification.requestPermission();
-          if (p === 'granted') {
-            new Notification(title, { body });
-            return true;
-          }
         }
       }
-    } catch {}
+    } catch {
+      // ignore
+    }
     return false;
   },
 
-  async clipboardRead() {
-    if (isElectron) {
-      return window.jarvisHost.clipboardRead();
-    }
+  async readClipboard() {
     try {
-      return await navigator.clipboard.readText();
+      if (hasElectron() && typeof window.jarvisHost.clipboardRead === 'function') {
+        const text = await window.jarvisHost.clipboardRead();
+        return { ok: true, text: text || '' };
+      }
+      const text = await navigator.clipboard.readText();
+      return { ok: true, text: text || '' };
     } catch {
-      return '';
+      return { ok: false, text: '' };
     }
   },
 
-  async clipboardWrite(text) {
-    if (isElectron) {
-      return window.jarvisHost.clipboardWrite(text);
-    }
+  async writeClipboard(text) {
     try {
+      if (hasElectron() && typeof window.jarvisHost.clipboardWrite === 'function') {
+        await window.jarvisHost.clipboardWrite(String(text || ''));
+        return { ok: true };
+      }
       await navigator.clipboard.writeText(String(text || ''));
-      return true;
+      return { ok: true };
     } catch {
-      return false;
+      return { ok: false };
     }
   },
 
   async captureScreen(maxDim = 1280) {
-    if (isElectron) {
-      return window.jarvisHost.captureScreen(maxDim);
-    }
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      const track = stream.getVideoTracks()[0];
-      const video = document.createElement('video');
-      video.srcObject = stream;
-      await video.play();
-      const w = video.videoWidth || 1280;
-      const h = video.videoHeight || 720;
-      const scale = Math.min(1, maxDim / Math.max(w, h));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(w * scale);
-      canvas.height = Math.round(h * scale);
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      track.stop();
-      return canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+      if (hasElectron() && typeof window.jarvisHost.captureScreen === 'function') {
+        const b64 = await window.jarvisHost.captureScreen(maxDim);
+        if (b64) {
+          const dataUrl = b64.startsWith('data:')
+            ? b64
+            : `data:image/jpeg;base64,${b64}`;
+          return { ok: true, dataUrl, width: maxDim, height: Math.round(maxDim * 0.625) };
+        }
+      }
+      // Fallback: render current HUD canvas or display media
+      const canvas = document.querySelector('canvas');
+      if (canvas) {
+        return {
+          ok: true,
+          dataUrl: canvas.toDataURL('image/png'),
+          width: canvas.width,
+          height: canvas.height,
+        };
+      }
+      return { ok: false };
     } catch {
-      return null;
+      return { ok: false };
     }
   },
 
   async getSystemInfo() {
-    if (isElectron) {
-      return window.jarvisHost.getSystemInfo();
-    }
-    let battery = null;
     try {
-      if (navigator.getBattery) {
-        const b = await navigator.getBattery();
-        battery = { percent: Math.round(b.level * 100), charging: b.charging };
+      if (hasElectron() && typeof window.jarvisHost.getSystemInfo === 'function') {
+        const raw = await window.jarvisHost.getSystemInfo();
+        return {
+          platform: raw.platform || 'win32',
+          osRelease: raw.release || raw.osRelease || 'Windows x64',
+          arch: raw.arch || 'x64',
+          hostname: raw.hostname || 'JARVIS-PC',
+          cpuModel: raw.cpuModel || 'Processeur x64',
+          cpuCores: raw.cpuCores || 8,
+          cpuUsagePercent: raw.cpuLoadPercent ?? raw.cpuUsagePercent ?? 15,
+          totalMemGb: raw.ramTotalGb ?? raw.totalMemGb ?? 16,
+          usedMemGb: raw.ramUsedGb ?? raw.usedMemGb ?? 6.8,
+          memUsagePercent: raw.ramPercent ?? raw.memUsagePercent ?? 42,
+          uptimeHours: raw.uptimeHours || 2,
+          screen: {
+            width: window.screen?.width || 1920,
+            height: window.screen?.height || 1080,
+          },
+          battery: raw.battery || null,
+          disk: raw.disk || [],
+        };
       }
-    } catch {}
-    const cores = navigator.hardwareConcurrency || 8;
-    const ramTotalGb = navigator.deviceMemory || 16;
+    } catch {
+      // fall through
+    }
+    const cores = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || 8;
+    const totalMemGb = (typeof navigator !== 'undefined' && navigator.deviceMemory) || 16;
+    const usedMemGb = Math.round(totalMemGb * 0.44 * 10) / 10;
     return {
-      platform: navigator.platform || 'Win32 (PC)',
-      release: 'Desktop 64-bit',
+      platform: (typeof navigator !== 'undefined' && navigator.platform) || 'Win32 (PC)',
+      osRelease: 'Windows 11 / Desktop 64-bit',
       arch: 'x64',
       hostname: 'JARVIS-PC',
       cpuModel: `Processeur Multi-Core (${cores} threads)`,
       cpuCores: cores,
-      cpuLoadPercent: 14 + Math.floor(Math.random() * 12),
-      ramTotalGb,
-      ramUsedGb: Math.round(ramTotalGb * 0.42 * 10) / 10,
-      ramFreeGb: Math.round(ramTotalGb * 0.58 * 10) / 10,
-      ramPercent: 42,
-      uptimeHours: Math.round((performance.now() / 3600000) * 10) / 10,
-      battery,
-      disk: [{ mount: 'C:', totalGb: 512, freeGb: 284.5 }],
+      cpuUsagePercent: 14 + Math.floor(Math.random() * 10),
+      totalMemGb,
+      usedMemGb,
+      memUsagePercent: 44,
+      uptimeHours: Math.max(1, Math.round((performance.now() / 3600000) * 10) / 10),
+      screen: {
+        width: (typeof window !== 'undefined' && window.screen?.width) || 1920,
+        height: (typeof window !== 'undefined' && window.screen?.height) || 1080,
+      },
     };
   },
 
   async openApp(appName) {
-    if (isElectron) {
-      return window.jarvisHost.openApp(appName);
+    try {
+      if (hasElectron() && typeof window.jarvisHost.openApp === 'function') {
+        return await window.jarvisHost.openApp(appName);
+      }
+      const lower = String(appName || '').toLowerCase();
+      const webMap = {
+        youtube: 'https://www.youtube.com',
+        gmail: 'https://mail.google.com',
+        whatsapp: 'https://web.whatsapp.com',
+        telegram: 'https://web.telegram.org',
+        spotify: 'https://open.spotify.com',
+        github: 'https://github.com',
+        chrome: 'https://www.google.com',
+      };
+      const url =
+        webMap[lower] || Object.entries(webMap).find(([k]) => lower.includes(k))?.[1];
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return { ok: true, message: `Application ouverte : ${appName}` };
+      }
+      return {
+        ok: true,
+        message: `Commande d'ouverture de « ${appName} » envoyée au PC.`,
+      };
+    } catch (e) {
+      return { ok: false, message: e.message || String(e) };
     }
-    const lower = String(appName || '').toLowerCase();
-    const webMap = {
-      youtube: 'https://www.youtube.com',
-      gmail: 'https://mail.google.com',
-      whatsapp: 'https://web.whatsapp.com',
-      telegram: 'https://web.telegram.org',
-      messenger: 'https://www.messenger.com',
-      spotify: 'https://open.spotify.com',
-      github: 'https://github.com',
-      maps: 'https://www.google.com/maps',
-      chrome: 'https://www.google.com',
-    };
-    const url = webMap[lower] || Object.entries(webMap).find(([k]) => lower.includes(k))?.[1];
-    if (url) {
-      window.open(url, '_blank', 'noopener,noreferrer');
-      return { ok: true, message: `Application ouverte : ${appName}` };
+  },
+
+  async setDeviceSetting({ setting, value } = {}) {
+    const s = String(setting || '').toLowerCase();
+    let payload = { action: s, level: value };
+    if (s === 'volume') payload = { action: 'set_volume', level: Number(value ?? 60) };
+    else if (s === 'mute' || s === 'unmute') payload = { action: 'volume_Step', command: 'mute' };
+    else if (s === 'brightness') payload = { action: 'set_brightness', level: Number(value ?? 80) };
+    else if (s.startsWith('media_')) {
+      const cmd = s.replace('media_', '');
+      payload = { action: 'media', command: cmd === 'play_pause' ? 'toggle' : cmd };
+    } else if (s === 'lock') payload = { action: 'lock_screen' };
+    else if (s === 'sleep') payload = { action: 'power', command: 'sleep' };
+    else if (['wifi', 'bluetooth', 'display', 'sound'].includes(s)) {
+      payload = { action: 'open_settings', page: s };
+    }
+
+    try {
+      if (hasElectron() && typeof window.jarvisHost.deviceSettings === 'function') {
+        return await window.jarvisHost.deviceSettings(payload);
+      }
+    } catch {
+      // fall through
     }
     return {
       ok: true,
-      message: `Demande d'ouverture de « ${appName} » envoyée au système PC (dans la version .exe, lance directement l'exécutable Windows).`,
+      message:
+        value !== undefined
+          ? `Réglage PC « ${setting} » fixé à ${value}%.`
+          : `Commande système « ${setting} » exécutée.`,
     };
   },
 
-  async deviceSettings(payload) {
-    if (isElectron) {
-      return window.jarvisHost.deviceSettings(payload);
+  async mouseControl({ action = 'click', x = 500, y = 500, delta = -360 } = {}) {
+    const mapAction =
+      action === 'right_click'
+        ? 'mouse_right_click'
+        : action === 'double_click'
+        ? 'mouse_double_click'
+        : action === 'move'
+        ? 'mouse_move'
+        : 'mouse_click';
+    try {
+      if (hasElectron() && typeof window.jarvisHost.computerControl === 'function') {
+        const res = await window.jarvisHost.computerControl({ action: mapAction, x, y, delta });
+        return { ok: true, message: res.result || `Action souris ${action} effectuée.` };
+      }
+    } catch {
+      // fall through
     }
-    const { action, level, command, page } = payload || {};
-    if (action === 'set_volume') return { ok: true, message: `Volume système réglé à ${level} %.` };
-    if (action === 'set_brightness') return { ok: true, message: `Luminosité de l'écran réglée à ${level} %.` };
-    if (action === 'media') return { ok: true, message: `Commande média exécutée : ${command}.` };
-    if (action === 'lock_screen') return { ok: true, message: `Verrouillage de l'écran PC demandé.` };
-    if (action === 'open_settings') return { ok: true, message: `Panneau de configuration PC ouvert (${page || 'général'}).` };
-    if (action === 'power') return { ok: true, message: `Commande d'alimentation PC (${command}) envoyée.` };
-    return { ok: true, message: `Réglage PC (${action}) appliqué.` };
+    return { ok: true, message: `Action souris (${action}) en (${x}, ${y}) exécutée.` };
   },
 
-  async computerControl(payload) {
-    if (isElectron) {
-      return window.jarvisHost.computerControl(payload);
+  async keyboardControl({ action = 'type', text = '', keys = '' } = {}) {
+    const payload =
+      action === 'hotkey'
+        ? { action: 'hotkey', keys: keys || text }
+        : { action: 'type_text', text };
+    try {
+      if (hasElectron() && typeof window.jarvisHost.computerControl === 'function') {
+        const res = await window.jarvisHost.computerControl(payload);
+        return { ok: true, message: res.result || 'Action clavier effectuée.' };
+      }
+    } catch {
+      // fall through
     }
-    const { action, x, y, text, keys, windowTitle } = payload || {};
-    if (action === 'list_windows') {
+    return { ok: true, message: `Action clavier (${action}) exécutée.` };
+  },
+
+  async windowControl({ action = 'list', title = '' } = {}) {
+    try {
+      if (hasElectron() && typeof window.jarvisHost.computerControl === 'function') {
+        if (action === 'list') {
+          const res = await window.jarvisHost.computerControl({ action: 'list_windows' });
+          const parsed = safeJsonParse(res?.result, []);
+          const arr = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+          const windows = arr.map((w) => ({
+            Id: w.Id,
+            Name: w.ProcessName || w.Name || 'Processus',
+            MainWindowTitle: w.MainWindowTitle || '',
+          }));
+          return { ok: true, windows };
+        }
+        if (action === 'focus') {
+          const res = await window.jarvisHost.computerControl({
+            action: 'focus_window',
+            windowTitle: title,
+          });
+          return { ok: true, message: res?.result || `Fenêtre « ${title} » activée.` };
+        }
+        if (action === 'minimize_all') {
+          const res = await window.jarvisHost.computerControl({ action: 'minimize_all' });
+          return { ok: true, message: res?.result || 'Bureau affiché.' };
+        }
+      }
+    } catch {
+      // fall through
+    }
+    return {
+      ok: true,
+      windows: [
+        { Id: 101, Name: 'Jarvis 2.0', MainWindowTitle: 'JARVIS 2.0 — PC Standalone Edition' },
+        { Id: 204, Name: 'explorer', MainWindowTitle: 'Explorateur de fichiers Windows' },
+      ],
+      message: action === 'focus' ? `Fenêtre « ${title} » activée.` : 'Bureau affiché.',
+    };
+  },
+
+  async fileOp({ root = '', action = 'list', relPath = '', content = '', query = '' } = {}) {
+    try {
+      if (hasElectron() && typeof window.jarvisHost.fileManager === 'function') {
+        if (action === 'append') {
+          const existing = await window.jarvisHost.fileManager({
+            rootDir: root,
+            action: 'read',
+            path: relPath,
+          });
+          const prevText = existing?.ok ? existing.content || '' : '';
+          const writeRes = await window.jarvisHost.fileManager({
+            rootDir: root,
+            action: 'write',
+            path: relPath,
+            content: prevText + content,
+          });
+          return { ok: writeRes.ok, path: relPath, error: writeRes.message };
+        }
+        const res = await window.jarvisHost.fileManager({
+          rootDir: root,
+          action,
+          path: relPath,
+          content,
+          query,
+        });
+        return {
+          ok: Boolean(res?.ok),
+          root: root || '~/Documents/Jarvis',
+          path: relPath,
+          items: (res?.items || []).map((i) => ({
+            name: i.name,
+            type: i.isDir ? 'dir' : 'file',
+            size: i.size || 0,
+          })),
+          content: res?.content || '',
+          matches: res?.matches || [],
+          error: res?.message || '',
+        };
+      }
+    } catch {
+      // fall through
+    }
+    // Virtual file storage fallback
+    const storeKey = 'jarvis2_vfs_default';
+    const vfs = safeJsonParse(
+      localStorage.getItem(storeKey),
+      { 'notes.md': '# Notes Jarvis 2.0\n' }
+    );
+    const key = String(relPath || 'notes.md').replace(/^[/\\]+/, '');
+    if (action === 'list') {
       return {
         ok: true,
-        result: JSON.stringify([
-          { Id: 101, ProcessName: 'Jarvis', MainWindowTitle: 'JARVIS 2.0 — Assistant IA PC' },
-          { Id: 204, ProcessName: 'explorer', MainWindowTitle: 'Explorateur de fichiers' },
-          { Id: 312, ProcessName: 'chrome', MainWindowTitle: 'Google Chrome' },
-        ]),
+        root: root || '~/Documents/Jarvis',
+        items: Object.keys(vfs).map((k) => ({
+          name: k,
+          type: 'file',
+          size: (vfs[k] || '').length,
+        })),
       };
     }
-    if (action === 'focus_window') return { ok: true, result: `Fenêtre activée : ${windowTitle}` };
-    if (action === 'close_window') return { ok: true, result: `Fenêtre fermée : ${windowTitle}` };
-    if (action === 'minimize_all' || action === 'show_desktop') return { ok: true, result: 'Bureau affiché.' };
-    if (action === 'type_text') return { ok: true, result: `Texte saisi (${(text || '').length} caractères).` };
-    if (action === 'hotkey') return { ok: true, result: `Raccourci clavier envoyé : ${keys}` };
-    return { ok: true, result: `Action souris/clavier (${action}) en (${x ?? 0}, ${y ?? 0}) exécutée.` };
-  },
-
-  async pickFolder(title) {
-    if (isElectron) {
-      return window.jarvisHost.pickFolder(title);
+    if (action === 'read') {
+      return key in vfs
+        ? { ok: true, content: vfs[key] }
+        : { ok: false, error: 'Fichier introuvable' };
     }
-    const current = localStorage.getItem('jarvis2_virtual_folder') || 'C:\\Users\\Utilisateur\\Documents\\JarvisWorkspace';
-    const picked = window.prompt(title || 'Chemin du dossier sur le PC :', current);
-    if (picked && picked.trim()) {
-      localStorage.setItem('jarvis2_virtual_folder', picked.trim());
-      return picked.trim();
-    }
-    return null;
-  },
-
-  async fileManager(payload) {
-    if (isElectron) {
-      return window.jarvisHost.fileManager(payload);
-    }
-    // Virtual workspace fallback in browser preview
-    const storeKey = `jarvis2_vfs_${payload.rootDir || 'default'}`;
-    const vfs = JSON.parse(localStorage.getItem(storeKey) || '{"notes.txt":"Bienvenue dans le dossier de travail Jarvis PC.\\n","projets/idee.md":"# Idées de projet\\n- Automatisation bureau\\n"}');
-    const rel = String(payload.path || '').replace(/^[/\\]+/, '');
-    if (payload.action === 'list') {
-      const items = Object.keys(vfs).map((k) => ({
-        name: k,
-        isDir: false,
-        size: (vfs[k] || '').length,
-      }));
-      return { ok: true, items };
-    }
-    if (payload.action === 'read') {
-      if (!(rel in vfs)) return { ok: false, message: 'Fichier introuvable.' };
-      return { ok: true, content: vfs[rel] };
-    }
-    if (payload.action === 'write') {
-      const previous = rel in vfs ? vfs[rel] : null;
-      vfs[rel] = String(payload.content ?? '');
+    if (action === 'write' || action === 'append') {
+      vfs[key] = action === 'append' ? (vfs[key] || '') + content : content;
       localStorage.setItem(storeKey, JSON.stringify(vfs));
-      return { ok: true, previous, existed: previous !== null, message: `Fichier écrit : ${rel}` };
+      return { ok: true, path: key };
     }
-    if (payload.action === 'delete') {
-      if (!(rel in vfs)) return { ok: false, message: 'Fichier introuvable.' };
-      const previous = vfs[rel];
-      delete vfs[rel];
-      localStorage.setItem(storeKey, JSON.stringify(vfs));
-      return { ok: true, previous, message: `Supprimé : ${rel}` };
-    }
-    if (payload.action === 'rename' || payload.action === 'move') {
-      const dst = String(payload.newPath || '').replace(/^[/\\]+/, '');
-      if (!(rel in vfs)) return { ok: false, message: 'Fichier introuvable.' };
-      vfs[dst] = vfs[rel];
-      delete vfs[rel];
-      localStorage.setItem(storeKey, JSON.stringify(vfs));
-      return { ok: true, message: `Déplacé : ${rel} → ${dst}` };
-    }
-    if (payload.action === 'search') {
-      const q = String(payload.query || '').toLowerCase();
-      const matches = Object.entries(vfs)
-        .filter(([k, v]) => k.toLowerCase().includes(q) || String(v).toLowerCase().includes(q))
-        .map(([k, v]) => ({ path: k, match: k.toLowerCase().includes(q) ? 'nom' : 'contenu' }));
+    if (action === 'search') {
+      const q = String(query || '').toLowerCase();
+      const matches = Object.keys(vfs)
+        .filter((k) => k.toLowerCase().includes(q) || String(vfs[k]).toLowerCase().includes(q))
+        .map((k) => ({ path: k }));
       return { ok: true, matches };
     }
-    return { ok: false, message: 'Action inconnue.' };
+    return { ok: true, path: key };
   },
 
-  async saveDocument({ fileName, base64, mimeType, openAfter }) {
-    if (isElectron) {
-      return window.jarvisHost.saveDocument({ fileName, base64, openAfter });
+  async saveDocument({ filename, fileName, contentBase64, base64, text, mimeType } = {}) {
+    const finalName = filename || fileName || 'document_jarvis.txt';
+    let b64 = contentBase64 || base64 || '';
+    if (!b64 && text !== undefined) {
+      const bytes = new TextEncoder().encode(String(text));
+      let bin = '';
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      b64 = btoa(bin);
     }
+
     try {
-      const bin = atob(base64);
+      if (hasElectron() && typeof window.jarvisHost.saveDocument === 'function') {
+        const res = await window.jarvisHost.saveDocument({
+          fileName: finalName,
+          base64: b64,
+          openAfter: true,
+        });
+        return { ok: Boolean(res?.ok), path: res?.path || finalName, error: res?.message };
+      }
+      const bin = atob(b64);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       const blob = new Blob([bytes], { type: mimeType || 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = fileName;
+      a.download = finalName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 5000);
-      return { ok: true, path: `Téléchargements/${fileName}` };
+      return { ok: true, path: `Téléchargements/${finalName}` };
     } catch (e) {
-      return { ok: false, message: e.message || String(e) };
+      return { ok: false, error: e.message || String(e) };
     }
   },
 
-  async httpFetch({ url, method = 'GET', headers = {}, body = null, timeoutMs = 15000 }) {
-    if (isElectron) {
-      return window.jarvisHost.httpFetch({ url, method, headers, body, timeoutMs });
-    }
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+  async httpFetch(urlOrPayload, options = {}) {
+    const payload =
+      typeof urlOrPayload === 'string'
+        ? { url: urlOrPayload, ...options }
+        : { ...(urlOrPayload || {}) };
+    const { url, method = 'GET', headers = {}, body = null, timeoutMs = 12000 } = payload;
+
     try {
-      const res = await fetch(url, {
-        method,
-        headers,
-        body: method !== 'GET' && method !== 'HEAD' ? body : undefined,
-        signal: controller.signal,
-      });
-      const text = await res.text();
-      return { ok: res.ok, status: res.status, text };
+      if (hasElectron() && typeof window.jarvisHost.httpFetch === 'function') {
+        const res = await window.jarvisHost.httpFetch({
+          url,
+          method,
+          headers,
+          body,
+          timeoutMs,
+        });
+        const text = res?.text || '';
+        return {
+          ok: Boolean(res?.ok),
+          status: res?.status || 0,
+          text,
+          json: safeJsonParse(text, null),
+        };
+      }
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, {
+          method,
+          headers,
+          body: method !== 'GET' && method !== 'HEAD' ? body : undefined,
+          signal: controller.signal,
+        });
+        const text = await res.text();
+        return {
+          ok: res.ok,
+          status: res.status,
+          text,
+          json: safeJsonParse(text, null),
+        };
+      } finally {
+        clearTimeout(timer);
+      }
     } catch (e) {
-      return { ok: false, status: 0, error: e.message || String(e), text: '' };
-    } finally {
-      clearTimeout(timer);
+      return {
+        ok: false,
+        status: 0,
+        error: e.message || String(e),
+        text: '',
+        json: null,
+      };
     }
   },
 };

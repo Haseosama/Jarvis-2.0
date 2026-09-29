@@ -14,10 +14,65 @@ const {
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const http = require('http');
 const crypto = require('crypto');
 const { exec, execFile } = require('child_process');
 
 let mainWindow = null;
+let localAssetServer = null;
+
+const MIME_MAP = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.tsv': 'text/tab-separated-values; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.bin': 'application/octet-stream',
+};
+
+function startEmbeddedAssetServer() {
+  return new Promise((resolve) => {
+    if (localAssetServer) {
+      const addr = localAssetServer.address();
+      if (addr && addr.port) return resolve(`http://127.0.0.1:${addr.port}`);
+    }
+    const distRoot = path.join(__dirname, '../dist');
+    const server = http.createServer((req, res) => {
+      try {
+        const rawUrl = decodeURIComponent((req.url || '/').split('?')[0]);
+        const relPath = rawUrl === '/' ? 'index.html' : rawUrl.replace(/^\/+/, '');
+        const filePath = path.join(distRoot, relPath);
+        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+          const ext = path.extname(filePath).toLowerCase();
+          const data = fs.readFileSync(filePath);
+          res.writeHead(200, {
+            'Content-Type': MIME_MAP[ext] || 'application/octet-stream',
+            'Cache-Control': 'no-cache',
+          });
+          res.end(data);
+        } else {
+          res.writeHead(404);
+          res.end('Not found');
+        }
+      } catch (e) {
+        res.writeHead(500);
+        res.end(String(e));
+      }
+    });
+    server.listen(0, '127.0.0.1', () => {
+      localAssetServer = server;
+      const addr = server.address();
+      resolve(`http://127.0.0.1:${addr.port}`);
+    });
+  });
+}
 
 // Path to local JSON store inside %APPDATA%/jarvis-pc
 function getStorePath() {
@@ -95,10 +150,10 @@ function runCmd(cmd, timeout = 10000) {
   });
 }
 
-function createWindow() {
+async function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 840,
+    width: 1340,
+    height: 860,
     minWidth: 940,
     minHeight: 640,
     backgroundColor: '#060e14',
@@ -121,9 +176,10 @@ function createWindow() {
 
   const startUrl = process.env.ELECTRON_START_URL;
   if (startUrl) {
-    mainWindow.loadURL(startUrl);
+    await mainWindow.loadURL(startUrl);
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    const embeddedUrl = await startEmbeddedAssetServer();
+    await mainWindow.loadURL(embeddedUrl);
   }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

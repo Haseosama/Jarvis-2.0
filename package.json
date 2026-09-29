@@ -31,6 +31,7 @@
   "build": {
     "appId": "com.haseosama.jarvis2",
     "productName": "Jarvis 2.0",
+    "asar": false,
     "directories": {
       "output": "out"
     },

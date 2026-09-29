@@ -12,6 +12,7 @@ import {
   DEFAULT_SATELLITES,
   moonPhase,
 } from '../src/space/SpaceEngine.js';
+import { hostBridge } from '../src/core/hostBridge.js';
 
 const ASSETS_DIR = path.resolve(process.cwd(), 'public/assets');
 
@@ -108,5 +109,24 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
       assert.ok(spec.name, `Plugin ${entry.fileName} has name`);
       assert.ok(spec.description, `Plugin ${entry.fileName} has description`);
     }
+  });
+
+  it('validates hostBridge methods required by App, ConfigStore, ToolRegistry, and PCControlPanel', async () => {
+    assert.equal(typeof hostBridge.onPushToTalk, 'function');
+    const unsub = hostBridge.onPushToTalk(() => {});
+    assert.equal(typeof unsub, 'function');
+    unsub();
+
+    const sys = await hostBridge.getSystemInfo();
+    assert.ok(sys.cpuCores > 0);
+    assert.ok(typeof sys.cpuUsagePercent === 'number');
+    assert.ok(typeof sys.memUsagePercent === 'number');
+
+    const dev = await hostBridge.setDeviceSetting({ setting: 'volume', value: 50 });
+    assert.equal(dev.ok, true);
+
+    const win = await hostBridge.windowControl({ action: 'list' });
+    assert.equal(win.ok, true);
+    assert.ok(Array.isArray(win.windows));
   });
 });

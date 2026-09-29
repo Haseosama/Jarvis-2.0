@@ -90,8 +90,7 @@ jobs:
           - **Médias, Productivité & 82 Plugins JSON** : radios en direct (France Inter, FIP, Radio Browser, mode Sommeil), podcasts, YouTube, générateur de documents sans serveur (PDF, Word `.docx`, Excel `.xlsx`, CSV, Markdown), coffre Obsidian, tâches, agenda, dépenses, habitudes et 82 plugins JSON intégrés.
           "@
           $exists = gh release view v2.0.0 2>$null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create v2.0.0 (Get-ChildItem "artifacts\*" | ForEach-Object { $_.FullName }) --title "Jarvis 2.0 — Édition PC Autonome (.exe sans backend)" --notes $notes --target "${{ github.sha }}"
-          } else {
-            gh release upload v2.0.0 (Get-ChildItem "artifacts\*" | ForEach-Object { $_.FullName }) --clobber
+          if ($LASTEXITCODE -eq 0) {
+            gh release delete v2.0.0 --yes --cleanup-tag
           }
+          gh release create v2.0.0 (Get-ChildItem "artifacts\*" | ForEach-Object { $_.FullName }) --title "Jarvis 2.0 — Édition PC Autonome (.exe sans backend)" --notes $notes --target "${{ github.sha }}"
