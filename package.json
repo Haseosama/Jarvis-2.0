@@ -1,0 +1,59 @@
+{
+  "name": "jarvis-pc",
+  "version": "2.0.0",
+  "description": "JARVIS 2.0 — Assistant IA personnel vocal et visuel pour PC (adapté de Jarvis-Android v0.9.53, autonome sans backend)",
+  "author": "Haseosama",
+  "license": "CC-BY-NC-4.0",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "build:exe": "node scripts/build-win-exe.mjs",
+    "test": "node --test tests/jarvis.test.js",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "electron:dev": "ELECTRON_START_URL=http://localhost:5173 electron .",
+    "electron:start": "npm run build && electron .",
+    "dist:win": "npm run build && electron-builder --win nsis --x64",
+    "dist:dir": "npm run build && electron-builder --win dir --x64"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "vite": "^6.0.3"
+  },
+  "build": {
+    "appId": "com.haseosama.jarvis2",
+    "productName": "Jarvis 2.0",
+    "directories": {
+      "output": "out"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Jarvis 2.0",
+      "artifactName": "Jarvis-2.0-Setup.exe"
+    }
+  }
+}

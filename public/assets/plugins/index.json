@@ -1,0 +1,1747 @@
+[
+  {
+    "fileName": "actualites.json",
+    "name": "actualites",
+    "description": "Ouvre Google Actualités sur un sujet. Pour « quoi de neuf sur… », « les infos sur… ».",
+    "spec": {
+      "name": "actualites",
+      "description": "Ouvre Google Actualités sur un sujet. Pour « quoi de neuf sur… », « les infos sur… ».",
+      "parameters": [
+        {
+          "name": "sujet",
+          "description": "Le sujet d'actualité",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://news.google.com/search?q={sujet}&hl=fr&gl=FR&ceid=FR:fr"
+    },
+    "json": "{\n  \"name\": \"actualites\",\n  \"description\": \"Ouvre Google Actualités sur un sujet. Pour « quoi de neuf sur… », « les infos sur… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"sujet\",\n      \"description\": \"Le sujet d'actualité\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://news.google.com/search?q={sujet}&hl=fr&gl=FR&ceid=FR:fr\"\n}\n"
+  },
+  {
+    "fileName": "adresse_france.json",
+    "name": "adresse_france",
+    "description": "Retrouve une adresse postale en France avec son code postal et sa ville (source : Base Adresse Nationale, adresse.data.gouv.fr). Base d'adresses : les monuments et les commerces ne sont pas toujours reconnus, donner un numéro et une rue. Pour « c'est quel code postal au 10 rue de… ».",
+    "spec": {
+      "name": "adresse_france",
+      "description": "Retrouve une adresse postale en France avec son code postal et sa ville (source : Base Adresse Nationale, adresse.data.gouv.fr). Base d'adresses : les monuments et les commerces ne sont pas toujours reconnus, donner un numéro et une rue. Pour « c'est quel code postal au 10 rue de… ».",
+      "parameters": [
+        {
+          "name": "recherche",
+          "description": "Adresse, par exemple 10 rue de la paix Paris",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://api-adresse.data.gouv.fr/search/?q={recherche}&limit=1",
+      "result_path": "features.0.properties.label"
+    },
+    "json": "{\n  \"name\": \"adresse_france\",\n  \"description\": \"Retrouve une adresse postale en France avec son code postal et sa ville (source : Base Adresse Nationale, adresse.data.gouv.fr). Base d'adresses : les monuments et les commerces ne sont pas toujours reconnus, donner un numéro et une rue. Pour « c'est quel code postal au 10 rue de… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"recherche\",\n      \"description\": \"Adresse, par exemple 10 rue de la paix Paris\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://api-adresse.data.gouv.fr/search/?q={recherche}&limit=1\",\n  \"result_path\": \"features.0.properties.label\"\n}\n"
+  },
+  {
+    "fileName": "agenda_evenement.json",
+    "name": "agenda_evenement",
+    "description": "Ouvre Google Agenda avec un nouvel événement prérempli (titre et lieu). L'utilisateur choisit la date et valide. Pour « ajoute un rendez-vous ».",
+    "spec": {
+      "name": "agenda_evenement",
+      "description": "Ouvre Google Agenda avec un nouvel événement prérempli (titre et lieu). L'utilisateur choisit la date et valide. Pour « ajoute un rendez-vous ».",
+      "parameters": [
+        {
+          "name": "titre",
+          "description": "Titre de l'événement",
+          "required": true
+        },
+        {
+          "name": "lieu",
+          "description": "Lieu (facultatif)",
+          "required": false
+        }
+      ],
+      "type": "open",
+      "url": "https://calendar.google.com/calendar/render?action=TEMPLATE&text={titre}&location={lieu}"
+    },
+    "json": "{\n  \"name\": \"agenda_evenement\",\n  \"description\": \"Ouvre Google Agenda avec un nouvel événement prérempli (titre et lieu). L'utilisateur choisit la date et valide. Pour « ajoute un rendez-vous ».\",\n  \"parameters\": [\n    {\n      \"name\": \"titre\",\n      \"description\": \"Titre de l'événement\",\n      \"required\": true\n    },\n    {\n      \"name\": \"lieu\",\n      \"description\": \"Lieu (facultatif)\",\n      \"required\": false\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://calendar.google.com/calendar/render?action=TEMPLATE&text={titre}&location={lieu}\"\n}\n"
+  },
+  {
+    "fileName": "anniversaires_celebres.json",
+    "name": "anniversaires_celebres",
+    "description": "Les personnalités nées un jour donné (Wikipédia). Pour « qui est né le même jour que moi ? », « quelles célébrités sont nées aujourd'hui ? ». Mois et jour sur deux chiffres.",
+    "spec": {
+      "name": "anniversaires_celebres",
+      "description": "Les personnalités nées un jour donné (Wikipédia). Pour « qui est né le même jour que moi ? », « quelles célébrités sont nées aujourd'hui ? ». Mois et jour sur deux chiffres.",
+      "parameters": [
+        {
+          "name": "mois",
+          "description": "Mois sur deux chiffres (01 à 12)",
+          "required": true
+        },
+        {
+          "name": "jour",
+          "description": "Jour sur deux chiffres (01 à 31)",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://api.wikimedia.org/feed/v1/wikipedia/fr/onthisday/births/{mois}/{jour}",
+      "result_items": "births",
+      "result_fields": [
+        "year",
+        "text"
+      ],
+      "result_max": 12
+    },
+    "json": "{\n  \"name\": \"anniversaires_celebres\",\n  \"description\": \"Les personnalités nées un jour donné (Wikipédia). Pour « qui est né le même jour que moi ? », « quelles célébrités sont nées aujourd'hui ? ». Mois et jour sur deux chiffres.\",\n  \"parameters\": [\n    {\n      \"name\": \"mois\",\n      \"description\": \"Mois sur deux chiffres (01 à 12)\",\n      \"required\": true\n    },\n    {\n      \"name\": \"jour\",\n      \"description\": \"Jour sur deux chiffres (01 à 31)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://api.wikimedia.org/feed/v1/wikipedia/fr/onthisday/births/{mois}/{jour}\",\n  \"result_items\": \"births\",\n  \"result_fields\": [\n    \"year\",\n    \"text\"\n  ],\n  \"result_max\": 12\n}\n"
+  },
+  {
+    "fileName": "archive_web.json",
+    "name": "archive_web",
+    "description": "Donne le lien vers la copie la plus proche d'un site dans la Wayback Machine d'Internet Archive. Pour « à quoi ressemblait ce site avant », « ce site a disparu ».",
+    "spec": {
+      "name": "archive_web",
+      "description": "Donne le lien vers la copie la plus proche d'un site dans la Wayback Machine d'Internet Archive. Pour « à quoi ressemblait ce site avant », « ce site a disparu ».",
+      "parameters": [
+        {
+          "name": "adresse",
+          "description": "Adresse du site, par exemple example.com",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://archive.org/wayback/available?url={adresse}",
+      "result_path": "archived_snapshots.closest.url"
+    },
+    "json": "{\n  \"name\": \"archive_web\",\n  \"description\": \"Donne le lien vers la copie la plus proche d'un site dans la Wayback Machine d'Internet Archive. Pour « à quoi ressemblait ce site avant », « ce site a disparu ».\",\n  \"parameters\": [\n    {\n      \"name\": \"adresse\",\n      \"description\": \"Adresse du site, par exemple example.com\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://archive.org/wayback/available?url={adresse}\",\n  \"result_path\": \"archived_snapshots.closest.url\"\n}\n"
+  },
+  {
+    "fileName": "asteroides_du_jour.json",
+    "name": "asteroides_du_jour",
+    "description": "Donne le nombre d'astéroïdes qui passent près de la Terre aujourd'hui (source : NASA NeoWs, clé de démonstration limitée). Pour « y a-t-il des astéroïdes aujourd'hui ».",
+    "spec": {
+      "name": "asteroides_du_jour",
+      "description": "Donne le nombre d'astéroïdes qui passent près de la Terre aujourd'hui (source : NASA NeoWs, clé de démonstration limitée). Pour « y a-t-il des astéroïdes aujourd'hui ».",
+      "parameters": [],
+      "type": "http",
+      "url": "https://api.nasa.gov/neo/rest/v1/feed/today?api_key=DEMO_KEY",
+      "result_path": "element_count"
+    },
+    "json": "{\n  \"name\": \"asteroides_du_jour\",\n  \"description\": \"Donne le nombre d'astéroïdes qui passent près de la Terre aujourd'hui (source : NASA NeoWs, clé de démonstration limitée). Pour « y a-t-il des astéroïdes aujourd'hui ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://api.nasa.gov/neo/rest/v1/feed/today?api_key=DEMO_KEY\",\n  \"result_path\": \"element_count\"\n}\n"
+  },
+  {
+    "fileName": "bilan_telephone.json",
+    "name": "bilan_telephone",
+    "description": "Fait le point sur le téléphone : batterie, stockage libre et dernières notifications. À utiliser pour « comment va mon téléphone », « qu'est-ce que j'ai raté ».",
+    "spec": {
+      "name": "bilan_telephone",
+      "description": "Fait le point sur le téléphone : batterie, stockage libre et dernières notifications. À utiliser pour « comment va mon téléphone », « qu'est-ce que j'ai raté ».",
+      "parameters": [],
+      "type": "routine",
+      "steps": [
+        {
+          "tool": "system_monitor",
+          "args": {}
+        },
+        {
+          "tool": "notifications",
+          "args": {
+            "limit": "5"
+          }
+        }
+      ]
+    },
+    "json": "{\n  \"name\": \"bilan_telephone\",\n  \"description\": \"Fait le point sur le téléphone : batterie, stockage libre et dernières notifications. À utiliser pour « comment va mon téléphone », « qu'est-ce que j'ai raté ».\",\n  \"parameters\": [],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"system_monitor\",\n      \"args\": {}\n    },\n    {\n      \"tool\": \"notifications\",\n      \"args\": {\n        \"limit\": \"5\"\n      }\n    }\n  ]\n}\n"
+  },
+  {
+    "fileName": "blague.json",
+    "name": "blague",
+    "description": "Une blague en français, au hasard. Pour « raconte-moi une blague », « fais-moi rire ».",
+    "spec": {
+      "name": "blague",
+      "description": "Une blague en français, au hasard. Pour « raconte-moi une blague », « fais-moi rire ».",
+      "parameters": [],
+      "type": "http",
+      "url": "https://v2.jokeapi.dev/joke/Any?lang=fr&blacklistFlags=nsfw,religious,political,racist,sexist,explicit",
+      "result_fields": [
+        "joke",
+        "setup",
+        "delivery"
+      ]
+    },
+    "json": "{\n  \"name\": \"blague\",\n  \"description\": \"Une blague en français, au hasard. Pour « raconte-moi une blague », « fais-moi rire ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://v2.jokeapi.dev/joke/Any?lang=fr&blacklistFlags=nsfw,religious,political,racist,sexist,explicit\",\n  \"result_fields\": [\n    \"joke\",\n    \"setup\",\n    \"delivery\"\n  ]\n}\n"
+  },
+  {
+    "fileName": "carte_recherche.json",
+    "name": "carte_recherche",
+    "description": "Ouvre Google Maps sur une recherche de lieu, par exemple une pharmacie, un restaurant ou une station-service.",
+    "spec": {
+      "name": "carte_recherche",
+      "description": "Ouvre Google Maps sur une recherche de lieu, par exemple une pharmacie, un restaurant ou une station-service.",
+      "parameters": [
+        {
+          "name": "lieu",
+          "description": "Ce qu'il faut chercher",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.google.com/maps/search/{lieu}"
+    },
+    "json": "{\n  \"name\": \"carte_recherche\",\n  \"description\": \"Ouvre Google Maps sur une recherche de lieu, par exemple une pharmacie, un restaurant ou une station-service.\",\n  \"parameters\": [\n    {\n      \"name\": \"lieu\",\n      \"description\": \"Ce qu'il faut chercher\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.google.com/maps/search/{lieu}\"\n}\n"
+  },
+  {
+    "fileName": "ce_jour_la.json",
+    "name": "ce_jour_la",
+    "description": "Ce qui s'est passé un jour donné dans l'histoire (Wikipédia). Pour « que s'est-il passé un 14 juillet ? », « un jour comme aujourd'hui dans l'histoire ». Mois et jour sur deux chiffres.",
+    "spec": {
+      "name": "ce_jour_la",
+      "description": "Ce qui s'est passé un jour donné dans l'histoire (Wikipédia). Pour « que s'est-il passé un 14 juillet ? », « un jour comme aujourd'hui dans l'histoire ». Mois et jour sur deux chiffres.",
+      "parameters": [
+        {
+          "name": "mois",
+          "description": "Mois sur deux chiffres (01 à 12)",
+          "required": true
+        },
+        {
+          "name": "jour",
+          "description": "Jour sur deux chiffres (01 à 31)",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://api.wikimedia.org/feed/v1/wikipedia/fr/onthisday/selected/{mois}/{jour}",
+      "result_items": "selected",
+      "result_fields": [
+        "year",
+        "text"
+      ],
+      "result_max": 8
+    },
+    "json": "{\n  \"name\": \"ce_jour_la\",\n  \"description\": \"Ce qui s'est passé un jour donné dans l'histoire (Wikipédia). Pour « que s'est-il passé un 14 juillet ? », « un jour comme aujourd'hui dans l'histoire ». Mois et jour sur deux chiffres.\",\n  \"parameters\": [\n    {\n      \"name\": \"mois\",\n      \"description\": \"Mois sur deux chiffres (01 à 12)\",\n      \"required\": true\n    },\n    {\n      \"name\": \"jour\",\n      \"description\": \"Jour sur deux chiffres (01 à 31)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://api.wikimedia.org/feed/v1/wikipedia/fr/onthisday/selected/{mois}/{jour}\",\n  \"result_items\": \"selected\",\n  \"result_fields\": [\n    \"year\",\n    \"text\"\n  ],\n  \"result_max\": 8\n}\n"
+  },
+  {
+    "fileName": "cinema_seances.json",
+    "name": "cinema_seances",
+    "description": "Ouvre les séances de cinéma d'une ville dans Google. Pour « qu'est-ce qui passe au cinéma », « des séances ce soir ».",
+    "spec": {
+      "name": "cinema_seances",
+      "description": "Ouvre les séances de cinéma d'une ville dans Google. Pour « qu'est-ce qui passe au cinéma », « des séances ce soir ».",
+      "parameters": [
+        {
+          "name": "ville",
+          "description": "Ville",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.google.com/search?q=séances+cinéma+{ville}"
+    },
+    "json": "{\n  \"name\": \"cinema_seances\",\n  \"description\": \"Ouvre les séances de cinéma d'une ville dans Google. Pour « qu'est-ce qui passe au cinéma », « des séances ce soir ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ville\",\n      \"description\": \"Ville\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.google.com/search?q=séances+cinéma+{ville}\"\n}\n"
+  },
+  {
+    "fileName": "citation.json",
+    "name": "citation",
+    "description": "Donne une citation au hasard avec son auteur, en anglais (source : zenquotes.io). Pour « une citation », « motive-moi ».",
+    "spec": {
+      "name": "citation",
+      "description": "Donne une citation au hasard avec son auteur, en anglais (source : zenquotes.io). Pour « une citation », « motive-moi ».",
+      "parameters": [],
+      "type": "http",
+      "url": "https://zenquotes.io/api/random"
+    },
+    "json": "{\n  \"name\": \"citation\",\n  \"description\": \"Donne une citation au hasard avec son auteur, en anglais (source : zenquotes.io). Pour « une citation », « motive-moi ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://zenquotes.io/api/random\"\n}\n"
+  },
+  {
+    "fileName": "classement_f1.json",
+    "name": "classement_f1",
+    "description": "Donne le classement actuel du championnat de Formule 1 des pilotes : les 3 premiers avec points et victoires (source : Jolpica, successeur d'Ergast). Pour « qui mène en F1 ».",
+    "spec": {
+      "name": "classement_f1",
+      "description": "Donne le classement actuel du championnat de Formule 1 des pilotes : les 3 premiers avec points et victoires (source : Jolpica, successeur d'Ergast). Pour « qui mène en F1 ».",
+      "parameters": [],
+      "type": "http",
+      "url": "https://api.jolpi.ca/ergast/f1/current/driverStandings.json?limit=3"
+    },
+    "json": "{\n  \"name\": \"classement_f1\",\n  \"description\": \"Donne le classement actuel du championnat de Formule 1 des pilotes : les 3 premiers avec points et victoires (source : Jolpica, successeur d'Ergast). Pour « qui mène en F1 ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://api.jolpi.ca/ergast/f1/current/driverStandings.json?limit=3\"\n}\n"
+  },
+  {
+    "fileName": "cocktail_hasard.json",
+    "name": "cocktail_hasard",
+    "description": "Propose un cocktail au hasard : nom, catégorie, verre et préparation, en anglais (source : thecocktaildb.com). Pour « un cocktail pour ce soir ».",
+    "spec": {
+      "name": "cocktail_hasard",
+      "description": "Propose un cocktail au hasard : nom, catégorie, verre et préparation, en anglais (source : thecocktaildb.com). Pour « un cocktail pour ce soir ».",
+      "parameters": [],
+      "type": "http",
+      "url": "https://www.thecocktaildb.com/api/json/v1/1/random.php"
+    },
+    "json": "{\n  \"name\": \"cocktail_hasard\",\n  \"description\": \"Propose un cocktail au hasard : nom, catégorie, verre et préparation, en anglais (source : thecocktaildb.com). Pour « un cocktail pour ce soir ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://www.thecocktaildb.com/api/json/v1/1/random.php\"\n}\n"
+  },
+  {
+    "fileName": "code_postal_ville.json",
+    "name": "code_postal_ville",
+    "description": "Donne le code postal d'une commune française (source : adresse.data.gouv.fr). Les grandes villes ont plusieurs codes : donne alors le principal. Pour « quel est le code postal de… ».",
+    "spec": {
+      "name": "code_postal_ville",
+      "description": "Donne le code postal d'une commune française (source : adresse.data.gouv.fr). Les grandes villes ont plusieurs codes : donne alors le principal. Pour « quel est le code postal de… ».",
+      "parameters": [
+        {
+          "name": "ville",
+          "description": "Nom de la commune",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://api-adresse.data.gouv.fr/search/?q={ville}&type=municipality&limit=1",
+      "result_path": "features.0.properties.postcode"
+    },
+    "json": "{\n  \"name\": \"code_postal_ville\",\n  \"description\": \"Donne le code postal d'une commune française (source : adresse.data.gouv.fr). Les grandes villes ont plusieurs codes : donne alors le principal. Pour « quel est le code postal de… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ville\",\n      \"description\": \"Nom de la commune\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://api-adresse.data.gouv.fr/search/?q={ville}&type=municipality&limit=1\",\n  \"result_path\": \"features.0.properties.postcode\"\n}\n"
+  },
+  {
+    "fileName": "code_recherche.json",
+    "name": "code_recherche",
+    "description": "Ouvre Stack Overflow sur une question de programmation. Pour « comment faire … en Kotlin », « cette erreur ».",
+    "spec": {
+      "name": "code_recherche",
+      "description": "Ouvre Stack Overflow sur une question de programmation. Pour « comment faire … en Kotlin », « cette erreur ».",
+      "parameters": [
+        {
+          "name": "question",
+          "description": "La question ou le message d'erreur",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://stackoverflow.com/search?q={question}"
+    },
+    "json": "{\n  \"name\": \"code_recherche\",\n  \"description\": \"Ouvre Stack Overflow sur une question de programmation. Pour « comment faire … en Kotlin », « cette erreur ».\",\n  \"parameters\": [\n    {\n      \"name\": \"question\",\n      \"description\": \"La question ou le message d'erreur\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://stackoverflow.com/search?q={question}\"\n}\n"
+  },
+  {
+    "fileName": "commune_france.json",
+    "name": "commune_france",
+    "description": "Donne les informations d'une commune française : code INSEE, codes postaux, population et département (source : geo.api.gouv.fr). Pour « combien d'habitants à… », « dans quel département est… ».",
+    "spec": {
+      "name": "commune_france",
+      "description": "Donne les informations d'une commune française : code INSEE, codes postaux, population et département (source : geo.api.gouv.fr). Pour « combien d'habitants à… », « dans quel département est… ».",
+      "parameters": [
+        {
+          "name": "ville",
+          "description": "Nom de la commune",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://geo.api.gouv.fr/communes?nom={ville}&fields=nom,code,codesPostaux,population,departement&limit=1"
+    },
+    "json": "{\n  \"name\": \"commune_france\",\n  \"description\": \"Donne les informations d'une commune française : code INSEE, codes postaux, population et département (source : geo.api.gouv.fr). Pour « combien d'habitants à… », « dans quel département est… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ville\",\n      \"description\": \"Nom de la commune\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://geo.api.gouv.fr/communes?nom={ville}&fields=nom,code,codesPostaux,population,departement&limit=1\"\n}\n"
+  },
+  {
+    "fileName": "comparer_prix.json",
+    "name": "comparer_prix",
+    "description": "Ouvre Google Shopping pour comparer les prix d'un produit. Pour « le meilleur prix pour… », « où acheter… ».",
+    "spec": {
+      "name": "comparer_prix",
+      "description": "Ouvre Google Shopping pour comparer les prix d'un produit. Pour « le meilleur prix pour… », « où acheter… ».",
+      "parameters": [
+        {
+          "name": "produit",
+          "description": "Le produit",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.google.com/search?tbm=shop&q={produit}"
+    },
+    "json": "{\n  \"name\": \"comparer_prix\",\n  \"description\": \"Ouvre Google Shopping pour comparer les prix d'un produit. Pour « le meilleur prix pour… », « où acheter… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"produit\",\n      \"description\": \"Le produit\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.google.com/search?tbm=shop&q={produit}\"\n}\n"
+  },
+  {
+    "fileName": "conjugaison.json",
+    "name": "conjugaison",
+    "description": "Ouvre la conjugaison complète d'un verbe (Le Conjugueur). Pour « conjugue le verbe… ».",
+    "spec": {
+      "name": "conjugaison",
+      "description": "Ouvre la conjugaison complète d'un verbe (Le Conjugueur). Pour « conjugue le verbe… ».",
+      "parameters": [
+        {
+          "name": "verbe",
+          "description": "Le verbe à l'infinitif, sans espace",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://leconjugueur.lefigaro.fr/conjugaison/verbe/{verbe}.html"
+    },
+    "json": "{\n  \"name\": \"conjugaison\",\n  \"description\": \"Ouvre la conjugaison complète d'un verbe (Le Conjugueur). Pour « conjugue le verbe… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"verbe\",\n      \"description\": \"Le verbe à l'infinitif, sans espace\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://leconjugueur.lefigaro.fr/conjugaison/verbe/{verbe}.html\"\n}\n"
+  },
+  {
+    "fileName": "covoiturage.json",
+    "name": "covoiturage",
+    "description": "Ouvre une recherche de covoiturage BlaBlaCar entre deux villes. Pour « un covoiturage Lyon Marseille ».",
+    "spec": {
+      "name": "covoiturage",
+      "description": "Ouvre une recherche de covoiturage BlaBlaCar entre deux villes. Pour « un covoiturage Lyon Marseille ».",
+      "parameters": [
+        {
+          "name": "depart",
+          "description": "Ville de départ",
+          "required": true
+        },
+        {
+          "name": "arrivee",
+          "description": "Ville d'arrivée",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.blablacar.fr/search?fn={depart}&tn={arrivee}"
+    },
+    "json": "{\n  \"name\": \"covoiturage\",\n  \"description\": \"Ouvre une recherche de covoiturage BlaBlaCar entre deux villes. Pour « un covoiturage Lyon Marseille ».\",\n  \"parameters\": [\n    {\n      \"name\": \"depart\",\n      \"description\": \"Ville de départ\",\n      \"required\": true\n    },\n    {\n      \"name\": \"arrivee\",\n      \"description\": \"Ville d'arrivée\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.blablacar.fr/search?fn={depart}&tn={arrivee}\"\n}\n"
+  },
+  {
+    "fileName": "definition_mot.json",
+    "name": "definition_mot",
+    "description": "Ouvre la définition d'un mot dans Google. Pour « que veut dire… », « la définition de… ».",
+    "spec": {
+      "name": "definition_mot",
+      "description": "Ouvre la définition d'un mot dans Google. Pour « que veut dire… », « la définition de… ».",
+      "parameters": [
+        {
+          "name": "mot",
+          "description": "Le mot",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.google.com/search?q=définition+{mot}"
+    },
+    "json": "{\n  \"name\": \"definition_mot\",\n  \"description\": \"Ouvre la définition d'un mot dans Google. Pour « que veut dire… », « la définition de… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"mot\",\n      \"description\": \"Le mot\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.google.com/search?q=définition+{mot}\"\n}\n"
+  },
+  {
+    "fileName": "dernier_seisme.json",
+    "name": "dernier_seisme",
+    "description": "Donne le dernier séisme de magnitude 4,5 ou plus des dernières 24 heures dans le monde (source : USGS) : magnitude et lieu, en anglais. Pour « y a-t-il eu un tremblement de terre ? ».",
+    "spec": {
+      "name": "dernier_seisme",
+      "description": "Donne le dernier séisme de magnitude 4,5 ou plus des dernières 24 heures dans le monde (source : USGS) : magnitude et lieu, en anglais. Pour « y a-t-il eu un tremblement de terre ? ».",
+      "parameters": [],
+      "type": "http",
+      "url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson",
+      "result_path": "features.0.properties.title"
+    },
+    "json": "{\n  \"name\": \"dernier_seisme\",\n  \"description\": \"Donne le dernier séisme de magnitude 4,5 ou plus des dernières 24 heures dans le monde (source : USGS) : magnitude et lieu, en anglais. Pour « y a-t-il eu un tremblement de terre ? ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson\",\n  \"result_path\": \"features.0.properties.title\"\n}\n"
+  },
+  {
+    "fileName": "entreprise_france.json",
+    "name": "entreprise_france",
+    "description": "Retrouve une entreprise française par son nom : raison sociale, numéro SIREN, adresse du siège, activité (source : recherche-entreprises.api.gouv.fr). Donne la meilleure correspondance du nom : mieux vaut le nom complet. Pour « c'est quoi cette société », « le SIREN de… ».",
+    "spec": {
+      "name": "entreprise_france",
+      "description": "Retrouve une entreprise française par son nom : raison sociale, numéro SIREN, adresse du siège, activité (source : recherche-entreprises.api.gouv.fr). Donne la meilleure correspondance du nom : mieux vaut le nom complet. Pour « c'est quoi cette société », « le SIREN de… ».",
+      "parameters": [
+        {
+          "name": "nom",
+          "description": "Nom complet de l'entreprise",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://recherche-entreprises.api.gouv.fr/search?q={nom}&per_page=1"
+    },
+    "json": "{\n  \"name\": \"entreprise_france\",\n  \"description\": \"Retrouve une entreprise française par son nom : raison sociale, numéro SIREN, adresse du siège, activité (source : recherche-entreprises.api.gouv.fr). Donne la meilleure correspondance du nom : mieux vaut le nom complet. Pour « c'est quoi cette société », « le SIREN de… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"nom\",\n      \"description\": \"Nom complet de l'entreprise\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://recherche-entreprises.api.gouv.fr/search?q={nom}&per_page=1\"\n}\n"
+  },
+  {
+    "fileName": "fait_insolite.json",
+    "name": "fait_insolite",
+    "description": "Donne un fait insolite au hasard, en anglais (source : uselessfacts.jsph.pl). Pour « raconte-moi un fait amusant », « le saviez-vous ».",
+    "spec": {
+      "name": "fait_insolite",
+      "description": "Donne un fait insolite au hasard, en anglais (source : uselessfacts.jsph.pl). Pour « raconte-moi un fait amusant », « le saviez-vous ».",
+      "parameters": [],
+      "type": "http",
+      "url": "https://uselessfacts.jsph.pl/api/v2/facts/random?language=en",
+      "result_path": "text"
+    },
+    "json": "{\n  \"name\": \"fait_insolite\",\n  \"description\": \"Donne un fait insolite au hasard, en anglais (source : uselessfacts.jsph.pl). Pour « raconte-moi un fait amusant », « le saviez-vous ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://uselessfacts.jsph.pl/api/v2/facts/random?language=en\",\n  \"result_path\": \"text\"\n}\n"
+  },
+  {
+    "fileName": "fete_du_jour.json",
+    "name": "fete_du_jour",
+    "description": "Les prénoms fêtés un jour donné en France (la fête du jour). Pour « c'est la fête de qui aujourd'hui ? », « quand est la Saint-… » ne marche pas : seulement par date.",
+    "spec": {
+      "name": "fete_du_jour",
+      "description": "Les prénoms fêtés un jour donné en France (la fête du jour). Pour « c'est la fête de qui aujourd'hui ? », « quand est la Saint-… » ne marche pas : seulement par date.",
+      "parameters": [
+        {
+          "name": "jour",
+          "description": "Jour du mois (1 à 31)",
+          "required": true
+        },
+        {
+          "name": "mois",
+          "description": "Mois (1 à 12)",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://nameday.abalin.net/api/V2/date?day={jour}&month={mois}&country=fr",
+      "result_path": "data.fr"
+    },
+    "json": "{\n  \"name\": \"fete_du_jour\",\n  \"description\": \"Les prénoms fêtés un jour donné en France (la fête du jour). Pour « c'est la fête de qui aujourd'hui ? », « quand est la Saint-… » ne marche pas : seulement par date.\",\n  \"parameters\": [\n    {\n      \"name\": \"jour\",\n      \"description\": \"Jour du mois (1 à 31)\",\n      \"required\": true\n    },\n    {\n      \"name\": \"mois\",\n      \"description\": \"Mois (1 à 12)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://nameday.abalin.net/api/V2/date?day={jour}&month={mois}&country=fr\",\n  \"result_path\": \"data.fr\"\n}\n"
+  },
+  {
+    "fileName": "gps_adresse.json",
+    "name": "gps_adresse",
+    "description": "Donne les coordonnées GPS d'une adresse postale ou d'une commune en France : longitude puis latitude (source : adresse.data.gouv.fr). Les monuments ne sont pas toujours reconnus : donner une adresse. Pour « quelles sont les coordonnées de… ».",
+    "spec": {
+      "name": "gps_adresse",
+      "description": "Donne les coordonnées GPS d'une adresse postale ou d'une commune en France : longitude puis latitude (source : adresse.data.gouv.fr). Les monuments ne sont pas toujours reconnus : donner une adresse. Pour « quelles sont les coordonnées de… ».",
+      "parameters": [
+        {
+          "name": "recherche",
+          "description": "Adresse postale ou commune",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://api-adresse.data.gouv.fr/search/?q={recherche}&limit=1",
+      "result_path": "features.0.geometry.coordinates"
+    },
+    "json": "{\n  \"name\": \"gps_adresse\",\n  \"description\": \"Donne les coordonnées GPS d'une adresse postale ou d'une commune en France : longitude puis latitude (source : adresse.data.gouv.fr). Les monuments ne sont pas toujours reconnus : donner une adresse. Pour « quelles sont les coordonnées de… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"recherche\",\n      \"description\": \"Adresse postale ou commune\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://api-adresse.data.gouv.fr/search/?q={recherche}&limit=1\",\n  \"result_path\": \"features.0.geometry.coordinates\"\n}\n"
+  },
+  {
+    "fileName": "heure_monde.json",
+    "name": "heure_monde",
+    "description": "Donne l'heure actuelle dans un fuseau horaire (source : timeapi.io). Pour « quelle heure est-il à Tokyo ».",
+    "spec": {
+      "name": "heure_monde",
+      "description": "Donne l'heure actuelle dans un fuseau horaire (source : timeapi.io). Pour « quelle heure est-il à Tokyo ».",
+      "parameters": [
+        {
+          "name": "fuseau",
+          "description": "Fuseau IANA, par exemple Asia/Tokyo, America/New_York, Europe/Paris",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://timeapi.io/api/time/current/zone?timeZone={fuseau}",
+      "result_path": "dateTime"
+    },
+    "json": "{\n  \"name\": \"heure_monde\",\n  \"description\": \"Donne l'heure actuelle dans un fuseau horaire (source : timeapi.io). Pour « quelle heure est-il à Tokyo ».\",\n  \"parameters\": [\n    {\n      \"name\": \"fuseau\",\n      \"description\": \"Fuseau IANA, par exemple Asia/Tokyo, America/New_York, Europe/Paris\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://timeapi.io/api/time/current/zone?timeZone={fuseau}\",\n  \"result_path\": \"dateTime\"\n}\n"
+  },
+  {
+    "fileName": "hotels.json",
+    "name": "hotels",
+    "description": "Ouvre Google Hôtels sur une ville. Pour « un hôtel à Nantes », « où dormir à Rome ».",
+    "spec": {
+      "name": "hotels",
+      "description": "Ouvre Google Hôtels sur une ville. Pour « un hôtel à Nantes », « où dormir à Rome ».",
+      "parameters": [
+        {
+          "name": "ville",
+          "description": "Ville",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.google.com/travel/hotels/{ville}"
+    },
+    "json": "{\n  \"name\": \"hotels\",\n  \"description\": \"Ouvre Google Hôtels sur une ville. Pour « un hôtel à Nantes », « où dormir à Rome ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ville\",\n      \"description\": \"Ville\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.google.com/travel/hotels/{ville}\"\n}\n"
+  },
+  {
+    "fileName": "idee_repas.json",
+    "name": "idee_repas",
+    "description": "Propose un plat au hasard : nom, catégorie, pays d'origine et début de la recette, en anglais (source : themealdb.com). Pour « qu'est-ce que je mange ce soir ? ».",
+    "spec": {
+      "name": "idee_repas",
+      "description": "Propose un plat au hasard : nom, catégorie, pays d'origine et début de la recette, en anglais (source : themealdb.com). Pour « qu'est-ce que je mange ce soir ? ».",
+      "parameters": [],
+      "type": "http",
+      "url": "https://www.themealdb.com/api/json/v1/1/random.php"
+    },
+    "json": "{\n  \"name\": \"idee_repas\",\n  \"description\": \"Propose un plat au hasard : nom, catégorie, pays d'origine et début de la recette, en anglais (source : themealdb.com). Pour « qu'est-ce que je mange ce soir ? ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://www.themealdb.com/api/json/v1/1/random.php\"\n}\n"
+  },
+  {
+    "fileName": "image_astronomie.json",
+    "name": "image_astronomie",
+    "description": "Lit l'explication de l'image astronomique du jour de la NASA (en anglais : à traduire et résumer). Pour « quelle est l'image de l'espace du jour ».",
+    "spec": {
+      "name": "image_astronomie",
+      "description": "Lit l'explication de l'image astronomique du jour de la NASA (en anglais : à traduire et résumer). Pour « quelle est l'image de l'espace du jour ».",
+      "parameters": [],
+      "type": "http",
+      "url": "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY",
+      "result_path": "explanation"
+    },
+    "json": "{\n  \"name\": \"image_astronomie\",\n  \"description\": \"Lit l'explication de l'image astronomique du jour de la NASA (en anglais : à traduire et résumer). Pour « quelle est l'image de l'espace du jour ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY\",\n  \"result_path\": \"explanation\"\n}\n"
+  },
+  {
+    "fileName": "images_recherche.json",
+    "name": "images_recherche",
+    "description": "Ouvre Google Images sur une recherche. Pour « montre-moi des photos de… », « à quoi ressemble… ».",
+    "spec": {
+      "name": "images_recherche",
+      "description": "Ouvre Google Images sur une recherche. Pour « montre-moi des photos de… », « à quoi ressemble… ».",
+      "parameters": [
+        {
+          "name": "recherche",
+          "description": "Ce qu'il faut chercher en images",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.google.com/search?tbm=isch&q={recherche}"
+    },
+    "json": "{\n  \"name\": \"images_recherche\",\n  \"description\": \"Ouvre Google Images sur une recherche. Pour « montre-moi des photos de… », « à quoi ressemble… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"recherche\",\n      \"description\": \"Ce qu'il faut chercher en images\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.google.com/search?tbm=isch&q={recherche}\"\n}\n"
+  },
+  {
+    "fileName": "indicateur_pays.json",
+    "name": "indicateur_pays",
+    "description": "Donne un indicateur statistique d'un pays, avec l'année de la donnée (source : Banque mondiale). Pour « combien d'habitants en… », « le PIB de… », « l'espérance de vie au… ».",
+    "spec": {
+      "name": "indicateur_pays",
+      "description": "Donne un indicateur statistique d'un pays, avec l'année de la donnée (source : Banque mondiale). Pour « combien d'habitants en… », « le PIB de… », « l'espérance de vie au… ».",
+      "parameters": [
+        {
+          "name": "pays",
+          "description": "Code pays à 2 lettres en minuscules : fr, de, us, jp, br, in, ma, sn…",
+          "required": true
+        },
+        {
+          "name": "indicateur",
+          "description": "SP.POP.TOTL population, NY.GDP.MKTP.CD PIB en dollars, SP.DYN.LE00.IN espérance de vie, SL.UEM.TOTL.ZS chômage en %, EN.ATM.CO2E.PC CO2 par habitant",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://api.worldbank.org/v2/country/{pays}/indicator/{indicateur}?format=json&per_page=1&mrnev=1"
+    },
+    "json": "{\n  \"name\": \"indicateur_pays\",\n  \"description\": \"Donne un indicateur statistique d'un pays, avec l'année de la donnée (source : Banque mondiale). Pour « combien d'habitants en… », « le PIB de… », « l'espérance de vie au… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"pays\",\n      \"description\": \"Code pays à 2 lettres en minuscules : fr, de, us, jp, br, in, ma, sn…\",\n      \"required\": true\n    },\n    {\n      \"name\": \"indicateur\",\n      \"description\": \"SP.POP.TOTL population, NY.GDP.MKTP.CD PIB en dollars, SP.DYN.LE00.IN espérance de vie, SL.UEM.TOTL.ZS chômage en %, EN.ATM.CO2E.PC CO2 par habitant\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://api.worldbank.org/v2/country/{pays}/indicator/{indicateur}?format=json&per_page=1&mrnev=1\"\n}\n"
+  },
+  {
+    "fileName": "indice_uv.json",
+    "name": "indice_uv",
+    "description": "Donne l'indice UV actuel d'une ville (source : wttr.in). 0 à 2 faible, 3 à 5 modéré, 6 à 7 fort, 8 et plus très fort. Sans ville, d'après l'adresse réseau du téléphone. Pour « faut-il mettre de la crème solaire ».",
+    "spec": {
+      "name": "indice_uv",
+      "description": "Donne l'indice UV actuel d'une ville (source : wttr.in). 0 à 2 faible, 3 à 5 modéré, 6 à 7 fort, 8 et plus très fort. Sans ville, d'après l'adresse réseau du téléphone. Pour « faut-il mettre de la crème solaire ».",
+      "parameters": [
+        {
+          "name": "ville",
+          "description": "Nom de la ville (facultatif)",
+          "required": false
+        }
+      ],
+      "type": "http",
+      "url": "https://wttr.in/{ville}?format=UV+%25u"
+    },
+    "json": "{\n  \"name\": \"indice_uv\",\n  \"description\": \"Donne l'indice UV actuel d'une ville (source : wttr.in). 0 à 2 faible, 3 à 5 modéré, 6 à 7 fort, 8 et plus très fort. Sans ville, d'après l'adresse réseau du téléphone. Pour « faut-il mettre de la crème solaire ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ville\",\n      \"description\": \"Nom de la ville (facultatif)\",\n      \"required\": false\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://wttr.in/{ville}?format=UV+%25u\"\n}\n"
+  },
+  {
+    "fileName": "infos_ville_monde.json",
+    "name": "infos_ville_monde",
+    "description": "Donne les informations d'une ville du monde : pays, latitude, longitude, altitude, fuseau horaire et population (source : Open-Meteo). Pour « où est… », « quel fuseau horaire à… », « combien d'habitants à… ».",
+    "spec": {
+      "name": "infos_ville_monde",
+      "description": "Donne les informations d'une ville du monde : pays, latitude, longitude, altitude, fuseau horaire et population (source : Open-Meteo). Pour « où est… », « quel fuseau horaire à… », « combien d'habitants à… ».",
+      "parameters": [
+        {
+          "name": "ville",
+          "description": "Nom de la ville",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://geocoding-api.open-meteo.com/v1/search?name={ville}&count=1&language=fr"
+    },
+    "json": "{\n  \"name\": \"infos_ville_monde\",\n  \"description\": \"Donne les informations d'une ville du monde : pays, latitude, longitude, altitude, fuseau horaire et population (source : Open-Meteo). Pour « où est… », « quel fuseau horaire à… », « combien d'habitants à… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ville\",\n      \"description\": \"Nom de la ville\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://geocoding-api.open-meteo.com/v1/search?name={ville}&count=1&language=fr\"\n}\n"
+  },
+  {
+    "fileName": "itineraire.json",
+    "name": "itineraire",
+    "description": "Ouvre Google Maps avec l'itinéraire vers une destination depuis la position actuelle. Pour « emmène-moi à… ».",
+    "spec": {
+      "name": "itineraire",
+      "description": "Ouvre Google Maps avec l'itinéraire vers une destination depuis la position actuelle. Pour « emmène-moi à… ».",
+      "parameters": [
+        {
+          "name": "destination",
+          "description": "Adresse ou nom du lieu",
+          "required": true
+        },
+        {
+          "name": "mode",
+          "description": "driving, walking, bicycling ou transit (driving par défaut)",
+          "required": false
+        }
+      ],
+      "type": "open",
+      "url": "https://www.google.com/maps/dir/?api=1&destination={destination}&travelmode={mode}"
+    },
+    "json": "{\n  \"name\": \"itineraire\",\n  \"description\": \"Ouvre Google Maps avec l'itinéraire vers une destination depuis la position actuelle. Pour « emmène-moi à… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"destination\",\n      \"description\": \"Adresse ou nom du lieu\",\n      \"required\": true\n    },\n    {\n      \"name\": \"mode\",\n      \"description\": \"driving, walking, bicycling ou transit (driving par défaut)\",\n      \"required\": false\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.google.com/maps/dir/?api=1&destination={destination}&travelmode={mode}\"\n}\n"
+  },
+  {
+    "fileName": "jours_feries.json",
+    "name": "jours_feries",
+    "description": "Donne les prochains jours fériés d'un pays. Pour « c'est quand le prochain jour férié ».",
+    "spec": {
+      "name": "jours_feries",
+      "description": "Donne les prochains jours fériés d'un pays. Pour « c'est quand le prochain jour férié ».",
+      "parameters": [
+        {
+          "name": "pays",
+          "description": "Code pays à 2 lettres en majuscules : FR, BE, CH, CA…",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://date.nager.at/api/v3/NextPublicHolidays/{pays}"
+    },
+    "json": "{\n  \"name\": \"jours_feries\",\n  \"description\": \"Donne les prochains jours fériés d'un pays. Pour « c'est quand le prochain jour férié ».\",\n  \"parameters\": [\n    {\n      \"name\": \"pays\",\n      \"description\": \"Code pays à 2 lettres en majuscules : FR, BE, CH, CA…\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://date.nager.at/api/v3/NextPublicHolidays/{pays}\"\n}\n"
+  },
+  {
+    "fileName": "leboncoin_recherche.json",
+    "name": "leboncoin_recherche",
+    "description": "Ouvre une recherche d'annonces sur leboncoin. Pour « cherche un vélo d'occasion sur leboncoin », « des annonces de … ».",
+    "spec": {
+      "name": "leboncoin_recherche",
+      "description": "Ouvre une recherche d'annonces sur leboncoin. Pour « cherche un vélo d'occasion sur leboncoin », « des annonces de … ».",
+      "parameters": [
+        {
+          "name": "recherche",
+          "description": "Ce que l'on cherche",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.leboncoin.fr/recherche?text={recherche}"
+    },
+    "json": "{\n  \"name\": \"leboncoin_recherche\",\n  \"description\": \"Ouvre une recherche d'annonces sur leboncoin. Pour « cherche un vélo d'occasion sur leboncoin », « des annonces de … ».\",\n  \"parameters\": [\n    {\n      \"name\": \"recherche\",\n      \"description\": \"Ce que l'on cherche\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.leboncoin.fr/recherche?text={recherche}\"\n}\n"
+  },
+  {
+    "fileName": "legifrance.json",
+    "name": "legifrance",
+    "description": "Ouvre la recherche de Légifrance sur un texte de loi ou un sujet juridique. Pour « que dit la loi sur… ».",
+    "spec": {
+      "name": "legifrance",
+      "description": "Ouvre la recherche de Légifrance sur un texte de loi ou un sujet juridique. Pour « que dit la loi sur… ».",
+      "parameters": [
+        {
+          "name": "recherche",
+          "description": "Le sujet ou l'article",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.legifrance.gouv.fr/search/all?tab_selection=all&searchField=ALL&query={recherche}"
+    },
+    "json": "{\n  \"name\": \"legifrance\",\n  \"description\": \"Ouvre la recherche de Légifrance sur un texte de loi ou un sujet juridique. Pour « que dit la loi sur… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"recherche\",\n      \"description\": \"Le sujet ou l'article\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.legifrance.gouv.fr/search/all?tab_selection=all&searchField=ALL&query={recherche}\"\n}\n"
+  },
+  {
+    "fileName": "lever_coucher_soleil.json",
+    "name": "lever_coucher_soleil",
+    "description": "Donne l'heure de lever et de coucher du soleil aujourd'hui, heure locale de la ville (source : wttr.in). Sans ville, le service se base sur l'adresse réseau du téléphone. Pour « à quelle heure se couche le soleil ».",
+    "spec": {
+      "name": "lever_coucher_soleil",
+      "description": "Donne l'heure de lever et de coucher du soleil aujourd'hui, heure locale de la ville (source : wttr.in). Sans ville, le service se base sur l'adresse réseau du téléphone. Pour « à quelle heure se couche le soleil ».",
+      "parameters": [
+        {
+          "name": "ville",
+          "description": "Nom de la ville (facultatif)",
+          "required": false
+        }
+      ],
+      "type": "http",
+      "url": "https://wttr.in/{ville}?format=Lever+%25S,+coucher+%25s"
+    },
+    "json": "{\n  \"name\": \"lever_coucher_soleil\",\n  \"description\": \"Donne l'heure de lever et de coucher du soleil aujourd'hui, heure locale de la ville (source : wttr.in). Sans ville, le service se base sur l'adresse réseau du téléphone. Pour « à quelle heure se couche le soleil ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ville\",\n      \"description\": \"Nom de la ville (facultatif)\",\n      \"required\": false\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://wttr.in/{ville}?format=Lever+%25S,+coucher+%25s\"\n}\n"
+  },
+  {
+    "fileName": "livre_infos.json",
+    "name": "livre_infos",
+    "description": "Cherche un livre et donne jusqu'à 3 résultats avec auteur et année de première publication (source : Open Library). Pour « qui a écrit… », « en quelle année est sorti… ».",
+    "spec": {
+      "name": "livre_infos",
+      "description": "Cherche un livre et donne jusqu'à 3 résultats avec auteur et année de première publication (source : Open Library). Pour « qui a écrit… », « en quelle année est sorti… ».",
+      "parameters": [
+        {
+          "name": "titre",
+          "description": "Titre ou mots du titre",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://openlibrary.org/search.json?q={titre}&limit=3&fields=title,author_name,first_publish_year"
+    },
+    "json": "{\n  \"name\": \"livre_infos\",\n  \"description\": \"Cherche un livre et donne jusqu'à 3 résultats avec auteur et année de première publication (source : Open Library). Pour « qui a écrit… », « en quelle année est sorti… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"titre\",\n      \"description\": \"Titre ou mots du titre\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://openlibrary.org/search.json?q={titre}&limit=3&fields=title,author_name,first_publish_year\"\n}\n"
+  },
+  {
+    "fileName": "livres_recherche.json",
+    "name": "livres_recherche",
+    "description": "Ouvre Google Livres sur un titre, un auteur ou un sujet. Pour « trouve-moi ce livre », « des livres sur… ».",
+    "spec": {
+      "name": "livres_recherche",
+      "description": "Ouvre Google Livres sur un titre, un auteur ou un sujet. Pour « trouve-moi ce livre », « des livres sur… ».",
+      "parameters": [
+        {
+          "name": "titre",
+          "description": "Titre, auteur ou sujet",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.google.com/search?tbm=bks&q={titre}"
+    },
+    "json": "{\n  \"name\": \"livres_recherche\",\n  \"description\": \"Ouvre Google Livres sur un titre, un auteur ou un sujet. Pour « trouve-moi ce livre », « des livres sur… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"titre\",\n      \"description\": \"Titre, auteur ou sujet\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.google.com/search?tbm=bks&q={titre}\"\n}\n"
+  },
+  {
+    "fileName": "meteo_aeroport.json",
+    "name": "meteo_aeroport",
+    "description": "Donne le dernier bulletin météo d'un aéroport au format METAR (source : aviationweather.gov) : à décoder et à expliquer (vent, visibilité, température, pression). Pour « le temps à l'aéroport de… », « la météo de Roissy ».",
+    "spec": {
+      "name": "meteo_aeroport",
+      "description": "Donne le dernier bulletin météo d'un aéroport au format METAR (source : aviationweather.gov) : à décoder et à expliquer (vent, visibilité, température, pression). Pour « le temps à l'aéroport de… », « la météo de Roissy ».",
+      "parameters": [
+        {
+          "name": "icao",
+          "description": "Code OACI de l'aéroport à 4 lettres : LFPG Paris-CDG, LFPO Orly, LFML Marseille, LFLL Lyon, LFBO Toulouse, LFMN Nice, EGLL Londres, KJFK New York",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://aviationweather.gov/api/data/metar?ids={icao}&format=raw"
+    },
+    "json": "{\n  \"name\": \"meteo_aeroport\",\n  \"description\": \"Donne le dernier bulletin météo d'un aéroport au format METAR (source : aviationweather.gov) : à décoder et à expliquer (vent, visibilité, température, pression). Pour « le temps à l'aéroport de… », « la météo de Roissy ».\",\n  \"parameters\": [\n    {\n      \"name\": \"icao\",\n      \"description\": \"Code OACI de l'aéroport à 4 lettres : LFPG Paris-CDG, LFPO Orly, LFML Marseille, LFLL Lyon, LFBO Toulouse, LFMN Nice, EGLL Londres, KJFK New York\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://aviationweather.gov/api/data/metar?ids={icao}&format=raw\"\n}\n"
+  },
+  {
+    "fileName": "meteo_marine.json",
+    "name": "meteo_marine",
+    "description": "État de la mer à un endroit de la côte : hauteur des vagues (m), période (s), direction (degrés), température de l'eau (°C). Pour « la mer est comment à Biarritz ? », « l'eau est à combien ? ». Donner la latitude et la longitude du lieu (connues pour les villes côtières).",
+    "spec": {
+      "name": "meteo_marine",
+      "description": "État de la mer à un endroit de la côte : hauteur des vagues (m), période (s), direction (degrés), température de l'eau (°C). Pour « la mer est comment à Biarritz ? », « l'eau est à combien ? ». Donner la latitude et la longitude du lieu (connues pour les villes côtières).",
+      "parameters": [
+        {
+          "name": "latitude",
+          "description": "Latitude du lieu, en degrés décimaux (ex. 43.48)",
+          "required": true
+        },
+        {
+          "name": "longitude",
+          "description": "Longitude du lieu, en degrés décimaux (ex. -1.56)",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://marine-api.open-meteo.com/v1/marine?latitude={latitude}&longitude={longitude}&current=wave_height,wave_period,wave_direction,sea_surface_temperature",
+      "result_fields": [
+        "current.wave_height",
+        "current.wave_period",
+        "current.wave_direction",
+        "current.sea_surface_temperature"
+      ]
+    },
+    "json": "{\n  \"name\": \"meteo_marine\",\n  \"description\": \"État de la mer à un endroit de la côte : hauteur des vagues (m), période (s), direction (degrés), température de l'eau (°C). Pour « la mer est comment à Biarritz ? », « l'eau est à combien ? ». Donner la latitude et la longitude du lieu (connues pour les villes côtières).\",\n  \"parameters\": [\n    {\n      \"name\": \"latitude\",\n      \"description\": \"Latitude du lieu, en degrés décimaux (ex. 43.48)\",\n      \"required\": true\n    },\n    {\n      \"name\": \"longitude\",\n      \"description\": \"Longitude du lieu, en degrés décimaux (ex. -1.56)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://marine-api.open-meteo.com/v1/marine?latitude={latitude}&longitude={longitude}&current=wave_height,wave_period,wave_direction,sea_surface_temperature\",\n  \"result_fields\": [\n    \"current.wave_height\",\n    \"current.wave_period\",\n    \"current.wave_direction\",\n    \"current.sea_surface_temperature\"\n  ]\n}\n"
+  },
+  {
+    "fileName": "mode_cinema.json",
+    "name": "mode_cinema",
+    "description": "Prépare le téléphone pour une séance : plus de notifications pendant la durée du film, luminosité basse. Pour « mode cinéma », « je suis au cinéma ».",
+    "spec": {
+      "name": "mode_cinema",
+      "description": "Prépare le téléphone pour une séance : plus de notifications pendant la durée du film, luminosité basse. Pour « mode cinéma », « je suis au cinéma ».",
+      "parameters": [
+        {
+          "name": "minutes",
+          "description": "Durée en minutes (60 par défaut)",
+          "required": false
+        }
+      ],
+      "type": "routine",
+      "steps": [
+        {
+          "tool": "quiet_mode",
+          "args": {
+            "action": "start",
+            "minutes": "{minutes}",
+            "reason": "cinéma"
+          }
+        },
+        {
+          "tool": "device_settings",
+          "args": {
+            "action": "set_brightness",
+            "value": "10"
+          }
+        }
+      ]
+    },
+    "json": "{\n  \"name\": \"mode_cinema\",\n  \"description\": \"Prépare le téléphone pour une séance : plus de notifications pendant la durée du film, luminosité basse. Pour « mode cinéma », « je suis au cinéma ».\",\n  \"parameters\": [\n    {\n      \"name\": \"minutes\",\n      \"description\": \"Durée en minutes (60 par défaut)\",\n      \"required\": false\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"quiet_mode\",\n      \"args\": {\n        \"action\": \"start\",\n        \"minutes\": \"{minutes}\",\n        \"reason\": \"cinéma\"\n      }\n    },\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"set_brightness\",\n        \"value\": \"10\"\n      }\n    }\n  ]\n}\n"
+  },
+  {
+    "fileName": "mode_lecture.json",
+    "name": "mode_lecture",
+    "description": "Prépare le téléphone pour lire : règle la luminosité puis le volume. À utiliser pour « mode lecture », « je vais lire ».",
+    "spec": {
+      "name": "mode_lecture",
+      "description": "Prépare le téléphone pour lire : règle la luminosité puis le volume. À utiliser pour « mode lecture », « je vais lire ».",
+      "parameters": [
+        {
+          "name": "luminosite",
+          "description": "Luminosité en pourcentage (0 à 100)",
+          "required": true
+        },
+        {
+          "name": "volume",
+          "description": "Volume en pourcentage (0 à 100)",
+          "required": true
+        }
+      ],
+      "type": "routine",
+      "steps": [
+        {
+          "tool": "device_settings",
+          "args": {
+            "action": "set_brightness",
+            "value": "{luminosite}"
+          }
+        },
+        {
+          "tool": "device_settings",
+          "args": {
+            "action": "set_volume",
+            "value": "{volume}"
+          }
+        }
+      ]
+    },
+    "json": "{\n  \"name\": \"mode_lecture\",\n  \"description\": \"Prépare le téléphone pour lire : règle la luminosité puis le volume. À utiliser pour « mode lecture », « je vais lire ».\",\n  \"parameters\": [\n    {\n      \"name\": \"luminosite\",\n      \"description\": \"Luminosité en pourcentage (0 à 100)\",\n      \"required\": true\n    },\n    {\n      \"name\": \"volume\",\n      \"description\": \"Volume en pourcentage (0 à 100)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"set_brightness\",\n        \"value\": \"{luminosite}\"\n      }\n    },\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"set_volume\",\n        \"value\": \"{volume}\"\n      }\n    }\n  ]\n}\n"
+  },
+  {
+    "fileName": "mode_nuit.json",
+    "name": "mode_nuit",
+    "description": "Prépare le téléphone pour la nuit : baisse le volume puis ouvre les réglages d'affichage. À utiliser pour « mode nuit » ou « je vais dormir ».",
+    "spec": {
+      "name": "mode_nuit",
+      "description": "Prépare le téléphone pour la nuit : baisse le volume puis ouvre les réglages d'affichage. À utiliser pour « mode nuit » ou « je vais dormir ».",
+      "parameters": [
+        {
+          "name": "volume",
+          "description": "Volume en pourcentage (0 à 100)",
+          "required": false
+        }
+      ],
+      "type": "routine",
+      "steps": [
+        {
+          "tool": "device_settings",
+          "args": {
+            "action": "set_volume",
+            "value": "{volume}"
+          }
+        },
+        {
+          "tool": "device_settings",
+          "args": {
+            "action": "open_settings",
+            "page": "display"
+          }
+        }
+      ]
+    },
+    "json": "{\n  \"name\": \"mode_nuit\",\n  \"description\": \"Prépare le téléphone pour la nuit : baisse le volume puis ouvre les réglages d'affichage. À utiliser pour « mode nuit » ou « je vais dormir ».\",\n  \"parameters\": [\n    {\n      \"name\": \"volume\",\n      \"description\": \"Volume en pourcentage (0 à 100)\",\n      \"required\": false\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"set_volume\",\n        \"value\": \"{volume}\"\n      }\n    },\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"open_settings\",\n        \"page\": \"display\"\n      }\n    }\n  ]\n}\n"
+  },
+  {
+    "fileName": "mode_reunion.json",
+    "name": "mode_reunion",
+    "description": "Prépare le téléphone pour une réunion : coupe la musique puis met le volume à zéro. À utiliser pour « mode réunion » ou « je suis en réunion ».",
+    "spec": {
+      "name": "mode_reunion",
+      "description": "Prépare le téléphone pour une réunion : coupe la musique puis met le volume à zéro. À utiliser pour « mode réunion » ou « je suis en réunion ».",
+      "type": "routine",
+      "steps": [
+        {
+          "tool": "device_settings",
+          "args": {
+            "action": "media",
+            "command": "pause"
+          }
+        },
+        {
+          "tool": "device_settings",
+          "args": {
+            "action": "set_volume",
+            "value": "0"
+          }
+        }
+      ]
+    },
+    "json": "{\n  \"name\": \"mode_reunion\",\n  \"description\": \"Prépare le téléphone pour une réunion : coupe la musique puis met le volume à zéro. À utiliser pour « mode réunion » ou « je suis en réunion ».\",\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"media\",\n        \"command\": \"pause\"\n      }\n    },\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"set_volume\",\n        \"value\": \"0\"\n      }\n    }\n  ]\n}\n"
+  },
+  {
+    "fileName": "mode_sieste.json",
+    "name": "mode_sieste",
+    "description": "Une sieste : pas de dérangement et un minuteur pour se réveiller. Pour « je fais une sieste de 20 minutes », « réveille-moi dans une demi-heure ».",
+    "spec": {
+      "name": "mode_sieste",
+      "description": "Une sieste : pas de dérangement et un minuteur pour se réveiller. Pour « je fais une sieste de 20 minutes », « réveille-moi dans une demi-heure ».",
+      "parameters": [
+        {
+          "name": "duree",
+          "description": "Durée de la sieste, par exemple « 20 minutes »",
+          "required": true
+        },
+        {
+          "name": "minutes",
+          "description": "La même durée, en minutes",
+          "required": true
+        }
+      ],
+      "type": "routine",
+      "steps": [
+        {
+          "tool": "quiet_mode",
+          "args": {
+            "action": "start",
+            "minutes": "{minutes}",
+            "reason": "sieste"
+          }
+        },
+        {
+          "tool": "timer",
+          "args": {
+            "action": "create",
+            "duration": "{duree}",
+            "label": "Fin de la sieste"
+          }
+        }
+      ]
+    },
+    "json": "{\n  \"name\": \"mode_sieste\",\n  \"description\": \"Une sieste : pas de dérangement et un minuteur pour se réveiller. Pour « je fais une sieste de 20 minutes », « réveille-moi dans une demi-heure ».\",\n  \"parameters\": [\n    {\n      \"name\": \"duree\",\n      \"description\": \"Durée de la sieste, par exemple « 20 minutes »\",\n      \"required\": true\n    },\n    {\n      \"name\": \"minutes\",\n      \"description\": \"La même durée, en minutes\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"quiet_mode\",\n      \"args\": {\n        \"action\": \"start\",\n        \"minutes\": \"{minutes}\",\n        \"reason\": \"sieste\"\n      }\n    },\n    {\n      \"tool\": \"timer\",\n      \"args\": {\n        \"action\": \"create\",\n        \"duration\": \"{duree}\",\n        \"label\": \"Fin de la sieste\"\n      }\n    }\n  ]\n}\n"
+  },
+  {
+    "fileName": "mode_sport.json",
+    "name": "mode_sport",
+    "description": "Prépare le téléphone pour le sport : règle le volume puis lance la musique. À utiliser pour « mode sport », « je vais courir ».",
+    "spec": {
+      "name": "mode_sport",
+      "description": "Prépare le téléphone pour le sport : règle le volume puis lance la musique. À utiliser pour « mode sport », « je vais courir ».",
+      "parameters": [
+        {
+          "name": "volume",
+          "description": "Volume en pourcentage (0 à 100)",
+          "required": true
+        }
+      ],
+      "type": "routine",
+      "steps": [
+        {
+          "tool": "device_settings",
+          "args": {
+            "action": "set_volume",
+            "value": "{volume}"
+          }
+        },
+        {
+          "tool": "device_settings",
+          "args": {
+            "action": "media",
+            "command": "play"
+          }
+        }
+      ]
+    },
+    "json": "{\n  \"name\": \"mode_sport\",\n  \"description\": \"Prépare le téléphone pour le sport : règle le volume puis lance la musique. À utiliser pour « mode sport », « je vais courir ».\",\n  \"parameters\": [\n    {\n      \"name\": \"volume\",\n      \"description\": \"Volume en pourcentage (0 à 100)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"set_volume\",\n        \"value\": \"{volume}\"\n      }\n    },\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"media\",\n        \"command\": \"play\"\n      }\n    }\n  ]\n}\n"
+  },
+  {
+    "fileName": "mode_voiture.json",
+    "name": "mode_voiture",
+    "description": "Prépare le téléphone pour conduire : monte le volume puis ouvre Google Maps. À utiliser pour « mode voiture » ou « je prends la route ».",
+    "spec": {
+      "name": "mode_voiture",
+      "description": "Prépare le téléphone pour conduire : monte le volume puis ouvre Google Maps. À utiliser pour « mode voiture » ou « je prends la route ».",
+      "parameters": [
+        {
+          "name": "volume",
+          "description": "Volume en pourcentage (0 à 100)",
+          "required": false
+        }
+      ],
+      "type": "routine",
+      "steps": [
+        {
+          "tool": "device_settings",
+          "args": {
+            "action": "set_volume",
+            "value": "{volume}"
+          }
+        },
+        {
+          "tool": "open_app",
+          "args": {
+            "app_name": "Maps"
+          }
+        }
+      ]
+    },
+    "json": "{\n  \"name\": \"mode_voiture\",\n  \"description\": \"Prépare le téléphone pour conduire : monte le volume puis ouvre Google Maps. À utiliser pour « mode voiture » ou « je prends la route ».\",\n  \"parameters\": [\n    {\n      \"name\": \"volume\",\n      \"description\": \"Volume en pourcentage (0 à 100)\",\n      \"required\": false\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"device_settings\",\n      \"args\": {\n        \"action\": \"set_volume\",\n        \"value\": \"{volume}\"\n      }\n    },\n    {\n      \"tool\": \"open_app\",\n      \"args\": {\n        \"app_name\": \"Maps\"\n      }\n    }\n  ]\n}\n"
+  },
+  {
+    "fileName": "mon_ip.json",
+    "name": "mon_ip",
+    "description": "Donne l'adresse IP publique du téléphone (celle que voient les sites web), source : ipify.org. Pour « quelle est mon adresse IP ».",
+    "spec": {
+      "name": "mon_ip",
+      "description": "Donne l'adresse IP publique du téléphone (celle que voient les sites web), source : ipify.org. Pour « quelle est mon adresse IP ».",
+      "parameters": [],
+      "type": "http",
+      "url": "https://api.ipify.org?format=json",
+      "result_path": "ip"
+    },
+    "json": "{\n  \"name\": \"mon_ip\",\n  \"description\": \"Donne l'adresse IP publique du téléphone (celle que voient les sites web), source : ipify.org. Pour « quelle est mon adresse IP ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://api.ipify.org?format=json\",\n  \"result_path\": \"ip\"\n}\n"
+  },
+  {
+    "fileName": "musique_recherche.json",
+    "name": "musique_recherche",
+    "description": "Ouvre Spotify sur une recherche de morceau, d'artiste ou de playlist. Pour « mets du jazz », « joue Daft Punk ».",
+    "spec": {
+      "name": "musique_recherche",
+      "description": "Ouvre Spotify sur une recherche de morceau, d'artiste ou de playlist. Pour « mets du jazz », « joue Daft Punk ».",
+      "parameters": [
+        {
+          "name": "recherche",
+          "description": "Morceau, artiste ou style",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://open.spotify.com/search/{recherche}"
+    },
+    "json": "{\n  \"name\": \"musique_recherche\",\n  \"description\": \"Ouvre Spotify sur une recherche de morceau, d'artiste ou de playlist. Pour « mets du jazz », « joue Daft Punk ».\",\n  \"parameters\": [\n    {\n      \"name\": \"recherche\",\n      \"description\": \"Morceau, artiste ou style\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://open.spotify.com/search/{recherche}\"\n}\n"
+  },
+  {
+    "fileName": "offres_emploi.json",
+    "name": "offres_emploi",
+    "description": "Ouvre les offres d'emploi de France Travail pour un métier. Pour « des offres de boulanger », « cherche un emploi de … ».",
+    "spec": {
+      "name": "offres_emploi",
+      "description": "Ouvre les offres d'emploi de France Travail pour un métier. Pour « des offres de boulanger », « cherche un emploi de … ».",
+      "parameters": [
+        {
+          "name": "metier",
+          "description": "Le métier ou les mots-clés",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://candidat.francetravail.fr/offres/recherche?motsCles={metier}"
+    },
+    "json": "{\n  \"name\": \"offres_emploi\",\n  \"description\": \"Ouvre les offres d'emploi de France Travail pour un métier. Pour « des offres de boulanger », « cherche un emploi de … ».\",\n  \"parameters\": [\n    {\n      \"name\": \"metier\",\n      \"description\": \"Le métier ou les mots-clés\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://candidat.francetravail.fr/offres/recherche?motsCles={metier}\"\n}\n"
+  },
+  {
+    "fileName": "pages_jaunes.json",
+    "name": "pages_jaunes",
+    "description": "Ouvre les Pages Jaunes sur un professionnel ou un commerce près d'un lieu. Pour « un plombier à… », « un serrurier près de chez moi ».",
+    "spec": {
+      "name": "pages_jaunes",
+      "description": "Ouvre les Pages Jaunes sur un professionnel ou un commerce près d'un lieu. Pour « un plombier à… », « un serrurier près de chez moi ».",
+      "parameters": [
+        {
+          "name": "quoi",
+          "description": "Le métier ou le commerce",
+          "required": true
+        },
+        {
+          "name": "ou",
+          "description": "La ville",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.pagesjaunes.fr/annuaire/chercherlespros?quoiqui={quoi}&ou={ou}"
+    },
+    "json": "{\n  \"name\": \"pages_jaunes\",\n  \"description\": \"Ouvre les Pages Jaunes sur un professionnel ou un commerce près d'un lieu. Pour « un plombier à… », « un serrurier près de chez moi ».\",\n  \"parameters\": [\n    {\n      \"name\": \"quoi\",\n      \"description\": \"Le métier ou le commerce\",\n      \"required\": true\n    },\n    {\n      \"name\": \"ou\",\n      \"description\": \"La ville\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.pagesjaunes.fr/annuaire/chercherlespros?quoiqui={quoi}&ou={ou}\"\n}\n"
+  },
+  {
+    "fileName": "pharmacie_garde.json",
+    "name": "pharmacie_garde",
+    "description": "Ouvre Google Maps sur les pharmacies de garde près d'un lieu. Pour « une pharmacie de garde », « pharmacie ouverte cette nuit ».",
+    "spec": {
+      "name": "pharmacie_garde",
+      "description": "Ouvre Google Maps sur les pharmacies de garde près d'un lieu. Pour « une pharmacie de garde », « pharmacie ouverte cette nuit ».",
+      "parameters": [
+        {
+          "name": "lieu",
+          "description": "Ville ou quartier (facultatif : sinon autour de la position)",
+          "required": false
+        }
+      ],
+      "type": "open",
+      "url": "https://www.google.com/maps/search/pharmacie+de+garde+{lieu}"
+    },
+    "json": "{\n  \"name\": \"pharmacie_garde\",\n  \"description\": \"Ouvre Google Maps sur les pharmacies de garde près d'un lieu. Pour « une pharmacie de garde », « pharmacie ouverte cette nuit ».\",\n  \"parameters\": [\n    {\n      \"name\": \"lieu\",\n      \"description\": \"Ville ou quartier (facultatif : sinon autour de la position)\",\n      \"required\": false\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.google.com/maps/search/pharmacie+de+garde+{lieu}\"\n}\n"
+  },
+  {
+    "fileName": "phase_lune.json",
+    "name": "phase_lune",
+    "description": "Donne la phase de la lune aujourd'hui (un emoji) et le jour du cycle lunaire, de 0 à 29 (source : wttr.in). Pour « quelle est la phase de la lune ».",
+    "spec": {
+      "name": "phase_lune",
+      "description": "Donne la phase de la lune aujourd'hui (un emoji) et le jour du cycle lunaire, de 0 à 29 (source : wttr.in). Pour « quelle est la phase de la lune ».",
+      "parameters": [
+        {
+          "name": "ville",
+          "description": "Nom de la ville (facultatif, la phase est la même partout)",
+          "required": false
+        }
+      ],
+      "type": "http",
+      "url": "https://wttr.in/{ville}?format=%25m+jour+%25M+du+cycle"
+    },
+    "json": "{\n  \"name\": \"phase_lune\",\n  \"description\": \"Donne la phase de la lune aujourd'hui (un emoji) et le jour du cycle lunaire, de 0 à 29 (source : wttr.in). Pour « quelle est la phase de la lune ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ville\",\n      \"description\": \"Nom de la ville (facultatif, la phase est la même partout)\",\n      \"required\": false\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://wttr.in/{ville}?format=%25m+jour+%25M+du+cycle\"\n}\n"
+  },
+  {
+    "fileName": "podcast_recherche.json",
+    "name": "podcast_recherche",
+    "description": "Cherche des podcasts par sujet ou par nom (Apple Podcasts) : titre, auteur, nombre d'épisodes et lien. Pour « un podcast sur l'histoire », « trouve le podcast de … ».",
+    "spec": {
+      "name": "podcast_recherche",
+      "description": "Cherche des podcasts par sujet ou par nom (Apple Podcasts) : titre, auteur, nombre d'épisodes et lien. Pour « un podcast sur l'histoire », « trouve le podcast de … ».",
+      "parameters": [
+        {
+          "name": "recherche",
+          "description": "Sujet ou nom du podcast",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://itunes.apple.com/search?term={recherche}&media=podcast&limit=5&country=fr",
+      "result_items": "results",
+      "result_fields": [
+        "collectionName",
+        "artistName",
+        "trackCount",
+        "collectionViewUrl"
+      ],
+      "result_max": 5
+    },
+    "json": "{\n  \"name\": \"podcast_recherche\",\n  \"description\": \"Cherche des podcasts par sujet ou par nom (Apple Podcasts) : titre, auteur, nombre d'épisodes et lien. Pour « un podcast sur l'histoire », « trouve le podcast de … ».\",\n  \"parameters\": [\n    {\n      \"name\": \"recherche\",\n      \"description\": \"Sujet ou nom du podcast\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://itunes.apple.com/search?term={recherche}&media=podcast&limit=5&country=fr\",\n  \"result_items\": \"results\",\n  \"result_fields\": [\n    \"collectionName\",\n    \"artistName\",\n    \"trackCount\",\n    \"collectionViewUrl\"\n  ],\n  \"result_max\": 5\n}\n"
+  },
+  {
+    "fileName": "prix_crypto.json",
+    "name": "prix_crypto",
+    "description": "Donne le prix actuel d'une cryptomonnaie (bitcoin, ethereum, solana…) dans une devise. À utiliser pour « combien vaut le bitcoin ».",
+    "spec": {
+      "name": "prix_crypto",
+      "description": "Donne le prix actuel d'une cryptomonnaie (bitcoin, ethereum, solana…) dans une devise. À utiliser pour « combien vaut le bitcoin ».",
+      "parameters": [
+        {
+          "name": "crypto",
+          "description": "Identifiant en minuscules : bitcoin, ethereum, solana, dogecoin…",
+          "required": true
+        },
+        {
+          "name": "devise",
+          "description": "Code de devise en minuscules : eur, usd, gbp… (eur par défaut)",
+          "required": false
+        }
+      ],
+      "type": "http",
+      "url": "https://api.coingecko.com/api/v3/simple/price?ids={crypto}&vs_currencies={devise}"
+    },
+    "json": "{\n  \"name\": \"prix_crypto\",\n  \"description\": \"Donne le prix actuel d'une cryptomonnaie (bitcoin, ethereum, solana…) dans une devise. À utiliser pour « combien vaut le bitcoin ».\",\n  \"parameters\": [\n    {\n      \"name\": \"crypto\",\n      \"description\": \"Identifiant en minuscules : bitcoin, ethereum, solana, dogecoin…\",\n      \"required\": true\n    },\n    {\n      \"name\": \"devise\",\n      \"description\": \"Code de devise en minuscules : eur, usd, gbp… (eur par défaut)\",\n      \"required\": false\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://api.coingecko.com/api/v3/simple/price?ids={crypto}&vs_currencies={devise}\"\n}\n"
+  },
+  {
+    "fileName": "prix_metaux.json",
+    "name": "prix_metaux",
+    "description": "Donne le cours d'un métal précieux en dollars américains l'once troy (source : gold-api.com). Pour « combien vaut l'or », « le cours de l'argent ».",
+    "spec": {
+      "name": "prix_metaux",
+      "description": "Donne le cours d'un métal précieux en dollars américains l'once troy (source : gold-api.com). Pour « combien vaut l'or », « le cours de l'argent ».",
+      "parameters": [
+        {
+          "name": "metal",
+          "description": "XAU pour l'or, XAG pour l'argent, XPT pour le platine, XPD pour le palladium",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://api.gold-api.com/price/{metal}",
+      "result_path": "price"
+    },
+    "json": "{\n  \"name\": \"prix_metaux\",\n  \"description\": \"Donne le cours d'un métal précieux en dollars américains l'once troy (source : gold-api.com). Pour « combien vaut l'or », « le cours de l'argent ».\",\n  \"parameters\": [\n    {\n      \"name\": \"metal\",\n      \"description\": \"XAU pour l'or, XAG pour l'argent, XPT pour le platine, XPD pour le palladium\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://api.gold-api.com/price/{metal}\",\n  \"result_path\": \"price\"\n}\n"
+  },
+  {
+    "fileName": "rappel_produit.json",
+    "name": "rappel_produit",
+    "description": "Cherche si un produit ou une marque a fait l'objet d'un rappel en France (source : RappelConso) : marque, motif, date. Pour « est-ce que le fromage X est rappelé ».",
+    "spec": {
+      "name": "rappel_produit",
+      "description": "Cherche si un produit ou une marque a fait l'objet d'un rappel en France (source : RappelConso) : marque, motif, date. Pour « est-ce que le fromage X est rappelé ».",
+      "parameters": [
+        {
+          "name": "terme",
+          "description": "Nom du produit ou de la marque",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso-v2-gtin-espaces/records?where=%22{terme}%22&limit=3&order_by=date_publication%20desc&select=marque_produit,motif_rappel,date_publication"
+    },
+    "json": "{\n  \"name\": \"rappel_produit\",\n  \"description\": \"Cherche si un produit ou une marque a fait l'objet d'un rappel en France (source : RappelConso) : marque, motif, date. Pour « est-ce que le fromage X est rappelé ».\",\n  \"parameters\": [\n    {\n      \"name\": \"terme\",\n      \"description\": \"Nom du produit ou de la marque\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso-v2-gtin-espaces/records?where=%22{terme}%22&limit=3&order_by=date_publication%20desc&select=marque_produit,motif_rappel,date_publication\"\n}\n"
+  },
+  {
+    "fileName": "rappels_recents.json",
+    "name": "rappels_recents",
+    "description": "Donne les 4 derniers rappels de produits de consommation en France : catégorie, marque, motif et date (source : RappelConso, data.economie.gouv.fr). Pour « y a-t-il des rappels de produits », « un produit dangereux ».",
+    "spec": {
+      "name": "rappels_recents",
+      "description": "Donne les 4 derniers rappels de produits de consommation en France : catégorie, marque, motif et date (source : RappelConso, data.economie.gouv.fr). Pour « y a-t-il des rappels de produits », « un produit dangereux ».",
+      "parameters": [],
+      "type": "http",
+      "url": "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso-v2-gtin-espaces/records?limit=4&order_by=date_publication%20desc&select=categorie_produit,marque_produit,motif_rappel,date_publication"
+    },
+    "json": "{\n  \"name\": \"rappels_recents\",\n  \"description\": \"Donne les 4 derniers rappels de produits de consommation en France : catégorie, marque, motif et date (source : RappelConso, data.economie.gouv.fr). Pour « y a-t-il des rappels de produits », « un produit dangereux ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso-v2-gtin-espaces/records?limit=4&order_by=date_publication%20desc&select=categorie_produit,marque_produit,motif_rappel,date_publication\"\n}\n"
+  },
+  {
+    "fileName": "recette.json",
+    "name": "recette",
+    "description": "Ouvre une recherche de recettes de cuisine sur Marmiton. Pour « une idée de recette avec… ».",
+    "spec": {
+      "name": "recette",
+      "description": "Ouvre une recherche de recettes de cuisine sur Marmiton. Pour « une idée de recette avec… ».",
+      "parameters": [
+        {
+          "name": "plat",
+          "description": "Le plat ou les ingrédients",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.marmiton.org/recettes/recherche.aspx?aqt={plat}"
+    },
+    "json": "{\n  \"name\": \"recette\",\n  \"description\": \"Ouvre une recherche de recettes de cuisine sur Marmiton. Pour « une idée de recette avec… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"plat\",\n      \"description\": \"Le plat ou les ingrédients\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.marmiton.org/recettes/recherche.aspx?aqt={plat}\"\n}\n"
+  },
+  {
+    "fileName": "recettes_ingredient.json",
+    "name": "recettes_ingredient",
+    "description": "Liste des plats qui utilisent un ingrédient (noms et pays d'origine, en anglais, source : themealdb.com). Pour « que faire avec du poulet », « des idées avec des œufs ».",
+    "spec": {
+      "name": "recettes_ingredient",
+      "description": "Liste des plats qui utilisent un ingrédient (noms et pays d'origine, en anglais, source : themealdb.com). Pour « que faire avec du poulet », « des idées avec des œufs ».",
+      "parameters": [
+        {
+          "name": "ingredient",
+          "description": "Ingrédient en anglais, par exemple chicken, beef, salmon, eggs, rice",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://www.themealdb.com/api/json/v1/1/filter.php?i={ingredient}"
+    },
+    "json": "{\n  \"name\": \"recettes_ingredient\",\n  \"description\": \"Liste des plats qui utilisent un ingrédient (noms et pays d'origine, en anglais, source : themealdb.com). Pour « que faire avec du poulet », « des idées avec des œufs ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ingredient\",\n      \"description\": \"Ingrédient en anglais, par exemple chicken, beef, salmon, eggs, rice\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://www.themealdb.com/api/json/v1/1/filter.php?i={ingredient}\"\n}\n"
+  },
+  {
+    "fileName": "resultats_sport.json",
+    "name": "resultats_sport",
+    "description": "Ouvre les résultats sportifs récents d'une équipe ou d'un joueur dans Google. Pour « quel est le score de… », « qui a gagné hier ».",
+    "spec": {
+      "name": "resultats_sport",
+      "description": "Ouvre les résultats sportifs récents d'une équipe ou d'un joueur dans Google. Pour « quel est le score de… », « qui a gagné hier ».",
+      "parameters": [
+        {
+          "name": "equipe",
+          "description": "Équipe, joueur ou compétition",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.google.com/search?q=score+{equipe}"
+    },
+    "json": "{\n  \"name\": \"resultats_sport\",\n  \"description\": \"Ouvre les résultats sportifs récents d'une équipe ou d'un joueur dans Google. Pour « quel est le score de… », « qui a gagné hier ».\",\n  \"parameters\": [\n    {\n      \"name\": \"equipe\",\n      \"description\": \"Équipe, joueur ou compétition\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.google.com/search?q=score+{equipe}\"\n}\n"
+  },
+  {
+    "fileName": "routine_matin.json",
+    "name": "routine_matin",
+    "description": "Prépare la journée : météo de la ville, événements du jour de l'agenda et rappels à venir. À utiliser pour « ma routine du matin », « prépare ma journée ».",
+    "spec": {
+      "name": "routine_matin",
+      "description": "Prépare la journée : météo de la ville, événements du jour de l'agenda et rappels à venir. À utiliser pour « ma routine du matin », « prépare ma journée ».",
+      "parameters": [
+        {
+          "name": "ville",
+          "description": "Ville pour la météo (« ici » pour la position du téléphone)",
+          "required": true
+        }
+      ],
+      "type": "routine",
+      "steps": [
+        {
+          "tool": "weather_report",
+          "args": {
+            "city": "{ville}"
+          }
+        },
+        {
+          "tool": "calendar",
+          "args": {
+            "action": "list",
+            "days": "1"
+          }
+        },
+        {
+          "tool": "reminder",
+          "args": {
+            "mode": "list"
+          }
+        }
+      ]
+    },
+    "json": "{\n  \"name\": \"routine_matin\",\n  \"description\": \"Prépare la journée : météo de la ville, événements du jour de l'agenda et rappels à venir. À utiliser pour « ma routine du matin », « prépare ma journée ».\",\n  \"parameters\": [\n    {\n      \"name\": \"ville\",\n      \"description\": \"Ville pour la météo (« ici » pour la position du téléphone)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"routine\",\n  \"steps\": [\n    {\n      \"tool\": \"weather_report\",\n      \"args\": {\n        \"city\": \"{ville}\"\n      }\n    },\n    {\n      \"tool\": \"calendar\",\n      \"args\": {\n        \"action\": \"list\",\n        \"days\": \"1\"\n      }\n    },\n    {\n      \"tool\": \"reminder\",\n      \"args\": {\n        \"mode\": \"list\"\n      }\n    }\n  ]\n}\n"
+  },
+  {
+    "fileName": "serie_infos.json",
+    "name": "serie_infos",
+    "description": "Infos sur une série télé : statut (en cours ou terminée), début, note, chaîne, et le prochain épisode s'il est annoncé. Pour « quand sort la prochaine saison de … ? », « la série … est finie ? ».",
+    "spec": {
+      "name": "serie_infos",
+      "description": "Infos sur une série télé : statut (en cours ou terminée), début, note, chaîne, et le prochain épisode s'il est annoncé. Pour « quand sort la prochaine saison de … ? », « la série … est finie ? ».",
+      "parameters": [
+        {
+          "name": "titre",
+          "description": "Titre de la série (souvent le titre original)",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://api.tvmaze.com/singlesearch/shows?q={titre}&embed=nextepisode",
+      "result_fields": [
+        "name",
+        "status",
+        "premiered",
+        "ended",
+        "rating.average",
+        "network.name",
+        "_embedded.nextepisode.airdate",
+        "_embedded.nextepisode.name"
+      ]
+    },
+    "json": "{\n  \"name\": \"serie_infos\",\n  \"description\": \"Infos sur une série télé : statut (en cours ou terminée), début, note, chaîne, et le prochain épisode s'il est annoncé. Pour « quand sort la prochaine saison de … ? », « la série … est finie ? ».\",\n  \"parameters\": [\n    {\n      \"name\": \"titre\",\n      \"description\": \"Titre de la série (souvent le titre original)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://api.tvmaze.com/singlesearch/shows?q={titre}&embed=nextepisode\",\n  \"result_fields\": [\n    \"name\",\n    \"status\",\n    \"premiered\",\n    \"ended\",\n    \"rating.average\",\n    \"network.name\",\n    \"_embedded.nextepisode.airdate\",\n    \"_embedded.nextepisode.name\"\n  ]\n}\n"
+  },
+  {
+    "fileName": "service_public.json",
+    "name": "service_public",
+    "description": "Ouvre la recherche de service-public.fr sur une démarche ou un droit (carte d'identité, permis, carte grise, allocations…). Pour « comment faire ma carte d'identité ».",
+    "spec": {
+      "name": "service_public",
+      "description": "Ouvre la recherche de service-public.fr sur une démarche ou un droit (carte d'identité, permis, carte grise, allocations…). Pour « comment faire ma carte d'identité ».",
+      "parameters": [
+        {
+          "name": "sujet",
+          "description": "La démarche ou le sujet",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.service-public.fr/particuliers/recherche?keyword={sujet}"
+    },
+    "json": "{\n  \"name\": \"service_public\",\n  \"description\": \"Ouvre la recherche de service-public.fr sur une démarche ou un droit (carte d'identité, permis, carte grise, allocations…). Pour « comment faire ma carte d'identité ».\",\n  \"parameters\": [\n    {\n      \"name\": \"sujet\",\n      \"description\": \"La démarche ou le sujet\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.service-public.fr/particuliers/recherche?keyword={sujet}\"\n}\n"
+  },
+  {
+    "fileName": "station_spatiale.json",
+    "name": "station_spatiale",
+    "description": "Donne la position actuelle de la Station spatiale internationale : latitude, longitude, altitude en km, vitesse en km/h, et si elle est éclairée par le soleil ou dans l'ombre (source : wheretheiss.at). Pour « où est l'ISS ? ».",
+    "spec": {
+      "name": "station_spatiale",
+      "description": "Donne la position actuelle de la Station spatiale internationale : latitude, longitude, altitude en km, vitesse en km/h, et si elle est éclairée par le soleil ou dans l'ombre (source : wheretheiss.at). Pour « où est l'ISS ? ».",
+      "parameters": [],
+      "type": "http",
+      "url": "https://api.wheretheiss.at/v1/satellites/25544"
+    },
+    "json": "{\n  \"name\": \"station_spatiale\",\n  \"description\": \"Donne la position actuelle de la Station spatiale internationale : latitude, longitude, altitude en km, vitesse en km/h, et si elle est éclairée par le soleil ou dans l'ombre (source : wheretheiss.at). Pour « où est l'ISS ? ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://api.wheretheiss.at/v1/satellites/25544\"\n}\n"
+  },
+  {
+    "fileName": "suivi_colis.json",
+    "name": "suivi_colis",
+    "description": "Ouvre le suivi La Poste / Colissimo pour un numéro de colis. Pour « où en est mon colis », « suivi de mon envoi ».",
+    "spec": {
+      "name": "suivi_colis",
+      "description": "Ouvre le suivi La Poste / Colissimo pour un numéro de colis. Pour « où en est mon colis », « suivi de mon envoi ».",
+      "parameters": [
+        {
+          "name": "code",
+          "description": "Le numéro de suivi du colis",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.laposte.fr/outils/suivre-vos-envois?code={code}"
+    },
+    "json": "{\n  \"name\": \"suivi_colis\",\n  \"description\": \"Ouvre le suivi La Poste / Colissimo pour un numéro de colis. Pour « où en est mon colis », « suivi de mon envoi ».\",\n  \"parameters\": [\n    {\n      \"name\": \"code\",\n      \"description\": \"Le numéro de suivi du colis\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.laposte.fr/outils/suivre-vos-envois?code={code}\"\n}\n"
+  },
+  {
+    "fileName": "synonymes.json",
+    "name": "synonymes",
+    "description": "Ouvre les synonymes d'un mot (CNRTL). Pour « un synonyme de… », « comment dire autrement… ».",
+    "spec": {
+      "name": "synonymes",
+      "description": "Ouvre les synonymes d'un mot (CNRTL). Pour « un synonyme de… », « comment dire autrement… ».",
+      "parameters": [
+        {
+          "name": "mot",
+          "description": "Le mot",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.cnrtl.fr/synonymie/{mot}"
+    },
+    "json": "{\n  \"name\": \"synonymes\",\n  \"description\": \"Ouvre les synonymes d'un mot (CNRTL). Pour « un synonyme de… », « comment dire autrement… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"mot\",\n      \"description\": \"Le mot\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.cnrtl.fr/synonymie/{mot}\"\n}\n"
+  },
+  {
+    "fileName": "taux_de_change.json",
+    "name": "taux_de_change",
+    "description": "Donne le taux de change du jour entre deux devises (source : Banque centrale européenne). Pour « combien font 50 euros en dollars ».",
+    "spec": {
+      "name": "taux_de_change",
+      "description": "Donne le taux de change du jour entre deux devises (source : Banque centrale européenne). Pour « combien font 50 euros en dollars ».",
+      "parameters": [
+        {
+          "name": "base",
+          "description": "Devise de départ, code en majuscules : EUR, USD, GBP…",
+          "required": true
+        },
+        {
+          "name": "cible",
+          "description": "Devise d'arrivée, code en majuscules",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://api.frankfurter.dev/v1/latest?base={base}&symbols={cible}"
+    },
+    "json": "{\n  \"name\": \"taux_de_change\",\n  \"description\": \"Donne le taux de change du jour entre deux devises (source : Banque centrale européenne). Pour « combien font 50 euros en dollars ».\",\n  \"parameters\": [\n    {\n      \"name\": \"base\",\n      \"description\": \"Devise de départ, code en majuscules : EUR, USD, GBP…\",\n      \"required\": true\n    },\n    {\n      \"name\": \"cible\",\n      \"description\": \"Devise d'arrivée, code en majuscules\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://api.frankfurter.dev/v1/latest?base={base}&symbols={cible}\"\n}\n"
+  },
+  {
+    "fileName": "tempo_edf.json",
+    "name": "tempo_edf",
+    "description": "Couleur du jour Tempo d'EDF (bleu, blanc ou rouge : le prix de l'électricité pour les abonnés Tempo), aujourd'hui ou demain. Pour « c'est quelle couleur Tempo demain ? », « jour rouge ? ».",
+    "spec": {
+      "name": "tempo_edf",
+      "description": "Couleur du jour Tempo d'EDF (bleu, blanc ou rouge : le prix de l'électricité pour les abonnés Tempo), aujourd'hui ou demain. Pour « c'est quelle couleur Tempo demain ? », « jour rouge ? ».",
+      "parameters": [
+        {
+          "name": "jour",
+          "description": "today pour aujourd'hui, tomorrow pour demain",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://www.api-couleur-tempo.fr/api/jourTempo/{jour}",
+      "result_fields": [
+        "dateJour",
+        "libCouleur"
+      ]
+    },
+    "json": "{\n  \"name\": \"tempo_edf\",\n  \"description\": \"Couleur du jour Tempo d'EDF (bleu, blanc ou rouge : le prix de l'électricité pour les abonnés Tempo), aujourd'hui ou demain. Pour « c'est quelle couleur Tempo demain ? », « jour rouge ? ».\",\n  \"parameters\": [\n    {\n      \"name\": \"jour\",\n      \"description\": \"today pour aujourd'hui, tomorrow pour demain\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://www.api-couleur-tempo.fr/api/jourTempo/{jour}\",\n  \"result_fields\": [\n    \"dateJour\",\n    \"libCouleur\"\n  ]\n}\n"
+  },
+  {
+    "fileName": "traduction_texte.json",
+    "name": "traduction_texte",
+    "description": "Traduit un texte et donne directement la traduction (source : MyMemory, sans clé, quota quotidien). Pour « comment dit-on … en anglais », « traduis cette phrase en espagnol ».",
+    "spec": {
+      "name": "traduction_texte",
+      "description": "Traduit un texte et donne directement la traduction (source : MyMemory, sans clé, quota quotidien). Pour « comment dit-on … en anglais », « traduis cette phrase en espagnol ».",
+      "parameters": [
+        {
+          "name": "texte",
+          "description": "Le texte à traduire",
+          "required": true
+        },
+        {
+          "name": "langues",
+          "description": "Langue source puis langue cible séparées par | , par exemple fr|en, fr|es, en|fr, fr|de",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://api.mymemory.translated.net/get?q={texte}&langpair={langues}",
+      "result_path": "responseData.translatedText"
+    },
+    "json": "{\n  \"name\": \"traduction_texte\",\n  \"description\": \"Traduit un texte et donne directement la traduction (source : MyMemory, sans clé, quota quotidien). Pour « comment dit-on … en anglais », « traduis cette phrase en espagnol ».\",\n  \"parameters\": [\n    {\n      \"name\": \"texte\",\n      \"description\": \"Le texte à traduire\",\n      \"required\": true\n    },\n    {\n      \"name\": \"langues\",\n      \"description\": \"Langue source puis langue cible séparées par | , par exemple fr|en, fr|es, en|fr, fr|de\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://api.mymemory.translated.net/get?q={texte}&langpair={langues}\",\n  \"result_path\": \"responseData.translatedText\"\n}\n"
+  },
+  {
+    "fileName": "traduire.json",
+    "name": "traduire",
+    "description": "Ouvre Google Traduction avec un texte et la langue cible. Pour « traduis … en anglais ».",
+    "spec": {
+      "name": "traduire",
+      "description": "Ouvre Google Traduction avec un texte et la langue cible. Pour « traduis … en anglais ».",
+      "parameters": [
+        {
+          "name": "texte",
+          "description": "Le texte à traduire",
+          "required": true
+        },
+        {
+          "name": "langue",
+          "description": "Code de la langue cible : en, fr, es, tl (tagalog), de…",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://translate.google.com/?sl=auto&tl={langue}&text={texte}&op=translate"
+    },
+    "json": "{\n  \"name\": \"traduire\",\n  \"description\": \"Ouvre Google Traduction avec un texte et la langue cible. Pour « traduis … en anglais ».\",\n  \"parameters\": [\n    {\n      \"name\": \"texte\",\n      \"description\": \"Le texte à traduire\",\n      \"required\": true\n    },\n    {\n      \"name\": \"langue\",\n      \"description\": \"Code de la langue cible : en, fr, es, tl (tagalog), de…\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://translate.google.com/?sl=auto&tl={langue}&text={texte}&op=translate\"\n}\n"
+  },
+  {
+    "fileName": "trafic_routier.json",
+    "name": "trafic_routier",
+    "description": "Ouvre Google Maps centré sur un lieu avec la circulation en temps réel affichée. Pour « il y a du trafic à… », « comment ça circule vers… ».",
+    "spec": {
+      "name": "trafic_routier",
+      "description": "Ouvre Google Maps centré sur un lieu avec la circulation en temps réel affichée. Pour « il y a du trafic à… », « comment ça circule vers… ».",
+      "parameters": [
+        {
+          "name": "lieu",
+          "description": "Le lieu à afficher, par exemple une ville ou une adresse",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.google.com/maps/@?api=1&map_action=map&layer=traffic&center={lieu}"
+    },
+    "json": "{\n  \"name\": \"trafic_routier\",\n  \"description\": \"Ouvre Google Maps centré sur un lieu avec la circulation en temps réel affichée. Pour « il y a du trafic à… », « comment ça circule vers… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"lieu\",\n      \"description\": \"Le lieu à afficher, par exemple une ville ou une adresse\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.google.com/maps/@?api=1&map_action=map&layer=traffic&center={lieu}\"\n}\n"
+  },
+  {
+    "fileName": "vacances_scolaires.json",
+    "name": "vacances_scolaires",
+    "description": "Donne les 2 prochaines périodes de vacances scolaires d'une zone (A, B ou C), avec dates de début et de fin en UTC : en France, ajouter 1 h (hiver) ou 2 h (été) donne minuit local (source : data.education.gouv.fr). Pour « quand sont les prochaines vacances ».",
+    "spec": {
+      "name": "vacances_scolaires",
+      "description": "Donne les 2 prochaines périodes de vacances scolaires d'une zone (A, B ou C), avec dates de début et de fin en UTC : en France, ajouter 1 h (hiver) ou 2 h (été) donne minuit local (source : data.education.gouv.fr). Pour « quand sont les prochaines vacances ».",
+      "parameters": [
+        {
+          "name": "zone",
+          "description": "Zone A, Zone B ou Zone C (écrire exactement ainsi)",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-calendrier-scolaire/records?where=zones%3D%22{zone}%22%20AND%20end_date%3E%3Dnow()&order_by=start_date&limit=2&select=description,start_date,end_date"
+    },
+    "json": "{\n  \"name\": \"vacances_scolaires\",\n  \"description\": \"Donne les 2 prochaines périodes de vacances scolaires d'une zone (A, B ou C), avec dates de début et de fin en UTC : en France, ajouter 1 h (hiver) ou 2 h (été) donne minuit local (source : data.education.gouv.fr). Pour « quand sont les prochaines vacances ».\",\n  \"parameters\": [\n    {\n      \"name\": \"zone\",\n      \"description\": \"Zone A, Zone B ou Zone C (écrire exactement ainsi)\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-calendrier-scolaire/records?where=zones%3D%22{zone}%22%20AND%20end_date%3E%3Dnow()&order_by=start_date&limit=2&select=description,start_date,end_date\"\n}\n"
+  },
+  {
+    "fileName": "vinted_recherche.json",
+    "name": "vinted_recherche",
+    "description": "Ouvre une recherche d'articles sur Vinted. Pour « cherche une veste … sur Vinted ».",
+    "spec": {
+      "name": "vinted_recherche",
+      "description": "Ouvre une recherche d'articles sur Vinted. Pour « cherche une veste … sur Vinted ».",
+      "parameters": [
+        {
+          "name": "recherche",
+          "description": "Ce que l'on cherche",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.vinted.fr/catalog?search_text={recherche}"
+    },
+    "json": "{\n  \"name\": \"vinted_recherche\",\n  \"description\": \"Ouvre une recherche d'articles sur Vinted. Pour « cherche une veste … sur Vinted ».\",\n  \"parameters\": [\n    {\n      \"name\": \"recherche\",\n      \"description\": \"Ce que l'on cherche\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.vinted.fr/catalog?search_text={recherche}\"\n}\n"
+  },
+  {
+    "fileName": "vols.json",
+    "name": "vols",
+    "description": "Ouvre Google Flights sur des vols entre deux villes. Pour « des vols pour Lisbonne », « un billet d'avion Paris New York ».",
+    "spec": {
+      "name": "vols",
+      "description": "Ouvre Google Flights sur des vols entre deux villes. Pour « des vols pour Lisbonne », « un billet d'avion Paris New York ».",
+      "parameters": [
+        {
+          "name": "depart",
+          "description": "Ville ou aéroport de départ",
+          "required": true
+        },
+        {
+          "name": "arrivee",
+          "description": "Ville ou aéroport d'arrivée",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.google.com/travel/flights?q=vols+de+{depart}+a+{arrivee}"
+    },
+    "json": "{\n  \"name\": \"vols\",\n  \"description\": \"Ouvre Google Flights sur des vols entre deux villes. Pour « des vols pour Lisbonne », « un billet d'avion Paris New York ».\",\n  \"parameters\": [\n    {\n      \"name\": \"depart\",\n      \"description\": \"Ville ou aéroport de départ\",\n      \"required\": true\n    },\n    {\n      \"name\": \"arrivee\",\n      \"description\": \"Ville ou aéroport d'arrivée\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.google.com/travel/flights?q=vols+de+{depart}+a+{arrivee}\"\n}\n"
+  },
+  {
+    "fileName": "wikipedia_hasard.json",
+    "name": "wikipedia_hasard",
+    "description": "Lit le résumé d'un article de Wikipédia en français tiré au hasard. Pour « apprends-moi quelque chose », « raconte-moi un truc au hasard ».",
+    "spec": {
+      "name": "wikipedia_hasard",
+      "description": "Lit le résumé d'un article de Wikipédia en français tiré au hasard. Pour « apprends-moi quelque chose », « raconte-moi un truc au hasard ».",
+      "parameters": [],
+      "type": "http",
+      "url": "https://fr.wikipedia.org/api/rest_v1/page/random/summary",
+      "result_path": "extract"
+    },
+    "json": "{\n  \"name\": \"wikipedia_hasard\",\n  \"description\": \"Lit le résumé d'un article de Wikipédia en français tiré au hasard. Pour « apprends-moi quelque chose », « raconte-moi un truc au hasard ».\",\n  \"parameters\": [],\n  \"type\": \"http\",\n  \"url\": \"https://fr.wikipedia.org/api/rest_v1/page/random/summary\",\n  \"result_path\": \"extract\"\n}\n"
+  },
+  {
+    "fileName": "wikipedia_recherche.json",
+    "name": "wikipedia_recherche",
+    "description": "Cherche des articles de Wikipédia en français sur un sujet et donne les titres et les liens (source : Wikipédia). Pour « trouve un article sur… ».",
+    "spec": {
+      "name": "wikipedia_recherche",
+      "description": "Cherche des articles de Wikipédia en français sur un sujet et donne les titres et les liens (source : Wikipédia). Pour « trouve un article sur… ».",
+      "parameters": [
+        {
+          "name": "sujet",
+          "description": "Le sujet",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://fr.wikipedia.org/w/api.php?action=opensearch&search={sujet}&limit=5&format=json"
+    },
+    "json": "{\n  \"name\": \"wikipedia_recherche\",\n  \"description\": \"Cherche des articles de Wikipédia en français sur un sujet et donne les titres et les liens (source : Wikipédia). Pour « trouve un article sur… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"sujet\",\n      \"description\": \"Le sujet\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://fr.wikipedia.org/w/api.php?action=opensearch&search={sujet}&limit=5&format=json\"\n}\n"
+  },
+  {
+    "fileName": "wikipedia_resume.json",
+    "name": "wikipedia_resume",
+    "description": "Donne le résumé d'un sujet sur Wikipédia en français (personne, lieu, notion). Pour « c'est quoi… », « qui est… ».",
+    "spec": {
+      "name": "wikipedia_resume",
+      "description": "Donne le résumé d'un sujet sur Wikipédia en français (personne, lieu, notion). Pour « c'est quoi… », « qui est… ».",
+      "parameters": [
+        {
+          "name": "sujet",
+          "description": "Titre de l'article Wikipédia, par exemple Tour Eiffel",
+          "required": true
+        }
+      ],
+      "type": "http",
+      "url": "https://fr.wikipedia.org/api/rest_v1/page/summary/{sujet}",
+      "result_path": "extract"
+    },
+    "json": "{\n  \"name\": \"wikipedia_resume\",\n  \"description\": \"Donne le résumé d'un sujet sur Wikipédia en français (personne, lieu, notion). Pour « c'est quoi… », « qui est… ».\",\n  \"parameters\": [\n    {\n      \"name\": \"sujet\",\n      \"description\": \"Titre de l'article Wikipédia, par exemple Tour Eiffel\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"http\",\n  \"url\": \"https://fr.wikipedia.org/api/rest_v1/page/summary/{sujet}\",\n  \"result_path\": \"extract\"\n}\n"
+  },
+  {
+    "fileName": "youtube_recherche.json",
+    "name": "youtube_recherche",
+    "description": "Ouvre la page de résultats YouTube pour une recherche (musique, tutoriel, vidéo).",
+    "spec": {
+      "name": "youtube_recherche",
+      "description": "Ouvre la page de résultats YouTube pour une recherche (musique, tutoriel, vidéo).",
+      "parameters": [
+        {
+          "name": "requete",
+          "description": "Ce qu'il faut chercher sur YouTube",
+          "required": true
+        }
+      ],
+      "type": "open",
+      "url": "https://www.youtube.com/results?search_query={requete}"
+    },
+    "json": "{\n  \"name\": \"youtube_recherche\",\n  \"description\": \"Ouvre la page de résultats YouTube pour une recherche (musique, tutoriel, vidéo).\",\n  \"parameters\": [\n    {\n      \"name\": \"requete\",\n      \"description\": \"Ce qu'il faut chercher sur YouTube\",\n      \"required\": true\n    }\n  ],\n  \"type\": \"open\",\n  \"url\": \"https://www.youtube.com/results?search_query={requete}\"\n}\n"
+  }
+]
