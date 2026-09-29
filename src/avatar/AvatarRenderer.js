@@ -103,6 +103,8 @@ export class AvatarRenderer {
     this.lipTint = 0.7;
     this.halo = false;
     this.lips = 0;
+    this.showCircuits = true;
+    this.closeUp = false;
   }
 
   get circuits() {
@@ -294,14 +296,15 @@ export class AvatarRenderer {
     const v = avatar.pv;
     const nrm = avatar.pn;
     const mesh = this.mesh;
-    const strokePx = Math.max(1.0, r / 170);
+    const strokePx = Math.max(0.45, r / 170);
 
-    // 1. Radial aura
-    const ar = r * 1.95;
+    // 1. Radial aura (brighter on close-up miniature PiP, matching AvatarView.kt)
+    const ar = r * (this.closeUp ? 1.35 : 1.95);
     const prR = (primary >> 16) & 0xff, prG = (primary >> 8) & 0xff, prB = primary & 0xff;
     const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, ar);
-    grad.addColorStop(0, `rgba(${prR},${prG},${prB},${((34 + 66 * amp) / 255).toFixed(3)})`);
-    grad.addColorStop(0.38, `rgba(${prR},${prG},${prB},${((20 + 40 * amp) / 255).toFixed(3)})`);
+    const auraBase = this.closeUp ? 85 : 34;
+    grad.addColorStop(0, `rgba(${prR},${prG},${prB},${((auraBase + 66 * amp) / 255).toFixed(3)})`);
+    grad.addColorStop(0.42, `rgba(${prR},${prG},${prB},${(((auraBase * 0.55) + 40 * amp) / 255).toFixed(3)})`);
     grad.addColorStop(1, `rgba(${prR},${prG},${prB},0)`);
     ctx.fillStyle = grad;
     ctx.beginPath();
@@ -309,19 +312,26 @@ export class AvatarRenderer {
     ctx.fill();
 
     // 2. Multi-ring breathing halo (Léa)
-    if (this.halo) {
+    if (this.halo && !this.closeUp) {
       this.drawHalo(ctx, cx, cy, r, amp, avatar.time);
     }
 
     // 3. Drifting points of light in the dark (26 particles as in AvatarRenderer.kt)
-    for (let k = 0; k < 26; k++) {
+    const particleCount = this.closeUp ? 10 : 26;
+    for (let k = 0; k < particleCount; k++) {
       const h = (Math.imul(k, -1640531535) >>> 8) & 0xffff;
       const ang = (h % 628) / 100 + 0.05 * avatar.time * (k % 2 === 0 ? 1 : -1);
       const dist = r * (1.15 + 0.85 * ((((h / 7) | 0) % 100) / 100));
       const tw = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(avatar.time * (0.8 + (h % 5) * 0.3) + k));
       ctx.fillStyle = `rgba(${prR},${prG},${prB},${((150 * tw) / 255).toFixed(3)})`;
       ctx.beginPath();
-      ctx.arc(cx + Math.cos(ang) * dist * 0.8, cy + Math.sin(ang) * dist * 1.05, 1.2 + (h % 3), 0, Math.PI * 2);
+      ctx.arc(
+        cx + Math.cos(ang) * dist * 0.8,
+        cy + Math.sin(ang) * dist * 1.05,
+        (1.2 + (h % 3)) * Math.min(1, strokePx),
+        0,
+        Math.PI * 2
+      );
       ctx.fill();
     }
 
@@ -359,7 +369,7 @@ export class AvatarRenderer {
       else continue;
 
       const area = Math.abs((this.xs[b] - this.xs[a]) * (this.ys[c] - this.ys[a]) - (this.xs[c] - this.xs[a]) * (this.ys[b] - this.ys[a]));
-      if (area <= 0.8) continue;
+      if (area <= 1e-4) continue;
 
       if ((this.skin === 0 || (this.holo && !this.holoHair)) && mesh.faceGroup[t] > 1.5) continue;
       const fadeAvg = (fade[a] + fade[b] + fade[c]) / 3;
@@ -386,6 +396,14 @@ export class AvatarRenderer {
         if (rim > 0.01) col = mixInt(col, accent, rim);
       }
 
+      // Close-up miniature brightness lift (CLOSE_UP_PAINT from AvatarView.kt)
+      if (this.closeUp) {
+        const cr = Math.min(255, (((col >> 16) & 0xff) * 1.35 + 18) | 0);
+        const cg = Math.min(255, (((col >> 8) & 0xff) * 1.35 + 18) | 0);
+        const cb = Math.min(255, ((col & 0xff) * 1.35 + 18) | 0);
+        col = argb(255, cr, cg, cb);
+      }
+
       this.faceColor[t] = col;
       const g = mesh.faceGroup[t];
       const zBias = g > 1.5 ? 0.05 : g > 0.5 ? 0 : -1000;
@@ -398,6 +416,7 @@ export class AvatarRenderer {
     activeOrder.sort((t1, t2) => faceZ[t1] - faceZ[t2]);
 
     // 6. Draw 3D surface triangles
+    const expand = Math.min(0.55, strokePx * 0.5);
     for (let k = 0; k < count; k++) {
       const t = activeOrder[k];
       const a = f[3 * t], b = f[3 * t + 1], d = f[3 * t + 2];
@@ -408,9 +427,9 @@ export class AvatarRenderer {
 
       ctx.fillStyle = intToCss(this.faceColor[t], 1);
       ctx.beginPath();
-      const dx0 = x0 - tcx, dy0 = y0 - tcy, g0 = 0.55 / Math.max(Math.abs(dx0) + Math.abs(dy0), 0.55);
-      const dx1 = x1 - tcx, dy1 = y1 - tcy, g1 = 0.55 / Math.max(Math.abs(dx1) + Math.abs(dy1), 0.55);
-      const dx2 = x2 - tcx, dy2 = y2 - tcy, g2 = 0.55 / Math.max(Math.abs(dx2) + Math.abs(dy2), 0.55);
+      const dx0 = x0 - tcx, dy0 = y0 - tcy, g0 = expand / Math.max(Math.abs(dx0) + Math.abs(dy0), expand);
+      const dx1 = x1 - tcx, dy1 = y1 - tcy, g1 = expand / Math.max(Math.abs(dx1) + Math.abs(dy1), expand);
+      const dx2 = x2 - tcx, dy2 = y2 - tcy, g2 = expand / Math.max(Math.abs(dx2) + Math.abs(dy2), expand);
       ctx.moveTo(x0 + dx0 * g0, y0 + dy0 * g0);
       ctx.lineTo(x1 + dx1 * g1, y1 + dy1 * g1);
       ctx.lineTo(x2 + dx2 * g2, y2 + dy2 * g2);
@@ -426,11 +445,13 @@ export class AvatarRenderer {
     // 8. High-Density Poisson-Disc Polygon Web & Twinkling Nodes
     this.drawWeb(ctx, nrm, amp, primary, strokePx, avatar.time);
 
-    // 9. Electronic Circuit Tracks, Running Light Pulses & Terminal Pads (Phone Version!)
-    if (this.holo || this.skin === 0) {
-      this.drawCircuits(ctx, nrm, amp, primary, bg, strokePx, avatar.time);
-    } else if (this.androidLook && this.skin > 0) {
-      this.drawEtched(ctx, nrm, amp, strokePx, avatar.time);
+    // 9. Electronic Circuit Tracks, Running Light Pulses & Terminal Pads (optional via showCircuits)
+    if (this.showCircuits) {
+      if (this.androidLook && this.skin > 0 && !this.holo) {
+        this.drawEtched(ctx, nrm, amp, strokePx, avatar.time);
+      } else {
+        this.drawCircuits(ctx, nrm, amp, primary, bg, strokePx, avatar.time);
+      }
     }
 
     // 10. Optical-Fibre Hologram Hair or Realistic Hair Strands
@@ -557,7 +578,7 @@ export class AvatarRenderer {
       if (!arr.length) continue;
       const col = bk === 2 ? mixInt(primary, 0xffffffff, 0.55) : primary;
       ctx.fillStyle = intToCss(col, alphas[bk] * (this.holo ? 0.65 : 1.0));
-      const rad = radii[bk] * Math.max(0.8, Math.min(1.6, strokePx / 2.2));
+      const rad = radii[bk] * Math.max(0.42, Math.min(1.5, strokePx * 0.85));
       ctx.beginPath();
       for (let m = 0; m < arr.length; m++) {
         const i = arr[m];
@@ -613,7 +634,7 @@ export class AvatarRenderer {
     for (let level = 0; level < 3; level++) {
       const arr = circuitBuckets[level];
       if (!arr.length) continue;
-      ctx.lineWidth = Math.max(3.4, strokePx * (2.6 + 0.9 * level));
+      ctx.lineWidth = Math.max(1.4, strokePx * (2.6 + 0.9 * level));
       ctx.strokeStyle = intToCss(gold, haloAlphas[level]);
       ctx.beginPath();
       for (let m = 0; m < arr.length; m += 2) {
@@ -631,7 +652,7 @@ export class AvatarRenderer {
       if (!arr.length) continue;
       const kind = (bk / 3) | 0;
       const level = bk % 3;
-      ctx.lineWidth = Math.max(1.3, strokePx * (0.78 + 0.32 * level));
+      ctx.lineWidth = Math.max(0.68, strokePx * (0.78 + 0.32 * level));
       const base = kind === 1 ? DEEP_BLUE : gold;
       const hot = kind === 1 ? blueHot : goldHot;
       ctx.strokeStyle = intToCss(level === 2 ? hot : base, lineAlphas[level]);
@@ -645,8 +666,8 @@ export class AvatarRenderer {
     }
 
     // 3. Round terminal circuit pads (outer ring + inner center)
-    const outerR = Math.max(1.9, strokePx * 1.25);
-    const innerR = Math.max(0.85, strokePx * 0.52);
+    const outerR = Math.max(0.95, strokePx * 1.25);
+    const innerR = Math.max(0.42, strokePx * 0.52);
     for (let kind = 0; kind < 2; kind++) {
       const padPoints = [];
       for (let idx = 0; idx < c.pads.length; idx++) {

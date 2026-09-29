@@ -17,14 +17,20 @@ export const VISEMES = {
 };
 
 const DURATION = {
-  REST: 0.6, M: 0.85, F: 0.8, S: 0.85, T: 0.75, K: 0.8,
-  I: 1.15, E: 1.2, A: 1.35, O: 1.25, U: 1.15,
+  REST: 0.55, M: 0.78, F: 0.76, S: 0.80, T: 0.72, K: 0.76,
+  I: 1.12, E: 1.18, A: 1.32, O: 1.24, U: 1.15,
+};
+
+const TRIGRAPH = {
+  eau: 'O', oin: 'O', ain: 'E', ein: 'E', aim: 'E',
+  tch: 'S', sch: 'S', ill: 'I', gue: 'K', gui: 'I',
 };
 
 const DIGRAPH = {
-  ou: 'U', au: 'O', eu: 'O', oi: 'O', ai: 'E', ei: 'E',
-  ch: 'S', sh: 'S', ph: 'F', th: 'F', gn: 'I', qu: 'K',
-  an: 'A', en: 'A', on: 'O', in: 'E', un: 'O',
+  ou: 'U', au: 'O', eu: 'O', oe: 'O', oi: 'O', ai: 'E', ei: 'E',
+  et: 'E', er: 'E', ez: 'E', ch: 'S', sh: 'S', ph: 'F', th: 'T',
+  gn: 'I', qu: 'K', gu: 'K', an: 'A', am: 'A', en: 'A', em: 'A',
+  on: 'O', om: 'O', in: 'E', im: 'E', un: 'O', um: 'O', yn: 'E',
 };
 
 const LETTER = {
@@ -54,21 +60,45 @@ export function textToVisemes(text) {
       i++;
       continue;
     }
+    if (/\s/.test(ch)) {
+      while (i < s.length && /\s/.test(s[i])) i++;
+      // Subtle syllable transition between words for natural French rhythm
+      if (out.length > 0 && out[out.length - 1][0] !== 'REST' && out[out.length - 1][0] !== 'M') {
+        out.push(['T', 0.32]);
+      }
+      continue;
+    }
     const c1 = toLatin(ch);
     const c2 = i + 1 < s.length ? toLatin(s[i + 1]) : '';
+    const c3 = i + 2 < s.length ? toLatin(s[i + 2]) : '';
+    const three = c1 + c2 + c3;
     const two = c1 + c2;
     let v = null;
-    if (two.length === 2 && DIGRAPH[two]) {
+    if (three.length === 3 && TRIGRAPH[three]) {
+      v = TRIGRAPH[three];
+      i += 3;
+    } else if (two.length === 2 && DIGRAPH[two]) {
       v = DIGRAPH[two];
       i += 2;
     } else {
+      const nextIsBreak = i + 1 >= s.length || /[\s.,;:!?—–\-]/.test(s[i + 1]);
       i++;
       if (!c1) continue;
+      // Silent final e / s / t / d / x / z in French words
+      if (nextIsBreak && /^[estdxzp]$/.test(c1) && out.length > 0) {
+        continue;
+      }
       v = LETTER[c1[0]];
       if (!v) continue;
     }
-    if (out.length > 0 && out[out.length - 1][0] === v) continue;
+    if (out.length > 0 && out[out.length - 1][0] === v) {
+      out[out.length - 1][1] = Math.min(1.8, out[out.length - 1][1] + 0.25);
+      continue;
+    }
     out.push([v, DURATION[v] || 1.0]);
+  }
+  if (out.length === 0 || out[out.length - 1][0] !== 'REST') {
+    out.push(['REST', DURATION.REST]);
   }
   return out;
 }
@@ -584,25 +614,33 @@ export class HoloAvatar {
       }
     }
 
-    if (Math.abs(this.wide) > 0.01 && this.mouth > 0) {
-      const kk = this.wide * this.mouth;
+    if (Math.abs(this.wide) > 0.01 && (this.mouth > 0.002 || Math.abs(this.wide) > 0.15)) {
+      const active = Math.max(this.mouth, 0.28);
+      const kk = this.wide * active;
       const lx = mesh.lipCentre[0];
       const ly = mesh.lipCentre[1];
       for (let i = 0; i < n; i++) {
         const k = mesh.lips[i] * kk;
         if (k === 0) continue;
-        v[3 * i] += k * (v[3 * i] - lx) * 0.55;
-        v[3 * i + 1] += k * (v[3 * i + 1] - ly) * 0.3;
-        v[3 * i + 2] -= k * 0.055;
+        v[3 * i] += k * (v[3 * i] - lx) * 0.62;
+        v[3 * i + 1] += k * (v[3 * i + 1] - ly) * 0.28;
+        // Rounded vowels (wide < 0 => k < 0) protrude lips forward (+z), wide vowels pull corners back (-z)
+        v[3 * i + 2] -= k * 0.065;
       }
     }
 
-    if (this.mouth > 0.004) {
+    if (this.mouth > 0.003) {
       const py = JAW_PIVOT[1], pz = JAW_PIVOT[2];
+      const upperLift = this.mouth * 0.018;
+      const ly = mesh.lipCentre[1];
       for (let i = 0; i < n; i++) {
+        const lm = mesh.lipMask[i];
+        if (lm > 0.05 && v[3 * i + 1] > ly && mesh.jaw[i] < 0.35) {
+          v[3 * i + 1] += lm * upperLift * this.cornerFactor[i];
+        }
         const w = mesh.jaw[i];
         if (w === 0) continue;
-        const ang = w * this.cornerFactor[i] * (this.mouth * JAW_MAX);
+        const ang = w * this.cornerFactor[i] * (this.mouth * (JAW_MAX * 1.12));
         const ca = Math.cos(ang), sa = Math.sin(ang);
         const dy = v[3 * i + 1] - py;
         const dz = v[3 * i + 2] - pz;

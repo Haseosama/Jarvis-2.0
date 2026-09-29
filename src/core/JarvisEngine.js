@@ -8,7 +8,7 @@ import { configStore, REST_MODELS, VOICE_PROFILES, DEFAULT_TTS_MODEL } from './C
 import { dataStore } from './DataStore.js';
 import { hostBridge } from './hostBridge.js';
 import { pluginEngine } from './PluginEngine.js';
-import { textToVisemes, VISEMES, pcmVisemes } from '../avatar/Visemes.js';
+import { textToVisemes, VISEMES, pcmVisemes, VisemeStream } from '../avatar/Visemes.js';
 
 const LIVE_WS_ENDPOINT =
   'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
@@ -37,6 +37,8 @@ export class JarvisEngine {
     this.nextPlayTime = 0;
     this.liveAudioSources = [];
     this.liveVisemeQueue = [];
+    this.scheduledVisemeChunks = [];
+    this.liveVisemeStream = new VisemeStream();
     this.liveVisemeTimer = null;
     this.currentAssistantTurnId = null;
     this.currentUserTurnId = null;
@@ -192,6 +194,8 @@ export class JarvisEngine {
         if (liveReady && this.ws && this.ws.readyState === WebSocket.OPEN) {
           this.suppressNextLiveTranscript = true;
           this.currentAssistantTurnId = null;
+          this.liveVisemeStream.reset();
+          this.liveVisemeStream.feedText(cleanForSpeech);
           this.ws.send(
             JSON.stringify({
               clientContent: {
@@ -240,7 +244,7 @@ export class JarvisEngine {
         });
         const inline = res.json?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData;
         if (res.ok && inline?.data) {
-          this._playFullTtsPcm24k(inline.data, voiceName);
+          this._playFullTtsPcm24k(inline.data, voiceName, cleanForSpeech);
           return;
         }
       } catch {
@@ -250,28 +254,47 @@ export class JarvisEngine {
 
     // 3. Offline / Local PC Speech Synthesis (only when no API key or offline mode)
     this._setState('SPEAKING', `Voix hors ligne (${voiceName})...`);
-    const pairs = textToVisemes(cleanForSpeech);
+    const words = cleanForSpeech.split(/\s+/).filter(Boolean);
     const frames = [];
-    for (const [vKey, dur] of pairs) {
-      const shape = VISEMES[vKey] || VISEMES.REST;
-      const count = Math.max(1, Math.round((dur || 1) * 1.6));
-      for (let k = 0; k < count; k++) {
-        frames.push({
-          jaw: shape.open * (1 - (shape.closure || 0)),
-          open: shape.open * (1 - (shape.closure || 0)),
-          width: shape.wide,
-          wide: shape.wide,
-        });
+    const wordFrameStart = [];
+    let charPos = 0;
+
+    for (const w of words) {
+      const foundPos = cleanForSpeech.indexOf(w, charPos);
+      const startChar = foundPos >= 0 ? foundPos : charPos;
+      wordFrameStart.push({ charIndex: startChar, frameIndex: frames.length });
+      charPos = startChar + w.length;
+
+      const wPairs = textToVisemes(w);
+      for (const [vKey, dur] of wPairs) {
+        if (vKey === 'REST') continue;
+        const shape = VISEMES[vKey] || VISEMES.REST;
+        const count = Math.max(2, Math.round((dur || 1) * 3.1));
+        for (let k = 0; k < count; k++) {
+          const env = Math.sin(((k + 0.5) / count) * Math.PI);
+          const openVal = shape.open * (1 - (shape.closure || 0)) * (0.65 + 0.35 * env);
+          frames.push({
+            jaw: openVal,
+            open: openVal,
+            width: shape.wide,
+            wide: shape.wide,
+            level: shape.closure >= 0.9 ? 0.05 : Math.max(0.15, openVal),
+          });
+        }
       }
+      // Subtle syllable closure between words
+      frames.push({ jaw: 0.04, open: 0.04, width: 0, wide: 0, level: 0.06 });
     }
+    frames.push({ jaw: 0, open: 0, width: 0, wide: 0, level: 0 });
 
     let idx = 0;
-    const stepMs = Math.round(70 / Math.max(0.75, profile.rate || 1.0));
+    const effRate = Math.max(0.75, Math.min(1.45, (profile.rate || 1.0) * (cfg.speechRate || 1.0)));
+    const stepMs = Math.max(16, Math.round(24 / effRate));
     this.ttsTimer = setInterval(() => {
       if (idx < frames.length) {
         const v = frames[idx++];
         this.cb.onViseme?.(v);
-        this.cb.onAudioLevel?.(Math.min(1, v.jaw * 0.9 + 0.15));
+        this.cb.onAudioLevel?.(Math.min(1, (v.level ?? v.open) * 0.95));
       } else {
         this.stopSpeaking();
       }
@@ -283,7 +306,7 @@ export class JarvisEngine {
         const utter = new SpeechSynthesisUtterance(cleanForSpeech);
         utter.lang = 'fr-FR';
         utter.pitch = profile.pitch;
-        utter.rate = Math.max(0.75, Math.min(1.45, profile.rate * (cfg.speechRate || 1.0)));
+        utter.rate = effRate;
 
         const allVoices = window.speechSynthesis.getVoices() || [];
         const frVoices = allVoices.filter((v) => /^fr/i.test(v.lang));
@@ -297,6 +320,17 @@ export class JarvisEngine {
           utter.voice = pool[(profile.idx || 0) % pool.length];
         }
 
+        // Lock viseme cursor to OS SpeechSynthesis word boundaries for tight lip-sync
+        utter.onboundary = (ev) => {
+          if (typeof ev.charIndex === 'number' && wordFrameStart.length > 0) {
+            let best = wordFrameStart[0].frameIndex;
+            for (const wf of wordFrameStart) {
+              if (wf.charIndex <= ev.charIndex + 1) best = wf.frameIndex;
+              else break;
+            }
+            idx = best;
+          }
+        };
         utter.onend = () => this.stopSpeaking();
         utter.onerror = () => this.stopSpeaking();
         window.speechSynthesis.speak(utter);
@@ -306,9 +340,12 @@ export class JarvisEngine {
     }
   }
 
-  _playFullTtsPcm24k(b64, voiceName = 'Aoede') {
+  _playFullTtsPcm24k(b64, voiceName = 'Aoede', transcriptText = '') {
     try {
       this.audioCtx = this.audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume().catch(() => {});
+      }
       const bin = atob(b64);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -316,19 +353,12 @@ export class JarvisEngine {
       const float32 = new Float32Array(pcm16.length);
       for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768.0;
 
-      const visFrames = pcmVisemes(float32, 24000);
-      this._setState('SPEAKING', `Jarvis parle (${voiceName} • 24 kHz)...`);
+      const rawFrames = pcmVisemes(float32, 24000);
+      const stream = new VisemeStream();
+      if (transcriptText) stream.feedText(transcriptText);
+      const visFrames = transcriptText ? stream.frames(rawFrames, 0.02) : rawFrames;
 
-      let fIdx = 0;
-      this.ttsTimer = setInterval(() => {
-        if (fIdx < visFrames.length) {
-          const vf = visFrames[fIdx++];
-          this.cb.onViseme?.({ jaw: vf.open, open: vf.open, width: vf.wide, wide: vf.wide });
-          this.cb.onAudioLevel?.(Math.min(1, (vf.level || vf.open || 0.2) * 0.95));
-        } else {
-          this.stopSpeaking();
-        }
-      }, 20);
+      this._setState('SPEAKING', `Jarvis parle (${voiceName} • 24 kHz)...`);
 
       const audioBuffer = this.audioCtx.createBuffer(1, float32.length, 24000);
       audioBuffer.getChannelData(0).set(float32);
@@ -336,8 +366,26 @@ export class JarvisEngine {
       src.buffer = audioBuffer;
       src.connect(this.audioCtx.destination);
       this.activeTtsSource = src;
+      const startAt = this.audioCtx.currentTime;
+
+      this.ttsTimer = setInterval(() => {
+        if (!this.audioCtx) {
+          this.stopSpeaking();
+          return;
+        }
+        const elapsed = this.audioCtx.currentTime - startAt;
+        const fIdx = Math.floor(elapsed / 0.02);
+        if (fIdx >= 0 && fIdx < visFrames.length) {
+          const vf = visFrames[fIdx];
+          this.cb.onViseme?.({ jaw: vf.open, open: vf.open, width: vf.wide, wide: vf.wide, level: vf.level });
+          this.cb.onAudioLevel?.(Math.min(1, (vf.level || vf.open || 0) * 0.95));
+        } else if (elapsed > audioBuffer.duration + 0.05) {
+          this.stopSpeaking();
+        }
+      }, 16);
+
       src.onended = () => this.stopSpeaking();
-      src.start(0);
+      src.start(startAt);
     } catch {
       this.stopSpeaking();
     }
@@ -364,7 +412,7 @@ export class JarvisEngine {
         // ignore
       }
     }
-    this.cb.onViseme?.({ jaw: 0, width: 0, round: 0, close: 0, teeth: 0 });
+    this.cb.onViseme?.({ jaw: 0, open: 0, width: 0, wide: 0, level: 0 });
     this.cb.onAudioLevel?.(0);
     if (this.state === 'SPEAKING') {
       this._setState(this.micActive ? 'LISTENING' : 'IDLE', this.micActive ? 'À l’écoute...' : 'Prêt');
@@ -377,6 +425,8 @@ export class JarvisEngine {
       this.liveVisemeTimer = null;
     }
     this.liveVisemeQueue = [];
+    this.scheduledVisemeChunks = [];
+    this.liveVisemeStream?.reset();
     if (this.liveAudioSources && this.liveAudioSources.length > 0) {
       for (const s of this.liveAudioSources) {
         try {
@@ -657,17 +707,20 @@ export class JarvisEngine {
 
           // Output speech transcription from Gemini Live
           const outText = sc.outputTranscription?.text;
-          if (outText && !this.suppressNextLiveTranscript) {
-            if (!this.currentAssistantTurnId) {
-              this.currentAssistantTurnId = `a_live_${Date.now()}`;
+          if (outText) {
+            this.liveVisemeStream?.feedText(outText);
+            if (!this.suppressNextLiveTranscript) {
+              if (!this.currentAssistantTurnId) {
+                this.currentAssistantTurnId = `a_live_${Date.now()}`;
+              }
+              this.cb.onMessage?.({
+                id: this.currentAssistantTurnId,
+                role: 'assistant',
+                text: outText,
+                append: true,
+                timestamp: Date.now(),
+              });
             }
-            this.cb.onMessage?.({
-              id: this.currentAssistantTurnId,
-              role: 'assistant',
-              text: outText,
-              append: true,
-              timestamp: Date.now(),
-            });
           }
 
           // Incoming 24kHz PCM audio chunks
@@ -675,17 +728,20 @@ export class JarvisEngine {
           for (const p of parts) {
             if (p.inlineData?.data) {
               this._playPcm24kBase64(p.inlineData.data);
-            } else if (p.text && !outText && !this.suppressNextLiveTranscript) {
-              if (!this.currentAssistantTurnId) {
-                this.currentAssistantTurnId = `a_live_${Date.now()}`;
+            } else if (p.text) {
+              if (!outText) this.liveVisemeStream?.feedText(p.text);
+              if (!outText && !this.suppressNextLiveTranscript) {
+                if (!this.currentAssistantTurnId) {
+                  this.currentAssistantTurnId = `a_live_${Date.now()}`;
+                }
+                this.cb.onMessage?.({
+                  id: this.currentAssistantTurnId,
+                  role: 'assistant',
+                  text: p.text,
+                  append: true,
+                  timestamp: Date.now(),
+                });
               }
-              this.cb.onMessage?.({
-                id: this.currentAssistantTurnId,
-                role: 'assistant',
-                text: p.text,
-                append: true,
-                timestamp: Date.now(),
-              });
             }
           }
 
@@ -877,24 +933,60 @@ export class JarvisEngine {
       const float32 = new Float32Array(pcm16.length);
       for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768.0;
 
-      // Queue 50 FPS (20ms) F1/F2 formant viseme frames for the entire duration of the audio chunk
-      const visFrames = pcmVisemes(float32, 24000);
-      for (const vf of visFrames) {
-        this.liveVisemeQueue.push(vf);
-      }
+      // Compute 50 FPS (20ms) F1/F2 formant visemes and blend with phoneme stream
+      const rawFrames = pcmVisemes(float32, 24000);
+      const visFrames = this.liveVisemeStream ? this.liveVisemeStream.frames(rawFrames, 0.02) : rawFrames;
+
+      const audioBuffer = this.audioCtx.createBuffer(1, float32.length, 24000);
+      audioBuffer.getChannelData(0).set(float32);
+      const src = this.audioCtx.createBufferSource();
+      src.buffer = audioBuffer;
+      src.connect(this.audioCtx.destination);
+      const startAt = Math.max(this.audioCtx.currentTime, this.nextPlayTime || 0);
+      const endAt = startAt + audioBuffer.duration;
+      src.start(startAt);
+      this.nextPlayTime = endAt;
+      this.liveAudioSources.push(src);
+      src.onended = () => {
+        this.liveAudioSources = this.liveAudioSources.filter((s) => s !== src);
+      };
+
+      this.scheduledVisemeChunks = this.scheduledVisemeChunks || [];
+      this.scheduledVisemeChunks.push({ startAt, endAt, frames: visFrames });
+      this.liveVisemeQueue = this.scheduledVisemeChunks;
 
       this._setState('SPEAKING', `Gemini Live parle (${this.wsVoice || configStore.get().voiceName})...`);
 
       if (!this.liveVisemeTimer) {
         this.liveVisemeTimer = setInterval(() => {
-          if (this.liveVisemeQueue.length > 0) {
-            const vf = this.liveVisemeQueue.shift();
-            this.cb.onViseme?.({ jaw: vf.open, open: vf.open, width: vf.wide, wide: vf.wide });
-            this.cb.onAudioLevel?.(Math.min(1, (vf.level || vf.open || 0.2) * 0.95));
-          } else if (!this.audioCtx || this.audioCtx.currentTime >= (this.nextPlayTime || 0)) {
+          const now = this.audioCtx ? this.audioCtx.currentTime : 0;
+          // Prune finished chunks
+          while (
+            this.scheduledVisemeChunks.length > 0 &&
+            now > this.scheduledVisemeChunks[0].endAt + 0.02
+          ) {
+            this.scheduledVisemeChunks.shift();
+          }
+
+          const active = this.scheduledVisemeChunks[0];
+          if (active && now >= active.startAt - 0.01) {
+            const fIdx = Math.max(
+              0,
+              Math.min(active.frames.length - 1, Math.floor((now - active.startAt) / 0.02))
+            );
+            const vf = active.frames[fIdx] || { open: 0, wide: 0, level: 0 };
+            this.cb.onViseme?.({
+              jaw: vf.open,
+              open: vf.open,
+              width: vf.wide,
+              wide: vf.wide,
+              level: vf.level,
+            });
+            this.cb.onAudioLevel?.(Math.min(1, (vf.level || vf.open || 0) * 0.95));
+          } else if (this.scheduledVisemeChunks.length === 0 && (!this.audioCtx || now >= (this.nextPlayTime || 0))) {
             clearInterval(this.liveVisemeTimer);
             this.liveVisemeTimer = null;
-            this.cb.onViseme?.({ jaw: 0, width: 0, round: 0, close: 0, teeth: 0 });
+            this.cb.onViseme?.({ jaw: 0, open: 0, width: 0, wide: 0, level: 0 });
             this.cb.onAudioLevel?.(0);
             if (this.state === 'SPEAKING') {
               this._setState(
@@ -903,21 +995,8 @@ export class JarvisEngine {
               );
             }
           }
-        }, 20);
+        }, 16);
       }
-
-      const audioBuffer = this.audioCtx.createBuffer(1, float32.length, 24000);
-      audioBuffer.getChannelData(0).set(float32);
-      const src = this.audioCtx.createBufferSource();
-      src.buffer = audioBuffer;
-      src.connect(this.audioCtx.destination);
-      const startAt = Math.max(this.audioCtx.currentTime, this.nextPlayTime || 0);
-      src.start(startAt);
-      this.nextPlayTime = startAt + audioBuffer.duration;
-      this.liveAudioSources.push(src);
-      src.onended = () => {
-        this.liveAudioSources = this.liveAudioSources.filter((s) => s !== src);
-      };
     } catch {
       // ignore
     }
@@ -1025,6 +1104,15 @@ export class JarvisEngine {
     if (/(cpu|ram|m[ée]moire vive|[ée]tat du pc|processeur|syst[èe]me)/.test(q)) {
       return await this.tools.execute('system_monitor', {});
     }
+    if (/(vide la corbeille|vider la corbeille)/.test(q)) {
+      return await this.tools.execute('device_settings', { setting: 'empty_recycle_bin' });
+    }
+    if (/([ée]teins l'[ée]cran|mets l'[ée]cran en veille)/.test(q)) {
+      return await this.tools.execute('device_settings', { setting: 'display_off' });
+    }
+    if (/(mets le pc en veille|mise en veille)/.test(q)) {
+      return await this.tools.execute('device_settings', { setting: 'sleep' });
+    }
     if (/(volume|monte le son|baisse le son|coupe le son|muet|luminosit[ée]|verrouille le pc)/.test(q)) {
       if (q.includes('muet') || q.includes('coupe le son')) {
         return await this.tools.execute('device_settings', { setting: 'mute' });
@@ -1033,13 +1121,41 @@ export class JarvisEngine {
         return await this.tools.execute('device_settings', { setting: 'lock' });
       }
       const numMatch = /(\d+)/.exec(q);
-      const val = numMatch ? parseInt(numMatch[1], 10) : 60;
+      const val = numMatch ? parseInt(numMatch[1], 10) : q.includes('baisse') ? 35 : 75;
       const setting = q.includes('luminosit') ? 'brightness' : 'volume';
       return await this.tools.execute('device_settings', { setting, value: val });
     }
     if (/^(ouvre|lance|d[ée]marre)\s+/i.test(text)) {
-      const appName = text.replace(/^(ouvre|lance|d[ée]marre)\s+(l'application\s+|le\s+|la\s+)?/i, '').trim();
+      const appName = text.replace(/^(ouvre|lance|d[ée]marre)\s+(l'application\s+|le\s+dossier\s+|le\s+|la\s+|les\s+)?/i, '').trim();
       return await this.tools.execute('open_app', { app_name: appName });
+    }
+    if (/^(ferme|quitte)\s+/i.test(text)) {
+      const winName = text.replace(/^(ferme|quitte)\s+(la\s+fen[êe]tre\s+|l'application\s+|le\s+|la\s+)?/i, '').trim();
+      return await this.tools.execute('pc_control', { action: 'close_window', text: winName });
+    }
+    if (/(agrandis|plein [ée]cran|maximise)/.test(q)) {
+      const winName = text.replace(/.*(agrandis|plein [ée]cran|maximise)\s*(la\s+fen[êe]tre\s+)?/i, '').trim();
+      return await this.tools.execute('pc_control', { action: 'maximize_window', text: winName });
+    }
+    if (/(ancre|mets la fen[êe]tre|aligne).*(gauche|droite)/.test(q)) {
+      return await this.tools.execute('pc_control', {
+        action: q.includes('droite') ? 'snap_right' : 'snap_left',
+      });
+    }
+    if (/(affiche le bureau|r[ée]duis toutes les fen[êe]tres)/.test(q)) {
+      return await this.tools.execute('pc_control', { action: 'minimize_all' });
+    }
+    if (/^(tape|écris|ecris|colle)\s+/i.test(text)) {
+      const toType = text.replace(/^(tape|écris|ecris|colle)\s+/i, '');
+      return await this.tools.execute('pc_control', { action: 'paste', text: toType });
+    }
+    if (/(appuie sur|raccourci|fais\s+ctrl|fais\s+alt)/i.test(q)) {
+      const keyStr = text.replace(/^(appuie sur|raccourci|fais)\s+/i, '').trim();
+      return await this.tools.execute('pc_control', { action: 'hotkey', keys: keyStr });
+    }
+    if (/(scrolle|d[ée]file)\s+/i.test(q)) {
+      const up = /haut|monte/i.test(q);
+      return await this.tools.execute('pc_control', { action: 'scroll', delta: up ? 480 : -480 });
     }
     if (/(fen[êe]tres ouvertes|liste les fen[êe]tres)/.test(q)) {
       return await this.tools.execute('pc_control', { action: 'list_windows' });

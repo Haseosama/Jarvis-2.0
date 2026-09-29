@@ -278,13 +278,36 @@ export const hostBridge = {
     let payload = { action: s, level: value };
     if (s === 'volume') payload = { action: 'set_volume', level: Number(value ?? 60) };
     else if (s === 'mute' || s === 'unmute') payload = { action: 'volume_Step', command: 'mute' };
+    else if (s === 'volume_up') payload = { action: 'volume_Step', command: 'up' };
+    else if (s === 'volume_down') payload = { action: 'volume_Step', command: 'down' };
     else if (s === 'brightness') payload = { action: 'set_brightness', level: Number(value ?? 80) };
     else if (s.startsWith('media_')) {
       const cmd = s.replace('media_', '');
       payload = { action: 'media', command: cmd === 'play_pause' ? 'toggle' : cmd };
     } else if (s === 'lock') payload = { action: 'lock_screen' };
+    else if (s === 'display_off') payload = { action: 'display_off' };
+    else if (s === 'empty_recycle_bin') payload = { action: 'empty_recycle_bin' };
+    else if (s === 'screenshot_snip') payload = { action: 'screenshot_snip' };
     else if (s === 'sleep') payload = { action: 'power', command: 'sleep' };
-    else if (['wifi', 'bluetooth', 'display', 'sound'].includes(s)) {
+    else if (s === 'restart') payload = { action: 'power', command: 'restart' };
+    else if (s === 'shutdown') payload = { action: 'power', command: 'shutdown' };
+    else if (s === 'cancel_power') payload = { action: 'power', command: 'cancel' };
+    else if (
+      [
+        'wifi',
+        'bluetooth',
+        'display',
+        'nightlight',
+        'sound',
+        'battery',
+        'storage',
+        'update',
+        'apps',
+        'taskbar',
+        'privacy',
+        'clipboard',
+      ].includes(s)
+    ) {
       payload = { action: 'open_settings', page: s };
     }
 
@@ -306,11 +329,13 @@ export const hostBridge = {
 
   async mouseControl({ action = 'click', x = 500, y = 500, delta = -360 } = {}) {
     const mapAction =
-      action === 'right_click'
+      action === 'scroll' || action === 'mouse_scroll'
+        ? 'mouse_scroll'
+        : action === 'right_click' || action === 'mouse_right_click'
         ? 'mouse_right_click'
-        : action === 'double_click'
+        : action === 'double_click' || action === 'mouse_double_click'
         ? 'mouse_double_click'
-        : action === 'move'
+        : action === 'move' || action === 'mouse_move'
         ? 'mouse_move'
         : 'mouse_click';
     try {
@@ -328,6 +353,8 @@ export const hostBridge = {
     const payload =
       action === 'hotkey'
         ? { action: 'hotkey', keys: keys || text }
+        : action === 'paste'
+        ? { action: 'paste_text', text }
         : { action: 'type_text', text };
     try {
       if (hasElectron() && typeof window.jarvisHost.computerControl === 'function') {
@@ -340,7 +367,7 @@ export const hostBridge = {
     return { ok: true, message: `Action clavier (${action}) exécutée.` };
   },
 
-  async windowControl({ action = 'list', title = '' } = {}) {
+  async windowControl({ action = 'list', title = '', pid = null } = {}) {
     try {
       if (hasElectron() && typeof window.jarvisHost.computerControl === 'function') {
         if (action === 'list') {
@@ -351,20 +378,29 @@ export const hostBridge = {
             Id: w.Id,
             Name: w.ProcessName || w.Name || 'Processus',
             MainWindowTitle: w.MainWindowTitle || '',
+            MemoryMB: w.MemoryMB ?? null,
+            Responding: w.Responding !== false,
           }));
           return { ok: true, windows };
         }
-        if (action === 'focus') {
-          const res = await window.jarvisHost.computerControl({
-            action: 'focus_window',
-            windowTitle: title,
-          });
-          return { ok: true, message: res?.result || `Fenêtre « ${title} » activée.` };
-        }
-        if (action === 'minimize_all') {
-          const res = await window.jarvisHost.computerControl({ action: 'minimize_all' });
-          return { ok: true, message: res?.result || 'Bureau affiché.' };
-        }
+        const actionMap = {
+          focus: 'focus_window',
+          maximize: 'maximize_window',
+          minimize: 'minimize_window',
+          restore: 'restore_window',
+          snap_left: 'snap_left',
+          snap_right: 'snap_right',
+          close: 'close_window',
+          kill: 'kill_process',
+          minimize_all: 'minimize_all',
+        };
+        const mapped = actionMap[action] || action;
+        const res = await window.jarvisHost.computerControl({
+          action: mapped,
+          windowTitle: title,
+          pid,
+        });
+        return { ok: true, message: res?.result || `Action fenêtre (${action}) exécutée.` };
       }
     } catch {
       // fall through
@@ -372,10 +408,11 @@ export const hostBridge = {
     return {
       ok: true,
       windows: [
-        { Id: 101, Name: 'Jarvis 2.0', MainWindowTitle: 'JARVIS 2.0 — PC Standalone Edition' },
-        { Id: 204, Name: 'explorer', MainWindowTitle: 'Explorateur de fichiers Windows' },
+        { Id: 101, Name: 'Jarvis 2.0', MainWindowTitle: 'JARVIS 2.0 — PC Standalone Edition', MemoryMB: 148.4, Responding: true },
+        { Id: 204, Name: 'explorer', MainWindowTitle: 'Explorateur de fichiers Windows', MemoryMB: 84.2, Responding: true },
+        { Id: 312, Name: 'chrome', MainWindowTitle: 'Google Chrome', MemoryMB: 310.5, Responding: true },
       ],
-      message: action === 'focus' ? `Fenêtre « ${title} » activée.` : 'Bureau affiché.',
+      message: title ? `Action (${action}) sur « ${title} » exécutée.` : `Action bureau (${action}) exécutée.`,
     };
   },
 

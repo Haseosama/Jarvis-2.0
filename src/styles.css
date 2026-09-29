@@ -189,6 +189,7 @@ html, body, #root {
 
 .avatar-quick-group {
   display: flex;
+  align-items: center;
   gap: 6px;
   flex-wrap: wrap;
   pointer-events: auto;
@@ -197,6 +198,23 @@ html, body, #root {
   border-radius: 10px;
   border: 1px solid var(--border-cyan);
   backdrop-filter: blur(8px);
+}
+
+.avatar-poly-select {
+  background: rgba(8, 22, 42, 0.92);
+  color: var(--cyan-soft);
+  border: 1px solid var(--border-cyan);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+
+.avatar-poly-select:hover,
+.avatar-poly-select:focus {
+  border-color: var(--cyan);
 }
 
 .avatar-canvas-holder {
@@ -249,28 +267,43 @@ html, body, #root {
   position: absolute;
   bottom: 16px;
   right: 16px;
-  width: 132px;
-  height: 152px;
+  width: 156px;
+  height: 180px;
+  display: flex;
+  flex-direction: column;
   border-radius: 14px;
   overflow: hidden;
   border: 1.5px solid var(--cyan);
-  background: rgba(4, 10, 22, 0.92);
-  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.65);
+  background: radial-gradient(circle at 50% 42%, rgba(0, 212, 255, 0.16), rgba(4, 10, 22, 0.96) 72%);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.72), 0 0 16px rgba(0, 212, 255, 0.22);
   cursor: pointer;
   z-index: 15;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.mini-avatar-pip:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.8), 0 0 22px rgba(0, 212, 255, 0.4);
+}
+
+.mini-pip-canvas {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  position: relative;
 }
 
 .mini-pip-label {
-  position: absolute;
-  bottom: 5px;
-  left: 8px;
-  right: 8px;
-  text-align: center;
-  font-size: 10px;
-  background: rgba(0, 0, 0, 0.65);
-  padding: 2px 6px;
-  border-radius: 6px;
-  color: var(--cyan);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(3, 9, 18, 0.9);
+  border-top: 1px solid rgba(0, 212, 255, 0.25);
+  padding: 4px 8px;
+  color: var(--cyan-soft);
 }
 
 /* ── Space, Media, Productivity & Plugins Panels ────────────────────────── */

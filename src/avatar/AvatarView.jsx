@@ -76,6 +76,8 @@ export default function AvatarView({
   faceId = 'classic',
   skin = BLUE_HOLO_SKIN,
   lips = 0,
+  showCircuits = true,
+  polygonLevel = 'high',
   hairStyleId = 'auto',
   hairShadeId = 'natural',
   avatarMode = '3d',
@@ -83,6 +85,7 @@ export default function AvatarView({
   closeUp = false,
   size = null,
   onClick = null,
+  onPolygonCountChange = null,
   primaryHex = 0xff00d4ff,
   accentHex = 0xff5ce1e6,
   bgHex = 0xff060e14,
@@ -106,6 +109,13 @@ export default function AvatarView({
   const showFace = avatarMode !== 'reactor' && config?.avatarFace !== false;
   const skinMode = resolveSkinCode(skin, config);
   const lipTone = typeof lips === 'number' ? lips : config?.avatarLips ?? 0;
+  const circuitsEnabled =
+    showCircuits !== undefined ? Boolean(showCircuits) : config?.avatarCircuits !== false;
+  const effectivePolyLevel = closeUp
+    ? polygonLevel === 'eco'
+      ? 'eco'
+      : 'medium'
+    : polygonLevel || config?.avatarPolygonLevel || (faceSpec.subdivide ? 'high' : 'medium');
   const levelVal = Math.max(outputLevel || 0, audioLevel || 0);
 
   useEffect(() => {
@@ -126,14 +136,13 @@ export default function AvatarView({
           finalMesh = recolourHair(baseMesh, faceSpec.hairColours, targetColours);
         }
 
-        // Subdivide the Classic avatar head mesh (4x polygons with curved Phong normals)
-        if (faceSpec.subdivide) {
-          finalMesh = HeadMesh.subdivideSkin(finalMesh);
-        }
+        // Apply selected polygon level (eco / low / medium / high / ultra)
+        finalMesh = HeadMesh.applyPolygonLevel(finalMesh, effectivePolyLevel);
 
         if (cancelled) return;
         engineRef.current.renderer = new AvatarRenderer(finalMesh);
         engineRef.current.avatar = new HoloAvatar(finalMesh);
+        onPolygonCountChange?.(finalMesh.faceCount);
         setReady(true);
       } catch (err) {
         console.error('Avatar load error:', err);
@@ -143,7 +152,7 @@ export default function AvatarView({
     return () => {
       cancelled = true;
     };
-  }, [faceSpec, effectiveHairId, effectiveShadeId]);
+  }, [faceSpec, effectiveHairId, effectiveShadeId, effectivePolyLevel]);
 
   const propsRef = useRef({});
   propsRef.current = {
@@ -154,6 +163,7 @@ export default function AvatarView({
     showFace,
     skinMode,
     lipTone,
+    circuitsEnabled,
     faceSpec,
     effectiveShadeId,
     primaryHex,
@@ -192,14 +202,26 @@ export default function AvatarView({
       if (timeline) {
         const sample = timeline.sample(nowMs);
         frames = sample.frames;
-      } else if (p.viseme && (p.viseme.jaw > 0.01 || p.viseme.open > 0.01)) {
+      } else if (
+        p.viseme &&
+        (p.state === 'SPEAKING' ||
+          (p.viseme.jaw ?? 0) > 0.004 ||
+          (p.viseme.open ?? 0) > 0.004 ||
+          Math.abs(p.viseme.wide ?? p.viseme.width ?? 0) > 0.01)
+      ) {
         const openVal = p.viseme.open ?? p.viseme.jaw ?? 0;
         const wideVal = p.viseme.wide ?? p.viseme.width ?? 0;
-        frames = [{ level: Math.max(p.levelVal, openVal), open: openVal, wide: wideVal }];
+        const lvl =
+          p.viseme.level !== undefined
+            ? p.viseme.level
+            : openVal > 0.015
+            ? Math.max(p.levelVal, openVal)
+            : 0;
+        frames = [{ level: lvl, open: openVal, wide: wideVal }];
       }
 
-      const speaking = p.state === 'SPEAKING' || (frames && frames.length > 0);
-      const level = speaking ? Math.max(p.levelVal, 0.25) : p.levelVal;
+      const speaking = p.state === 'SPEAKING' || Boolean(frames && frames.some((f) => f.open > 0.01));
+      const level = speaking ? Math.max(p.levelVal, frames?.[0]?.level ?? 0.18) : p.levelVal;
 
       if (!p.showFace || !avatar || !renderer) {
         drawGlowReactor(
@@ -219,11 +241,13 @@ export default function AvatarView({
       avatar.watching = p.watching;
       avatar.step(dt, level, speaking, moodForState(p.state), frames);
 
-      const r = Math.min(w, h) * (p.closeUp ? 0.52 : 0.38);
+      const r = Math.min(w, h) * (p.closeUp ? 0.54 : 0.38);
       const cx = w / 2;
-      const cy = h * (p.closeUp ? 0.48 : 0.46);
+      const cy = h * (p.closeUp ? 0.44 : 0.46);
 
       const shade = HAIR_SHADES.find((s) => s.id === p.effectiveShadeId);
+      renderer.closeUp = Boolean(p.closeUp);
+      renderer.showCircuits = Boolean(p.circuitsEnabled);
       renderer.holo = p.skinMode >= HOLO_SKIN;
       renderer.holoHair = p.skinMode === HOLO_HAIR_SKIN;
       renderer.blueMix = p.skinMode >= BLUE_HOLO_SKIN;

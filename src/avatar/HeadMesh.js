@@ -9,6 +9,14 @@ export const HOLO_HAIR_SKIN = 6;
 export const BLUE_HOLO_SKIN = 7;
 export const DARK_BLUE_HOLO_SKIN = 8;
 
+export const POLYGON_LEVELS = [
+  { id: 'eco', label: 'Éco (~20 500 polygones)', short: 'Éco (20k)', webR0: 0.048 },
+  { id: 'low', label: 'Léger (~27 700 polygones)', short: 'Léger (28k)', webR0: 0.038 },
+  { id: 'medium', label: 'Standard (~37 160 polygones)', short: 'Standard (37k)', webR0: 0.032 },
+  { id: 'high', label: 'Haute Définition (~84 555 polygones)', short: 'Haute (85k)', webR0: 0.028 },
+  { id: 'ultra', label: 'Ultra (~148 600 polygones)', short: 'Ultra (149k)', webR0: 0.024 },
+];
+
 export const HAIR_SHADES = [
   { id: 'black', fr: 'Noir', en: 'Black', colours: { body: 0x1a1512, root: 0x0a0807, tip: 0x302620, grey: 0, greyRgb: 0x8e8b86 }, browColour: 0xff161210 },
   { id: 'dark_brown', fr: 'Brun foncé', en: 'Dark brown', colours: { body: 0x2a1c14, root: 0x120c08, tip: 0x4a3325, grey: 0, greyRgb: 0x8e8b86 }, browColour: 0xff221710 },
@@ -203,8 +211,8 @@ export class HeadMesh {
    * Quadruples the face polygon count of the Classic avatar (~16,400 skin triangles -> ~65,600 curved triangles,
    * ~86,600 total triangles) while preserving all landmark, eye, lip, and hair lock vertex indices.
    */
-  static subdivideSkin(mesh) {
-    if (mesh._subdivided) return mesh;
+  static subdivideSkin(mesh, { includeHair = false } = {}) {
+    if (mesh._subdivided && !includeHair) return mesh;
     const oldV = mesh.vertexCount;
     const oldF = mesh.faceCount;
     const v = mesh.verts;
@@ -233,11 +241,11 @@ export class HeadMesh {
     let subCount = 0;
     for (let t = 0; t < oldF; t++) {
       const a = f[3 * t], b = f[3 * t + 1], c = f[3 * t + 2];
+      const allowedGroup = includeHair ? fg[t] <= 3.5 : fg[t] <= 1.5;
+      const allowedPaint = includeHair || (paint[a] === 0 && paint[b] === 0 && paint[c] === 0);
       if (
-        fg[t] <= 1.5 &&
-        paint[a] === 0 &&
-        paint[b] === 0 &&
-        paint[c] === 0 &&
+        allowedGroup &&
+        allowedPaint &&
         (fade[a] + fade[b] + fade[c]) / 3 > 0.12
       ) {
         toSubdivide[t] = 1;
@@ -298,7 +306,7 @@ export class HeadMesh {
       newBrow.push(0.5 * (brow[lo] + brow[hi]));
       newLips.push(0.5 * (lips[lo] + lips[hi]));
       newFade.push(0.5 * (fade[lo] + fade[hi]));
-      newPaint.push(0);
+      newPaint.push(paint[lo] !== 0 ? paint[lo] : paint[hi]);
       newLid.push(0.5 * (lid[lo] + lid[hi]));
       newLipMask.push(0.5 * (lipMask[lo] + lipMask[hi]));
       newSway.push(0.5 * (sway[lo] + sway[hi]));
@@ -370,6 +378,104 @@ export class HeadMesh {
     });
     subdivided._subdivided = true;
     return subdivided;
+  }
+
+  /**
+   * Watertight vertex-clustering mesh decimation for lower polygon levels ('eco', 'low').
+   * Preserves all eyes, eyelids, lips, landmarks, and hair lock vertices 100% intact.
+   */
+  static decimateSkin(mesh, cellSize = 0.018) {
+    if (!cellSize || cellSize <= 0) return mesh;
+    const nV = mesh.vertexCount;
+    const nF = mesh.faceCount;
+    const v = mesh.verts;
+    const f = mesh.faces;
+    const fg = mesh.faceGroup;
+
+    // Pin eyes, eyelids, mouth chains, lips, landmarks, and locks so facial features stay sharp
+    const pinned = new Uint8Array(nV);
+    for (let e = 0; e < mesh.eyeFirst.length; e++) {
+      const s = mesh.eyeFirst[e], end = s + mesh.eyeCount[e];
+      for (let i = s; i < end; i++) pinned[i] = 1;
+    }
+    for (let i = 0; i < mesh.eyelidRim.length; i += 3) {
+      pinned[mesh.eyelidRim[i]] = 1;
+      pinned[mesh.eyelidRim[i + 1]] = 1;
+    }
+    for (const vi of mesh.mouthUpper) pinned[vi] = 1;
+    for (const vi of mesh.mouthLower) pinned[vi] = 1;
+    for (const ring of Object.values(mesh.landmarks || {})) {
+      for (const vi of ring) pinned[vi] = 1;
+    }
+    for (let i = 0; i < nV; i++) {
+      if (mesh.lid[i] > 0.005 || mesh.lipMask[i] > 0.08 || mesh.lips[i] > 0.08) {
+        pinned[i] = 1;
+      }
+    }
+
+    const inv = 1 / cellSize;
+    const cellMap = new Map();
+    const rep = new Int32Array(nV);
+    for (let i = 0; i < nV; i++) {
+      if (pinned[i]) {
+        rep[i] = i;
+        continue;
+      }
+      const gx = Math.floor((v[3 * i] + 2.0) * inv) & 0x3ff;
+      const gy = Math.floor((v[3 * i + 1] + 2.0) * inv) & 0x3ff;
+      const gz = Math.floor((v[3 * i + 2] + 2.0) * inv) & 0x3ff;
+      const pTag = mesh.paint[i] === 0 ? 0 : 1;
+      const key = ((gx * 1024 + gy) * 1024 + gz) * 2 + pTag;
+      const existing = cellMap.get(key);
+      if (existing !== undefined) {
+        rep[i] = existing;
+      } else {
+        cellMap.set(key, i);
+        rep[i] = i;
+      }
+    }
+
+    const outFacesTmp = [];
+    const outGroupTmp = [];
+    for (let t = 0; t < nF; t++) {
+      const a = rep[f[3 * t]];
+      const b = rep[f[3 * t + 1]];
+      const c = rep[f[3 * t + 2]];
+      if (a === b || b === c || c === a) continue;
+      outFacesTmp.push(a, b, c);
+      outGroupTmp.push(fg[t]);
+    }
+
+    const decimated = new HeadMesh({
+      ...mesh,
+      faces: new Int32Array(outFacesTmp),
+      faceGroup: new Float32Array(outGroupTmp),
+    });
+    decimated._decimated = true;
+    return decimated;
+  }
+
+  /**
+   * Applies the user-selected polygon density level ('eco' | 'low' | 'medium' | 'high' | 'ultra').
+   */
+  static applyPolygonLevel(baseMesh, level = 'high') {
+    const spec = POLYGON_LEVELS.find((p) => p.id === level) || POLYGON_LEVELS[3];
+    let result = baseMesh;
+    if (level === 'eco') {
+      result = HeadMesh.decimateSkin(baseMesh, 0.046);
+    } else if (level === 'low') {
+      result = HeadMesh.decimateSkin(baseMesh, 0.026);
+    } else if (level === 'medium') {
+      result = baseMesh;
+    } else if (level === 'ultra') {
+      result = HeadMesh.subdivideSkin(baseMesh, { includeHair: true });
+    } else {
+      // 'high' (default: 84,555 polygons on Classic)
+      result = HeadMesh.subdivideSkin(baseMesh, { includeHair: false });
+    }
+    result._polygonLevel = spec.id;
+    result._webR0 = spec.webR0;
+    return result;
   }
 }
 
@@ -830,7 +936,7 @@ export class CharacterMesh {
 // ── NetworkWeb (Port of NetworkWeb.kt — High-Density Poisson-Disc Polygon Web) ──
 
 export class NetworkWeb {
-  constructor(mesh, r0 = 0.028) {
+  constructor(mesh, r0 = mesh._webR0 || 0.028) {
     const v = mesh.verts;
     const f = mesh.faces;
     const nF = mesh.faceCount;

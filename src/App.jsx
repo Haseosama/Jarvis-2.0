@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import AvatarView from './avatar/AvatarView.jsx';
+import { POLYGON_LEVELS } from './avatar/HeadMesh.js';
 import SpaceView from './space/SpaceView.jsx';
 import MediaPlayerPanel from './video/MediaPlayerPanel.jsx';
 import ProductivityPanel from './ui/ProductivityPanel.jsx';
@@ -36,6 +37,7 @@ export default function App() {
   const [statusText, setStatusText] = useState('Prêt — Appuyez sur Ctrl+Espace ou écrivez une commande');
   const [viseme, setViseme] = useState({ jaw: 0, width: 0, round: 0, close: 0, teeth: 0 });
   const [audioLevel, setAudioLevel] = useState(0);
+  const [polygonCount, setPolygonCount] = useState(84555);
   const [messages, setMessages] = useState([
     {
       id: 'welcome',
@@ -266,30 +268,30 @@ export default function App() {
                     <button
                       className={`space-pill ${cfg.avatarSkin === 7 ? 'active' : ''}`}
                       onClick={() => configStore.update({ avatarSkin: 7 })}
-                      title="Hologramme bleu + circuits électriques (défaut téléphone)"
+                      title="Hologramme bleu (défaut téléphone)"
                     >
-                      ⚡ Holo Bleu + Circuits
+                      ⚡ Holo Bleu
                     </button>
                     <button
                       className={`space-pill ${cfg.avatarSkin === 5 ? 'active' : ''}`}
                       onClick={() => configStore.update({ avatarSkin: 5 })}
-                      title="Hologramme doré + circuits électriques"
+                      title="Hologramme doré"
                     >
-                      ✨ Holo Or + Circuits
+                      ✨ Holo Or
                     </button>
                     <button
                       className={`space-pill ${cfg.avatarSkin === 6 ? 'active' : ''}`}
                       onClick={() => configStore.update({ avatarSkin: 6 })}
-                      title="Hologramme + cheveux en fibres optiques + circuits"
+                      title="Hologramme + cheveux en fibres optiques"
                     >
                       💫 Fibres Optiques
                     </button>
                     <button
                       className={`space-pill ${cfg.avatarSkin === 0 ? 'active' : ''}`}
                       onClick={() => configStore.update({ avatarSkin: 0 })}
-                      title="Réseau polygonal lumineux + circuits électriques"
+                      title="Réseau polygonal lumineux"
                     >
-                      🕸️ Réseau Lumineux
+                      🕸️ Réseau
                     </button>
                     <button
                       className={`space-pill ${cfg.avatarSkin >= 1 && cfg.avatarSkin <= 4 ? 'active' : ''}`}
@@ -298,6 +300,29 @@ export default function App() {
                     >
                       🎨 Peau 3D
                     </button>
+                    <button
+                      className={`space-pill ${cfg.avatarCircuits !== false ? 'active' : ''}`}
+                      onClick={() =>
+                        configStore.update({ avatarCircuits: cfg.avatarCircuits === false })
+                      }
+                      title="Activer ou désactiver les circuits électriques sur le visage"
+                    >
+                      {cfg.avatarCircuits !== false ? '🔌 Circuits : ON' : '🔌 Circuits : OFF'}
+                    </button>
+                    <select
+                      className="avatar-poly-select"
+                      value={cfg.avatarPolygonLevel || 'high'}
+                      onChange={(e) =>
+                        configStore.update({ avatarPolygonLevel: e.target.value })
+                      }
+                      title="Sélecteur de densité de polygones (réduire si besoin pour économiser le PC)"
+                    >
+                      {POLYGON_LEVELS.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          🔺 {p.short}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
               </div>
@@ -310,9 +335,12 @@ export default function App() {
                   faceId={cfg.avatarFaceId}
                   skin={cfg.avatarSkin}
                   lips={cfg.avatarLips}
+                  showCircuits={cfg.avatarCircuits !== false}
+                  polygonLevel={cfg.avatarPolygonLevel || 'high'}
                   hairStyleId={cfg.avatarHair}
                   hairShadeId={cfg.avatarHairShade}
                   avatarMode={cfg.avatarMode}
+                  onPolygonCountChange={setPolygonCount}
                 />
               </div>
 
@@ -322,7 +350,9 @@ export default function App() {
                   <span>{statusText}</span>
                 </div>
                 <div className="hud-voice-badge">
-                  🎙️ Voix : <strong>{cfg.voiceName}</strong> • Ville : <strong>{cfg.userCity}</strong>
+                  🎙️ Voix : <strong>{cfg.voiceName}</strong> • 🔺{' '}
+                  <strong>{polygonCount.toLocaleString('fr-FR')}</strong> polygones • Ville :{' '}
+                  <strong>{cfg.userCity}</strong>
                 </div>
               </div>
             </div>
@@ -387,17 +417,26 @@ export default function App() {
               onClick={() => setActiveView('avatar')}
               title="Revenir à l’Avatar 3D plein écran"
             >
-              <AvatarView
-                state={aiState}
-                audioLevel={audioLevel}
-                viseme={viseme}
-                faceId={cfg.avatarFaceId}
-                skin={cfg.avatarSkin}
-                hairStyleId={cfg.avatarHair}
-                hairShadeId={cfg.avatarHairShade}
-                avatarMode={cfg.avatarMode}
-              />
-              <span className="mini-pip-label">🎭 {cfg.voiceName}</span>
+              <div className="mini-pip-canvas">
+                <AvatarView
+                  state={aiState}
+                  audioLevel={audioLevel}
+                  viseme={viseme}
+                  faceId={cfg.avatarFaceId}
+                  skin={cfg.avatarSkin}
+                  lips={cfg.avatarLips}
+                  showCircuits={cfg.avatarCircuits !== false}
+                  polygonLevel={cfg.avatarPolygonLevel || 'high'}
+                  hairStyleId={cfg.avatarHair}
+                  hairShadeId={cfg.avatarHairShade}
+                  avatarMode={cfg.avatarMode}
+                  closeUp={true}
+                />
+              </div>
+              <div className="mini-pip-label">
+                <span className={`hud-dot state-${aiState.toLowerCase()}`} />
+                <span>🎭 {cfg.voiceName}</span>
+              </div>
             </div>
           )}
         </section>

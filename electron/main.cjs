@@ -388,11 +388,48 @@ ipcMain.handle('jarvis:system-info', async () => {
   };
 });
 
-// Launch PC application or URL
+// Launch PC application, system folder, or URL
 ipcMain.handle('jarvis:open-app', async (_e, appName) => {
   const raw = String(appName || '').trim();
   if (!raw) return { ok: false, message: "Nom d'application manquant." };
   const lower = raw.toLowerCase();
+
+  // Direct URL support
+  if (/^(https?:\/\/|mailto:|steam:|spotify:|discord:|obsidian:)/i.test(raw)) {
+    await shell.openExternal(raw);
+    return { ok: true, message: `Lien ouvert : ${raw}` };
+  }
+
+  // System folders (Documents, Downloads, Desktop, Pictures, Music, Videos, Jarvis)
+  const folderMap = {
+    documents: 'documents',
+    'mes documents': 'documents',
+    telechargements: 'downloads',
+    téléchargements: 'downloads',
+    downloads: 'downloads',
+    bureau: 'desktop',
+    desktop: 'desktop',
+    images: 'pictures',
+    photos: 'pictures',
+    pictures: 'pictures',
+    musique: 'music',
+    music: 'music',
+    videos: 'videos',
+    vidéos: 'videos',
+    accueil: 'home',
+    home: 'home',
+  };
+  if (lower === 'dossier jarvis' || lower === 'jarvis') {
+    const jarvisDir = path.join(app.getPath('documents'), 'Jarvis');
+    fs.mkdirSync(jarvisDir, { recursive: true });
+    await shell.openPath(jarvisDir);
+    return { ok: true, message: `Dossier Jarvis ouvert : ${jarvisDir}` };
+  }
+  if (folderMap[lower]) {
+    const dir = app.getPath(folderMap[lower]);
+    await shell.openPath(dir);
+    return { ok: true, message: `Dossier ouvert : ${dir}` };
+  }
 
   const webFallbacks = {
     youtube: 'https://www.youtube.com',
@@ -404,6 +441,9 @@ ipcMain.handle('jarvis:open-app', async (_e, appName) => {
     chatgpt: 'https://chatgpt.com',
     github: 'https://github.com',
     maps: 'https://www.google.com/maps',
+    drive: 'https://drive.google.com',
+    calendar: 'https://calendar.google.com',
+    agenda: 'https://calendar.google.com',
   };
 
   if (process.platform === 'win32') {
@@ -422,17 +462,27 @@ ipcMain.handle('jarvis:open-app', async (_e, appName) => {
       terminal: 'wt.exe',
       powershell: 'powershell.exe',
       gestionnaire: 'taskmgr.exe',
+      'gestionnaire des tâches': 'taskmgr.exe',
       taskmgr: 'taskmgr.exe',
+      capture: 'ms-screenclip:',
+      snippingtool: 'snippingtool.exe',
       parametres: 'ms-settings:',
       réglages: 'ms-settings:',
       reglages: 'ms-settings:',
       settings: 'ms-settings:',
+      panneau: 'control.exe',
+      'panneau de configuration': 'control.exe',
+      regedit: 'regedit.exe',
+      services: 'services.msc',
+      dxdiag: 'dxdiag.exe',
+      cleanmgr: 'cleanmgr.exe',
       chrome: 'chrome',
       'google chrome': 'chrome',
       edge: 'msedge',
       'microsoft edge': 'msedge',
       firefox: 'firefox',
       brave: 'brave',
+      opera: 'opera',
       vscode: 'code',
       'visual studio code': 'code',
       code: 'code',
@@ -444,7 +494,18 @@ ipcMain.handle('jarvis:open-app', async (_e, appName) => {
       excel: 'excel',
       powerpoint: 'powerpnt',
       outlook: 'outlook',
+      teams: 'msteams:',
       vlc: 'vlc',
+      obs: 'obs64',
+      blender: 'blender',
+      gimp: 'gimp',
+      audacity: 'audacity',
+      horloge: 'ms-clock:',
+      alarme: 'ms-clock:',
+      meteo: 'bingweather:',
+      cartes: 'bingmaps:',
+      store: 'ms-windows-store:',
+      xbox: 'xbox:',
     };
     const mapped = winMap[lower] || Object.entries(winMap).find(([k]) => lower.includes(k))?.[1];
     if (mapped) {
@@ -487,7 +548,7 @@ ipcMain.handle('jarvis:open-app', async (_e, appName) => {
     return { ok: true, message: `Ouvert dans le navigateur : ${raw}` };
   }
 
-  return { ok: false, message: `No app matching '${raw}' is installed.` };
+  return { ok: false, message: `Aucune application correspondant à « ${raw} » n'a été trouvée.` };
 });
 
 // PC Device Settings (Volume, Brightness, Media keys, Settings pages, Lock, Power)
@@ -496,7 +557,6 @@ ipcMain.handle('jarvis:device-settings', async (_e, payload) => {
   if (process.platform === 'win32') {
     if (action === 'set_volume' && typeof level === 'number') {
       const target = Math.max(0, Math.min(100, Math.round(level)));
-      // Set Windows master volume using PowerShell CoreAudio COM or WScript.Shell
       const steps = Math.round(target / 2);
       const ps = `powershell -NoProfile -Command "$w = New-Object -ComObject WScript.Shell; 1..50 | ForEach-Object { $w.SendKeys([char]174) }; 1..${steps} | ForEach-Object { $w.SendKeys([char]175) }"`;
       await runCmd(ps, 6000);
@@ -531,15 +591,35 @@ ipcMain.handle('jarvis:device-settings', async (_e, payload) => {
       await runCmd('rundll32.exe user32.dll,LockWorkStation');
       return { ok: true, message: 'Session Windows verrouillée.' };
     }
+    if (action === 'display_off') {
+      await runCmd(
+        'powershell -NoProfile -Command "Add-Type -MemberDefinition \'[DllImport(\\"user32.dll\\")] public static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);\' -Name M -Namespace W; [W.M]::SendMessage(0xFFFF, 0x0112, 0xF170, 2)"',
+        4000
+      );
+      return { ok: true, message: 'Écran du PC mis en veille.' };
+    }
+    if (action === 'empty_recycle_bin') {
+      await runCmd('powershell -NoProfile -Command "Clear-RecycleBin -Force -ErrorAction SilentlyContinue"', 6000);
+      return { ok: true, message: 'Corbeille Windows vidée.' };
+    }
+    if (action === 'screenshot_snip') {
+      await shell.openExternal('ms-screenclip:');
+      return { ok: true, message: 'Outil Capture Windows lancé.' };
+    }
     if (action === 'open_settings') {
       const map = {
         wifi: 'ms-settings:network-wifi',
         bluetooth: 'ms-settings:bluetooth',
         display: 'ms-settings:display',
+        nightlight: 'ms-settings:nightlight',
         sound: 'ms-settings:sound',
         battery: 'ms-settings:batterysaver',
+        storage: 'ms-settings:storagesense',
         update: 'ms-settings:windowsupdate',
         apps: 'ms-settings:appsfeatures',
+        taskbar: 'ms-settings:taskbar',
+        privacy: 'ms-settings:privacy',
+        clipboard: 'ms-settings:clipboard',
       };
       await shell.openExternal(map[page] || 'ms-settings:');
       return { ok: true, message: `Paramètres Windows ouverts (${page || 'général'}).` };
@@ -557,6 +637,10 @@ ipcMain.handle('jarvis:device-settings', async (_e, payload) => {
         await runCmd('shutdown /s /t 5');
         return { ok: true, message: 'Arrêt du PC programmé dans 5 secondes.' };
       }
+      if (command === 'cancel') {
+        await runCmd('shutdown /a');
+        return { ok: true, message: 'Arrêt/redémarrage programmé annulé.' };
+      }
     }
   }
   return { ok: true, message: `Action système exécutée : ${action}${command ? ' (' + command + ')' : ''}.` };
@@ -564,11 +648,11 @@ ipcMain.handle('jarvis:device-settings', async (_e, payload) => {
 
 // PC Desktop / Mouse / Keyboard / Windows automation
 ipcMain.handle('jarvis:computer-control', async (_e, payload) => {
-  const { action, x, y, text, keys, windowTitle } = payload || {};
+  const { action, x, y, delta, text, keys, windowTitle, pid } = payload || {};
   if (process.platform === 'win32') {
     if (action === 'list_windows') {
       const res = await runCmd(
-        'powershell -NoProfile -Command "Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object Id, ProcessName, MainWindowTitle | ConvertTo-Json -Compress"',
+        'powershell -NoProfile -Command "Get-Process | Where-Object { $_.MainWindowTitle } | Sort-Object WorkingSet64 -Descending | Select-Object Id, ProcessName, MainWindowTitle, Responding, @{Name=\'MemoryMB\';Expression={[math]::Round($_.WorkingSet64 / 1MB, 1)}} | ConvertTo-Json -Compress"',
         5000
       );
       if (res.ok && res.stdout) {
@@ -576,21 +660,56 @@ ipcMain.handle('jarvis:computer-control', async (_e, payload) => {
       }
       return { ok: true, result: '[]' };
     }
-    if (action === 'focus_window' && windowTitle) {
-      const safe = String(windowTitle).replace(/["'`]/g, '');
-      const ps = `powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $p = Get-Process | Where-Object { $_.MainWindowTitle -like '*${safe}*' } | Select-Object -First 1; if ($p) { $ws.AppActivate($p.Id); Write-Output $p.MainWindowTitle }"`;
+    if (action === 'focus_window' && (windowTitle || pid)) {
+      const safe = String(windowTitle || '').replace(/["'`]/g, '');
+      const filter = pid ? `$_.Id -eq ${Number(pid)}` : `$_.MainWindowTitle -like '*${safe}*' -or $_.ProcessName -like '*${safe}*'`;
+      const ps = `powershell -NoProfile -Command "Add-Type -MemberDefinition '[DllImport(\\"user32.dll\\")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow); [DllImport(\\"user32.dll\\")] public static extern bool SetForegroundWindow(IntPtr hWnd);' -Name W -Namespace U; $p = Get-Process | Where-Object { ${filter} } | Select-Object -First 1; if ($p -and $p.MainWindowHandle) { [U.W]::ShowWindowAsync($p.MainWindowHandle, 9) | Out-Null; [U.W]::SetForegroundWindow($p.MainWindowHandle) | Out-Null; Write-Output $p.MainWindowTitle }"`;
       const res = await runCmd(ps, 4000);
-      return { ok: true, result: res.stdout ? `Fenêtre activée : ${res.stdout}` : `Aucune fenêtre trouvée pour « ${safe} ».` };
+      return { ok: true, result: res.stdout ? `Fenêtre au premier plan : ${res.stdout}` : `Aucune fenêtre trouvée pour « ${safe || pid} ».` };
     }
-    if (action === 'close_window' && windowTitle) {
-      const safe = String(windowTitle).replace(/["'`]/g, '');
-      const ps = `powershell -NoProfile -Command "$p = Get-Process | Where-Object { $_.MainWindowTitle -like '*${safe}*' } | Select-Object -First 1; if ($p) { $p.CloseMainWindow() | Out-Null; Write-Output $p.MainWindowTitle }"`;
+    if ((action === 'maximize_window' || action === 'minimize_window' || action === 'restore_window') && (windowTitle || pid)) {
+      const safe = String(windowTitle || '').replace(/["'`]/g, '');
+      const cmdShow = action === 'maximize_window' ? 3 : action === 'minimize_window' ? 6 : 9;
+      const filter = pid ? `$_.Id -eq ${Number(pid)}` : `$_.MainWindowTitle -like '*${safe}*' -or $_.ProcessName -like '*${safe}*'`;
+      const ps = `powershell -NoProfile -Command "Add-Type -MemberDefinition '[DllImport(\\"user32.dll\\")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow); [DllImport(\\"user32.dll\\")] public static extern bool SetForegroundWindow(IntPtr hWnd);' -Name W -Namespace U; $p = Get-Process | Where-Object { ${filter} } | Select-Object -First 1; if ($p -and $p.MainWindowHandle) { [U.W]::ShowWindowAsync($p.MainWindowHandle, ${cmdShow}) | Out-Null; if (${cmdShow} -ne 6) { [U.W]::SetForegroundWindow($p.MainWindowHandle) | Out-Null }; Write-Output $p.MainWindowTitle }"`;
       const res = await runCmd(ps, 4000);
-      return { ok: true, result: res.stdout ? `Fenêtre fermée : ${res.stdout}` : `Aucune fenêtre trouvée pour « ${safe} ».` };
+      return { ok: true, result: res.stdout ? `Action (${action}) sur : ${res.stdout}` : `Fenêtre introuvable.` };
+    }
+    if (action === 'snap_left' || action === 'snap_right') {
+      const safe = String(windowTitle || '').replace(/["'`]/g, '');
+      const rightSide = action === 'snap_right' ? '$sw / 2' : '0';
+      const filter = pid
+        ? `$p = Get-Process -Id ${Number(pid)} -ErrorAction SilentlyContinue; $h = $p.MainWindowHandle`
+        : safe
+        ? `$p = Get-Process | Where-Object { $_.MainWindowTitle -like '*${safe}*' -or $_.ProcessName -like '*${safe}*' } | Select-Object -First 1; $h = $p.MainWindowHandle`
+        : `$h = [U.S]::GetForegroundWindow()`;
+      const ps = `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; Add-Type -MemberDefinition '[DllImport(\\"user32.dll\\")] public static extern IntPtr GetForegroundWindow(); [DllImport(\\"user32.dll\\")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow); [DllImport(\\"user32.dll\\")] public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int W, int H, bool bRepaint);' -Name S -Namespace U; ${filter}; if ($h) { $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea; $sw = $wa.Width; $sh = $wa.Height; [U.S]::ShowWindowAsync($h, 9) | Out-Null; [U.S]::MoveWindow($h, [int](${rightSide}), $wa.Top, [int]($sw / 2), $sh, $true) | Out-Null; Write-Output 'OK' }"`;
+      await runCmd(ps, 4000);
+      return { ok: true, result: `Fenêtre ancrée à ${action === 'snap_right' ? 'droite' : 'gauche'} de l'écran.` };
+    }
+    if (action === 'close_window' && (windowTitle || pid)) {
+      const safe = String(windowTitle || '').replace(/["'`]/g, '');
+      const filter = pid ? `$_.Id -eq ${Number(pid)}` : `$_.MainWindowTitle -like '*${safe}*' -or $_.ProcessName -like '*${safe}*'`;
+      const ps = `powershell -NoProfile -Command "$p = Get-Process | Where-Object { ${filter} } | Select-Object -First 1; if ($p) { $p.CloseMainWindow() | Out-Null; Write-Output $p.MainWindowTitle }"`;
+      const res = await runCmd(ps, 4000);
+      return { ok: true, result: res.stdout ? `Fenêtre fermée : ${res.stdout}` : `Aucune fenêtre trouvée pour « ${safe || pid} ».` };
+    }
+    if (action === 'kill_process' && (windowTitle || pid)) {
+      const safe = String(windowTitle || '').replace(/["'`]/g, '');
+      const ps = pid
+        ? `powershell -NoProfile -Command "Stop-Process -Id ${Number(pid)} -Force -ErrorAction SilentlyContinue; Write-Output 'PID ${Number(pid)}'"`
+        : `powershell -NoProfile -Command "$p = Get-Process | Where-Object { $_.MainWindowTitle -like '*${safe}*' -or $_.ProcessName -like '*${safe}*' } | Select-Object -First 1; if ($p) { Stop-Process -Id $p.Id -Force; Write-Output $p.ProcessName }"`;
+      const res = await runCmd(ps, 4000);
+      return { ok: true, result: res.stdout ? `Processus terminé : ${res.stdout}` : `Processus introuvable.` };
     }
     if (action === 'minimize_all' || action === 'show_desktop') {
       await runCmd('powershell -NoProfile -Command "(New-Object -ComObject Shell.Application).ToggleDesktop()"', 3000);
       return { ok: true, result: 'Bureau affiché (fenêtres basculées).' };
+    }
+    if (action === 'paste_text' && text) {
+      clipboard.writeText(String(text));
+      await runCmd('powershell -NoProfile -Command "(New-Object -ComObject WScript.Shell).SendKeys(\'^v\')"', 3000);
+      return { ok: true, result: `Texte collé instantanément (${text.length} caractères).` };
     }
     if (action === 'type_text' && text) {
       const escaped = String(text).replace(/[+^%~(){}[\]]/g, '{$&}').replace(/"/g, '""');
@@ -598,18 +717,50 @@ ipcMain.handle('jarvis:computer-control', async (_e, payload) => {
       return { ok: true, result: `Texte saisi au clavier (${text.length} caractères).` };
     }
     if (action === 'hotkey' && keys) {
-      const mapSendKeys = String(keys)
-        .toLowerCase()
+      const lowerKey = String(keys).toLowerCase().trim();
+      if (lowerKey === 'win+d') {
+        await runCmd('powershell -NoProfile -Command "(New-Object -ComObject Shell.Application).ToggleDesktop()"', 3000);
+        return { ok: true, result: 'Raccourci Win+D exécuté (Bureau).' };
+      }
+      if (lowerKey === 'win+e') {
+        await runCmd('explorer.exe');
+        return { ok: true, result: 'Raccourci Win+E exécuté (Explorateur).' };
+      }
+      if (lowerKey === 'win+shift+s') {
+        await shell.openExternal('ms-screenclip:');
+        return { ok: true, result: 'Outil Capture Windows lancé.' };
+      }
+      if (lowerKey === 'ctrl+shift+esc') {
+        await runCmd('start "" taskmgr.exe');
+        return { ok: true, result: 'Gestionnaire des tâches ouvert.' };
+      }
+      const mapSendKeys = lowerKey
         .replace(/ctrl\+/g, '^')
         .replace(/alt\+/g, '%')
         .replace(/shift\+/g, '+')
-        .replace(/enter/g, '{ENTER}')
-        .replace(/tab/g, '{TAB}')
-        .replace(/esc/g, '{ESC}')
-        .replace(/backspace/g, '{BS}')
-        .replace(/delete/g, '{DEL}');
+        .replace(/\benter\b|\bentrée\b|\bentree\b/g, '{ENTER}')
+        .replace(/\btab\b/g, '{TAB}')
+        .replace(/\besc\b|\béchap\b|\bechap\b/g, '{ESC}')
+        .replace(/\bspace\b|\bespace\b/g, ' ')
+        .replace(/\bbackspace\b/g, '{BS}')
+        .replace(/\bdelete\b|\bsuppr\b/g, '{DEL}')
+        .replace(/\bup\b|\bhaut\b/g, '{UP}')
+        .replace(/\bdown\b|\bbas\b/g, '{DOWN}')
+        .replace(/\bleft\b|\bgauche\b/g, '{LEFT}')
+        .replace(/\bright\b|\bdroite\b/g, '{RIGHT}')
+        .replace(/\bpageup\b/g, '{PGUP}')
+        .replace(/\bpagedown\b/g, '{PGDN}')
+        .replace(/\bhome\b/g, '{HOME}')
+        .replace(/\bend\b/g, '{END}')
+        .replace(/\bf(\d{1,2})\b/g, '{F$1}');
       await runCmd(`powershell -NoProfile -Command "(New-Object -ComObject WScript.Shell).SendKeys('${mapSendKeys}')"`, 4000);
       return { ok: true, result: `Raccourci clavier envoyé : ${keys}` };
+    }
+    if (action === 'mouse_scroll') {
+      const wheelDelta = Math.round(Number(delta ?? -360));
+      const ps = `powershell -NoProfile -Command "Add-Type -MemberDefinition '[DllImport(\\"user32.dll\\")] public static extern void mouse_event(int f, int dx, int dy, int d, int i);' -Name U -Namespace W; [W.U]::mouse_event(0x0800, 0, 0, ${wheelDelta}, 0)"`;
+      await runCmd(ps, 3000);
+      return { ok: true, result: `Défilement souris (${wheelDelta > 0 ? 'haut' : 'bas'}) effectué.` };
     }
     if ((action === 'mouse_move' || action === 'mouse_click' || action === 'mouse_double_click' || action === 'mouse_right_click') && x != null && y != null) {
       const ix = Math.round(Number(x));

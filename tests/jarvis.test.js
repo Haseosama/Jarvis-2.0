@@ -8,6 +8,7 @@ import {
   CharacterMesh,
   HAIR_SHADES,
   BUILT_IN_FACES,
+  POLYGON_LEVELS,
   CircuitTraces,
   NetworkWeb,
   recolourHair,
@@ -153,15 +154,25 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
 
     const classicAb = readArrayBuffer('avatar/head_mesh.bin');
     const baseClassic = HeadMesh.parse(classicAb);
-    const subClassic = HeadMesh.subdivideSkin(baseClassic);
-    assert.ok(subClassic.faceCount > 80000, `Expected >80,000 polygons on subdivided Classic, got ${subClassic.faceCount}`);
+    const ecoClassic = HeadMesh.applyPolygonLevel(baseClassic, 'eco');
+    const lowClassic = HeadMesh.applyPolygonLevel(baseClassic, 'low');
+    const medClassic = HeadMesh.applyPolygonLevel(baseClassic, 'medium');
+    const highClassic = HeadMesh.applyPolygonLevel(baseClassic, 'high');
+    const ultraClassic = HeadMesh.applyPolygonLevel(baseClassic, 'ultra');
 
-    const circuits = new CircuitTraces(subClassic);
+    assert.equal(POLYGON_LEVELS.length, 5);
+    assert.ok(ecoClassic.faceCount < lowClassic.faceCount, 'eco < low polygons');
+    assert.ok(lowClassic.faceCount < medClassic.faceCount, 'low < medium polygons');
+    assert.ok(medClassic.faceCount < highClassic.faceCount, 'medium < high polygons');
+    assert.ok(highClassic.faceCount > 80000, `Expected >80,000 polygons on high Classic, got ${highClassic.faceCount}`);
+    assert.ok(ultraClassic.faceCount > 140000, `Expected >140,000 polygons on ultra Classic, got ${ultraClassic.faceCount}`);
+
+    const circuits = new CircuitTraces(highClassic);
     assert.ok(circuits.trackCount > 50, `Expected >50 circuit tracks, got ${circuits.trackCount}`);
     assert.ok(circuits.segments.length > 500, 'Expected >500 circuit segment endpoints');
     assert.ok(circuits.pads.length > 100, 'Expected >100 circuit pads');
 
-    const web = new NetworkWeb(subClassic);
+    const web = new NetworkWeb(highClassic);
     assert.ok(web.count > 5000, `Expected >5,000 polygon web nodes, got ${web.count}`);
     assert.ok(web.edges.length > 20000, 'Expected >20,000 polygon web edge endpoints');
 
@@ -172,9 +183,17 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
       assert.ok(prof.gender === 'female' || prof.gender === 'male');
     }
 
-    configStore.update({ avatarFaceId: 'classic', avatarSkin: 7, voiceName: 'Fenrir' });
+    configStore.update({
+      avatarFaceId: 'classic',
+      avatarSkin: 7,
+      avatarCircuits: false,
+      avatarPolygonLevel: 'low',
+      voiceName: 'Fenrir',
+    });
     assert.equal(configStore.get().avatarFaceId, 'classic');
     assert.equal(configStore.get().avatarSkin, 7);
+    assert.equal(configStore.get().avatarCircuits, false);
+    assert.equal(configStore.get().avatarPolygonLevel, 'low');
     assert.equal(configStore.get().voiceName, 'Fenrir');
   });
 });

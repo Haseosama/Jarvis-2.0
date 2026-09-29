@@ -6,7 +6,7 @@ import {
   LIVE_MODELS,
   REST_MODELS,
 } from '../core/ConfigStore.js';
-import { BUILT_IN_FACES, HAIR_SHADES } from '../avatar/HeadMesh.js';
+import { BUILT_IN_FACES, HAIR_SHADES, POLYGON_LEVELS } from '../avatar/HeadMesh.js';
 
 export default function SettingsModal({ onClose, onTestVoice }) {
   const [cfg, setCfg] = useState(configStore.get());
@@ -98,13 +98,13 @@ export default function SettingsModal({ onClose, onTestVoice }) {
                     ))}
                   </div>
 
-                  <h4>Peau & Circuits Électriques (comme sur la version téléphone)</h4>
+                  <h4>Peau & Hologramme (comme sur la version téléphone)</h4>
                   <div className="settings-chip-row">
                     {[
-                      { v: 7, label: '⚡ Hologramme bleu (Circuits Or & Bleu)' },
-                      { v: 5, label: '✨ Hologramme (Circuits Or)' },
+                      { v: 7, label: '⚡ Hologramme bleu' },
+                      { v: 5, label: '✨ Hologramme doré' },
                       { v: 6, label: '💫 Hologramme + cheveux fibres optiques' },
-                      { v: 0, label: '🕸️ Réseau lumineux + circuits' },
+                      { v: 0, label: '🕸️ Réseau lumineux' },
                       { v: 1, label: '🧑 Peau claire' },
                       { v: 2, label: '🧑 Peau mate' },
                       { v: 3, label: '🧑 Peau bronzée' },
@@ -116,6 +116,35 @@ export default function SettingsModal({ onClose, onTestVoice }) {
                         onClick={() => update({ avatarSkin: s.v })}
                       >
                         {s.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <h4>Circuits Électriques sur le Visage</h4>
+                  <div className="settings-chip-row">
+                    <button
+                      className={`space-pill ${cfg.avatarCircuits !== false ? 'active' : ''}`}
+                      onClick={() => update({ avatarCircuits: true })}
+                    >
+                      🔌 Avec circuits électriques (Or & Bleu)
+                    </button>
+                    <button
+                      className={`space-pill ${cfg.avatarCircuits === false ? 'active' : ''}`}
+                      onClick={() => update({ avatarCircuits: false })}
+                    >
+                      🚫 Sans circuits électriques
+                    </button>
+                  </div>
+
+                  <h4>Sélecteur de Polygones (Densité 3D & Performance PC)</h4>
+                  <div className="settings-chip-row">
+                    {POLYGON_LEVELS.map((p) => (
+                      <button
+                        key={p.id}
+                        className={`space-pill ${(cfg.avatarPolygonLevel || 'high') === p.id ? 'active' : ''}`}
+                        onClick={() => update({ avatarPolygonLevel: p.id })}
+                      >
+                        🔺 {p.label}
                       </button>
                     ))}
                   </div>

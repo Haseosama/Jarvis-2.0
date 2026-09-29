@@ -120,19 +120,21 @@ export class ToolRegistry {
     // 4. PC Mouse / Keyboard / Window Control (PC equivalent of ScreenTools.kt)
     this.register({
       name: 'pc_control',
-      description: 'Contrôler la souris, le clavier et les fenêtres du PC : action = click, double_click, right_click, move, scroll, type (saisir du texte au clavier), hotkey (ex: ctrl+c, alt+tab, win+d, enter), list_windows (lister les fenêtres ouvertes), focus_window, minimize_all.',
+      description:
+        'Contrôler la souris, le clavier et les fenêtres du PC : action = click, double_click, right_click, move, scroll, type, paste (coller du texte avec accents instantanément), hotkey (ex: ctrl+c, ctrl+v, ctrl+z, alt+tab, alt+f4, win+d, win+e, enter, esc, space), list_windows, focus_window, maximize_window, minimize_window, restore_window, snap_left, snap_right, close_window, kill_process, minimize_all.',
       parameters: {
         type: 'OBJECT',
         properties: {
           action: {
             type: 'STRING',
-            description: 'click, double_click, right_click, move, scroll, type, hotkey, list_windows, focus_window, minimize_all',
+            description:
+              'click, double_click, right_click, move, scroll, type, paste, hotkey, list_windows, focus_window, maximize_window, minimize_window, restore_window, snap_left, snap_right, close_window, kill_process, minimize_all',
           },
           x: { type: 'NUMBER', description: 'Coordonnée X à l’écran (pour click/move).' },
           y: { type: 'NUMBER', description: 'Coordonnée Y à l’écran (pour click/move).' },
-          text: { type: 'STRING', description: 'Texte à taper (pour type) ou titre de fenêtre (pour focus_window).' },
+          text: { type: 'STRING', description: 'Texte à taper/coller ou titre/nom de la fenêtre cible.' },
           keys: { type: 'STRING', description: 'Raccourci clavier (ex: ctrl+c, alt+tab, enter, escape).' },
-          delta: { type: 'NUMBER', description: 'Amplitude de défilement (pour scroll).' },
+          delta: { type: 'NUMBER', description: 'Amplitude de défilement (pour scroll, positif=haut, négatif=bas).' },
         },
         required: ['action'],
       },
@@ -143,11 +145,11 @@ export class ToolRegistry {
             action: act,
             x: args.x,
             y: args.y,
-            delta: args.delta || -360,
+            delta: args.delta ?? -360,
           });
           return r.message || `Action souris ${act} effectuée.`;
         }
-        if (act === 'type' || act === 'hotkey') {
+        if (act === 'type' || act === 'paste' || act === 'hotkey') {
           const r = await hostBridge.keyboardControl({
             action: act,
             text: args.text,
@@ -161,12 +163,41 @@ export class ToolRegistry {
           if (!wins.length) return 'Aucune fenêtre active détectée.';
           return (
             'Fenêtres ouvertes sur le PC :\n' +
-            wins.map((w) => `• ${w.Name} : ${w.MainWindowTitle}`).join('\n')
+            wins
+              .map(
+                (w) =>
+                  `• ${w.Name}${w.MemoryMB ? ` (${w.MemoryMB} Mo)` : ''} : ${w.MainWindowTitle}`
+              )
+              .join('\n')
           );
         }
         if (act === 'focus_window') {
           const r = await hostBridge.windowControl({ action: 'focus', title: args.text });
           return r.message || `Fenêtre « ${args.text} » activée.`;
+        }
+        if (act === 'maximize_window' || act === 'maximize') {
+          const r = await hostBridge.windowControl({ action: 'maximize', title: args.text });
+          return r.message || `Fenêtre « ${args.text} » agrandie.`;
+        }
+        if (act === 'minimize_window' || act === 'minimize') {
+          const r = await hostBridge.windowControl({ action: 'minimize', title: args.text });
+          return r.message || `Fenêtre « ${args.text} » réduite.`;
+        }
+        if (act === 'restore_window' || act === 'restore') {
+          const r = await hostBridge.windowControl({ action: 'restore', title: args.text });
+          return r.message || `Fenêtre « ${args.text} » restaurée.`;
+        }
+        if (act === 'snap_left' || act === 'snap_right') {
+          const r = await hostBridge.windowControl({ action: act, title: args.text });
+          return r.message || `Fenêtre ancrée (${act}).`;
+        }
+        if (act === 'close_window' || act === 'close') {
+          const r = await hostBridge.windowControl({ action: 'close', title: args.text });
+          return r.message || `Fenêtre « ${args.text} » fermée.`;
+        }
+        if (act === 'kill_process' || act === 'kill') {
+          const r = await hostBridge.windowControl({ action: 'kill', title: args.text });
+          return r.message || `Processus « ${args.text} » arrêté.`;
         }
         if (act === 'minimize_all') {
           const r = await hostBridge.windowControl({ action: 'minimize_all' });

@@ -138,7 +138,9 @@ const DEFAULT_CONFIG = {
   // Avatar
   avatarMode: '3d', // '3d' | 'reactor'
   avatarFaceId: 'classic', // 'classic' | 'lea' | 'marc'
-  avatarSkin: 7, // 7 = Hologramme bleu + circuits, 5 = Hologramme or + circuits, 6 = Hologramme + fibres, 0 = Réseau lumineux, 1..4 = Peau
+  avatarSkin: 7, // 7 = Hologramme bleu, 5 = Hologramme or, 6 = Hologramme + fibres, 0 = Réseau lumineux, 1..4 = Peau
+  avatarCircuits: true, // true = afficher les circuits électriques, false = sans circuits
+  avatarPolygonLevel: 'high', // 'eco' | 'low' | 'medium' | 'high' | 'ultra'
   avatarLips: 0, // 0 = Naturelles, 1 = Rose, 2 = Rouge, 3 = Prune, 4 = Corail
   avatarHair: 'auto', // 'auto' | 'none' | style id
   avatarHairShade: 'natural',
