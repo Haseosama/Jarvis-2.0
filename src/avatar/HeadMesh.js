@@ -92,6 +92,38 @@ export class HeadMesh {
     this.edgeCount = (this.edges.length / 2) | 0;
   }
 
+  /** Apply a restrained lower-face sculpt to Classic: a cleaner jaw taper and less chin fullness. */
+  static refineClassicFace(mesh) {
+    const verts = new Float32Array(mesh.verts);
+    const eyeCentre = mesh.eyeCentre;
+    const centreX = eyeCentre?.length >= 6 ? 0.5 * (eyeCentre[0] + eyeCentre[3]) : 0;
+    const headVertices = Math.min(mesh.nHead || mesh.vertexCount, mesh.vertexCount);
+
+    for (let i = 0; i < headVertices; i++) {
+      const x = mesh.verts[3 * i];
+      const y = mesh.verts[3 * i + 1];
+      const z = mesh.verts[3 * i + 2];
+      const jaw = mesh.jaw?.[i] || 0;
+      if (mesh.lipMask?.[i] > 0.05) continue;
+
+      const front = smooth(-0.08, 0.24, z);
+      if (front <= 0) continue;
+      const cheekWeight = smooth(-0.48, -0.08, y) * (1 - smooth(0.10, 0.34, y)) * front;
+      const chinWeight = jaw < 0.12
+        ? 0
+        : smooth(-0.92, -0.72, y) * (1 - smooth(-0.62, -0.49, y)) * front * jaw;
+      const taper = 0.025 * cheekWeight + 0.060 * chinWeight;
+      if (taper <= 0 && chinWeight <= 0) continue;
+
+      verts[3 * i] = centreX + (x - centreX) * (1 - taper);
+      // Lift and gently flatten only the front underside of the chin; the mouth landmarks stay in place.
+      verts[3 * i + 1] = y + 0.028 * chinWeight;
+      verts[3 * i + 2] = z - 0.072 * chinWeight;
+    }
+
+    return new HeadMesh({ ...mesh, verts });
+  }
+
   static parse(arrayBuffer) {
     const dv = new DataView(arrayBuffer);
     const magic = String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3));

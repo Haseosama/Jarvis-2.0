@@ -127,7 +127,9 @@ export default function AvatarView({
         const baseMesh = await loadHeadMesh(faceSpec.asset);
         const shade = HAIR_SHADES.find((s) => s.id === effectiveShadeId);
         const targetColours = shade ? shade.colours : faceSpec.hairColours;
-        let finalMesh = baseMesh;
+        let finalMesh = faceSpec.id === 'classic'
+          ? HeadMesh.refineClassicFace(baseMesh)
+          : baseMesh;
 
         if (effectiveHairId) {
           const style = await loadHairStyle(effectiveHairId);

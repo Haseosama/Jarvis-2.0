@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import packageJson from '../package.json';
 import AvatarView from './avatar/AvatarView.jsx';
 import { POLYGON_LEVELS } from './avatar/HeadMesh.js';
@@ -12,6 +13,21 @@ import { configStore } from './core/ConfigStore.js';
 import { ToolRegistry } from './actions/ToolRegistry.js';
 import { JarvisEngine } from './core/JarvisEngine.js';
 import { hostBridge } from './core/hostBridge.js';
+import { clampMiniAvatarPosition } from './ui/miniAvatarPosition.js';
+
+const MINI_AVATAR_POSITION_KEY = 'jarvis.miniAvatarPosition';
+
+function readMiniAvatarPosition() {
+  try {
+    if (typeof window === 'undefined') return null;
+    const saved = JSON.parse(window.localStorage.getItem(MINI_AVATAR_POSITION_KEY) || 'null');
+    return Number.isFinite(saved?.left) && Number.isFinite(saved?.top)
+      ? { left: saved.left, top: saved.top }
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 const QUICK_COMMANDS = [
   { label: '📋 Briefing du jour', cmd: 'Fais-moi le briefing du jour' },
@@ -32,6 +48,8 @@ export default function App() {
     observer: { latDeg: 44.8378, lonDeg: -0.5792, label: 'Bordeaux' },
   });
   const [mediaState, setMediaState] = useState(null);
+  const [miniAvatarPosition, setMiniAvatarPosition] = useState(readMiniAvatarPosition);
+  const [miniAvatarDragging, setMiniAvatarDragging] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
   const [aiState, setAiState] = useState('IDLE');
@@ -57,6 +75,96 @@ export default function App() {
   const engineRef = useRef(null);
   const toolsRef = useRef(null);
   const chatEndRef = useRef(null);
+  const miniAvatarRef = useRef(null);
+  const miniAvatarDragRef = useRef(null);
+  const miniAvatarClickSuppressedRef = useRef(false);
+
+  const clampMiniAvatar = (left, top, element = miniAvatarRef.current) => {
+    const width = element?.offsetWidth || 156;
+    const height = element?.offsetHeight || 180;
+    return clampMiniAvatarPosition(left, top, width, height, window.innerWidth, window.innerHeight);
+  };
+
+  const onMiniAvatarPointerDown = (event) => {
+    if (event.button !== 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    miniAvatarDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startLeft: rect.left,
+      startTop: rect.top,
+      moved: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setMiniAvatarDragging(true);
+  };
+
+  const onMiniAvatarPointerMove = (event) => {
+    const drag = miniAvatarDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+    drag.moved = true;
+    event.preventDefault();
+    setMiniAvatarPosition(clampMiniAvatar(drag.startLeft + dx, drag.startTop + dy));
+  };
+
+  const finishMiniAvatarDrag = (event, cancelled = false) => {
+    const drag = miniAvatarDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    miniAvatarDragRef.current = null;
+    setMiniAvatarDragging(false);
+    if (drag.moved && !cancelled) {
+      miniAvatarClickSuppressedRef.current = true;
+      window.setTimeout(() => { miniAvatarClickSuppressedRef.current = false; }, 0);
+    }
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const onMiniAvatarKeyDown = (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      setActiveView('avatar');
+      return;
+    }
+    const steps = { ArrowLeft: [-16, 0], ArrowRight: [16, 0], ArrowUp: [0, -16], ArrowDown: [0, 16] };
+    const step = steps[event.key];
+    if (!step || !miniAvatarRef.current) return;
+    event.preventDefault();
+    const rect = miniAvatarRef.current.getBoundingClientRect();
+    setMiniAvatarPosition(clampMiniAvatar(rect.left + step[0], rect.top + step[1]));
+  };
+
+  useEffect(() => {
+    if (!miniAvatarPosition) return;
+    try {
+      window.localStorage.setItem(MINI_AVATAR_POSITION_KEY, JSON.stringify(miniAvatarPosition));
+    } catch { /* Storage can be disabled in private browser contexts. */ }
+  }, [miniAvatarPosition]);
+
+  useEffect(() => {
+    if (activeView === 'avatar' || !miniAvatarPosition || !miniAvatarRef.current) return;
+    const rect = miniAvatarRef.current.getBoundingClientRect();
+    const clamped = clampMiniAvatar(rect.left, rect.top);
+    if (clamped.left !== miniAvatarPosition.left || clamped.top !== miniAvatarPosition.top) {
+      setMiniAvatarPosition(clamped);
+    }
+  }, [activeView]);
+
+  useEffect(() => {
+    const clampOnResize = () => {
+      if (!miniAvatarRef.current) return;
+      setMiniAvatarPosition((position) =>
+        position ? clampMiniAvatar(position.left, position.top) : position
+      );
+    };
+    window.addEventListener('resize', clampOnResize);
+    return () => window.removeEventListener('resize', clampOnResize);
+  }, []);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -413,11 +521,32 @@ export default function App() {
           )}
 
           {/* Persistent Mini Avatar PiP when viewing Map / Media / Productivity / PC / Plugins */}
-          {activeView !== 'avatar' && (
+          {activeView !== 'avatar' && createPortal(
             <div
-              className="mini-avatar-pip"
-              onClick={() => setActiveView('avatar')}
-              title="Revenir à l’Avatar 3D plein écran"
+              ref={miniAvatarRef}
+              className={`mini-avatar-pip${miniAvatarDragging ? ' is-dragging' : ''}`}
+              style={miniAvatarPosition ? {
+                left: `${miniAvatarPosition.left}px`,
+                top: `${miniAvatarPosition.top}px`,
+                right: 'auto',
+                bottom: 'auto',
+              } : undefined}
+              role="button"
+              tabIndex={0}
+              aria-label="Avatar miniature. Faites-le glisser pour le déplacer, ou appuyez sur Entrée pour l’agrandir."
+              onPointerDown={onMiniAvatarPointerDown}
+              onPointerMove={onMiniAvatarPointerMove}
+              onPointerUp={(event) => finishMiniAvatarDrag(event)}
+              onPointerCancel={(event) => finishMiniAvatarDrag(event, true)}
+              onKeyDown={onMiniAvatarKeyDown}
+              onClick={() => {
+                if (miniAvatarClickSuppressedRef.current) {
+                  miniAvatarClickSuppressedRef.current = false;
+                  return;
+                }
+                setActiveView('avatar');
+              }}
+              title="Faire glisser pour déplacer · Cliquer pour revenir à l’Avatar 3D"
             >
               <div className="mini-pip-canvas">
                 <AvatarView
@@ -436,10 +565,12 @@ export default function App() {
                 />
               </div>
               <div className="mini-pip-label">
+                <span className="mini-pip-grip" aria-hidden="true">⠿</span>
                 <span className={`hud-dot state-${aiState.toLowerCase()}`} />
                 <span>🎭 {cfg.voiceName}</span>
               </div>
-            </div>
+            </div>,
+            document.body
           )}
         </section>
 

@@ -91,6 +91,7 @@ jobs:
           - Avatar sans cheveux : suppression des résidus de peinture capillaire sur le crâne, en conservant les détails du visage.
           - Voûte céleste : position géographique actuelle demandée à l’ouverture et centrage local de la carte, avec commande pour actualiser la position.
           - Avatar 3D : surfaces et mèches capillaires supprimées (y compris fibres optiques et peau 3D); points bleus isolés retirés des hologrammes bleu/or/fibres; iris du Classique naturalisé avec la palette de Léa et ligne des yeux recentrée.
+          - Classique : mâchoire légèrement affinée et volume du double menton réduit. Miniature PiP déplaçable dans toute la fenêtre, avec position mémorisée.
 
           Adaptation complète sur PC (Windows x64) de **Jarvis-Android v0.9.53**, fonctionnant de manière 100% autonome sans serveur backend externe.
 

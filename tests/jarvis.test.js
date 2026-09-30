@@ -32,6 +32,7 @@ import { PluginEngine } from '../src/core/PluginEngine.js';
 import { ToolRegistry } from '../src/actions/ToolRegistry.js';
 import { normalizeAircraft, haversineDistanceKm } from '../src/space/TrackingService.js';
 import { configStore, ALL_VOICES, VOICE_PROFILES, normalizeFaceId } from '../src/core/ConfigStore.js';
+import { clampMiniAvatarPosition } from '../src/ui/miniAvatarPosition.js';
 
 const ASSETS_DIR = path.resolve(process.cwd(), 'public/assets');
 
@@ -53,6 +54,52 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
       holo.step(0.016, 0.65, true, 'IDLE', [{ level: 0.7, open: 0.8, wide: 0.2 }]);
       assert.ok(holo.mouth > 0, 'HoloAvatar mouth > 0 when speaking');
     }
+  });
+
+  it('refines only the Classic lower face to taper the jaw and reduce chin fullness', () => {
+    const mesh = HeadMesh.parse(readArrayBuffer('avatar/head_mesh.bin'));
+    const refined = HeadMesh.refineClassicFace(mesh);
+    const centerX = 0.5 * (mesh.eyeCentre[0] + mesh.eyeCentre[3]);
+    const chinVertices = [];
+    for (let i = 0; i < mesh.nHead; i++) {
+      const x = mesh.verts[3 * i];
+      const y = mesh.verts[3 * i + 1];
+      const z = mesh.verts[3 * i + 2];
+      if (y > -0.85 && y < -0.62 && Math.abs(x - centerX) < 0.28 && z > 0.2 && mesh.jaw[i] > 0.3 && mesh.lipMask[i] <= 0.05) {
+        chinVertices.push(i);
+      }
+    }
+    assert.ok(chinVertices.length > 10, 'the chin test region contains enough front-facing jaw vertices');
+    const averageDistanceFromCenter = (verts) =>
+      chinVertices.reduce((sum, i) => sum + Math.abs(verts[3 * i] - centerX), 0) / chinVertices.length;
+    const beforeWidth = averageDistanceFromCenter(mesh.verts);
+    const afterWidth = averageDistanceFromCenter(refined.verts);
+    const beforeDepth = chinVertices.reduce((sum, i) => sum + mesh.verts[3 * i + 2], 0) / chinVertices.length;
+    const afterDepth = chinVertices.reduce((sum, i) => sum + refined.verts[3 * i + 2], 0) / chinVertices.length;
+    assert.ok(afterWidth < beforeWidth, 'the lower face tapers very slightly toward the chin');
+    assert.ok(afterDepth < beforeDepth, 'the front underside of the chin is pulled back');
+    assert.notEqual(refined.verts, mesh.verts, 'the cached source mesh remains unchanged');
+    assert.deepEqual(Array.from(refined.verts.slice(3 * mesh.nHead)), Array.from(mesh.verts.slice(3 * mesh.nHead)), 'hair vertices are not altered');
+    for (let i = 0; i < mesh.vertexCount; i++) {
+      if (mesh.lipMask[i] > 0.05) {
+        assert.equal(refined.verts[3 * i], mesh.verts[3 * i], 'lip landmarks remain unchanged');
+        assert.equal(refined.verts[3 * i + 1], mesh.verts[3 * i + 1]);
+        assert.equal(refined.verts[3 * i + 2], mesh.verts[3 * i + 2]);
+      }
+    }
+  });
+
+  it('clamps a draggable mini avatar to the viewport edges', () => {
+    assert.deepEqual(clampMiniAvatarPosition(900, -30, 156, 180, 800, 600), { left: 636, top: 8 });
+    assert.deepEqual(clampMiniAvatarPosition(-10, 900, 156, 180, 800, 600), { left: 8, top: 412 });
+    assert.deepEqual(clampMiniAvatarPosition(50, 50, 156, 180, 100, 100), { left: 0, top: 0 });
+
+    const app = fs.readFileSync(path.resolve(process.cwd(), 'src/App.jsx'), 'utf8');
+    const styles = fs.readFileSync(path.resolve(process.cwd(), 'src/styles.css'), 'utf8');
+    assert.match(app, /createPortal\([\s\S]*onPointerDown=\{onMiniAvatarPointerDown\}/);
+    assert.match(app, /setPointerCapture\(event\.pointerId\)/);
+    assert.match(app, /localStorage\.setItem\(MINI_AVATAR_POSITION_KEY/);
+    assert.match(styles, /\.mini-avatar-pip\s*\{[^}]*position:\s*fixed/);
   });
 
   it('animates a visible mouth cavity and eases back to a closed resting pose', () => {
