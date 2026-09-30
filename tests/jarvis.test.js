@@ -108,17 +108,13 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     assert.equal(fills, restingFills, 'closed mouth has no dark cavity overlay');
   });
 
-  it('suppresses translucent scalp hair paint only in the blue hologram', () => {
+  it('suppresses translucent scalp hair paint in every avatar style', () => {
     const renderer = Object.create(AvatarRenderer.prototype);
     renderer.mesh = {
       paint: new Int32Array([0x80aa2200 | 0]),
       lipMask: new Float32Array([0]),
       fade: new Float32Array([1]),
     };
-    renderer.skin = 5;
-    renderer.holo = true;
-    renderer.blueMix = true;
-    renderer.holoHair = false;
     renderer.androidLook = false;
     renderer.lips = 0;
     renderer.lipTint = 0.7;
@@ -127,20 +123,25 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     const flat = 0xffabcdef;
     const primary = 0xff00d4ff;
     const bg = 0xff000000;
-    const withHairPaint = renderer.vertexColour(0, normal, 0, flat, primary, bg);
-    renderer.mesh.paint[0] = 0;
-    const withoutHairPaint = renderer.vertexColour(0, normal, 0, flat, primary, bg);
-    assert.equal(withHairPaint, withoutHairPaint, 'blue hologram replaces translucent scalp paint with the hologram surface');
+    const modes = [
+      { skin: 5, holo: true, blueMix: true, holoHair: false, label: 'blue hologram' },
+      { skin: 2, holo: true, blueMix: false, holoHair: false, label: 'gold hologram' },
+      { skin: 2, holo: true, blueMix: false, holoHair: true, label: 'optical-fibre hologram' },
+      { skin: 0, holo: false, blueMix: false, holoHair: false, label: 'network' },
+      { skin: 2, holo: false, blueMix: false, holoHair: false, label: '3D skin' },
+    ];
 
-    renderer.mesh.paint[0] = 0x80aa2200 | 0;
-    renderer.blueMix = false;
-    assert.notEqual(renderer.vertexColour(0, normal, 0, flat, primary, bg), withoutHairPaint, 'gold hologram keeps its existing hair paint');
-    renderer.blueMix = true;
-    renderer.holoHair = true;
-    assert.notEqual(renderer.vertexColour(0, normal, 0, flat, primary, bg), withoutHairPaint, 'optical-fibre hair mode keeps its existing hair paint');
+    for (const mode of modes) {
+      Object.assign(renderer, mode);
+      renderer.mesh.paint[0] = 0x80aa2200 | 0;
+      const withHairPaint = renderer.vertexColour(0, normal, 0, flat, primary, bg);
+      renderer.mesh.paint[0] = 0;
+      const withoutHairPaint = renderer.vertexColour(0, normal, 0, flat, primary, bg);
+      assert.equal(withHairPaint, withoutHairPaint, `${mode.label} ignores translucent scalp hair paint`);
+    }
   });
 
-  it('hides transparent hair edges only in the blue hologram', () => {
+  it('hides hair polygon edges in every avatar style', () => {
     const renderer = Object.create(AvatarRenderer.prototype);
     renderer.mesh = { faceGroup: new Float32Array([0, 2.5, 0]), fade: new Float32Array(4).fill(1) };
     renderer.structure = {
@@ -168,13 +169,17 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
       return segments;
     };
 
-    renderer.holo = true;
-    renderer.holoHair = false;
-    renderer.blueMix = true;
-    assert.deepEqual(renderedSegments(), [[[20, 0], [30, 0]]], 'blue hologram keeps regular edges but hides hair edges');
-
-    renderer.blueMix = false;
-    assert.equal(renderedSegments().length, 2, 'gold hologram keeps its existing hair-edge rendering');
+    const styles = [
+      { holo: true, holoHair: false, blueMix: true, skin: 5, label: 'blue hologram' },
+      { holo: true, holoHair: false, blueMix: false, skin: 5, label: 'gold hologram' },
+      { holo: true, holoHair: true, blueMix: false, skin: 5, label: 'optical-fibre hologram' },
+      { holo: false, holoHair: false, blueMix: false, skin: 0, label: 'network' },
+      { holo: false, holoHair: false, blueMix: false, skin: 2, label: '3D skin' },
+    ];
+    for (const style of styles) {
+      Object.assign(renderer, style);
+      assert.deepEqual(renderedSegments(), [[[20, 0], [30, 0]]], `${style.label} keeps facial edges but hides hair edges`);
+    }
   });
 
   it('renders a sparser sample of blue hologram points without removing the polygon web', () => {

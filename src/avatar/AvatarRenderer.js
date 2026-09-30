@@ -229,8 +229,7 @@ export class AvatarRenderer {
 
     const sourcePaint = mesh.paint[vi];
     const isHairPaint = sourcePaint !== 0 && ((sourcePaint >>> 24) & 0xff) < 255;
-    const ignoreHairPaint = this.blueMix && this.holo && !this.holoHair && isHairPaint;
-    const pnt = ignoreHairPaint ? 0 : sourcePaint;
+    const pnt = isHairPaint ? 0 : sourcePaint;
     if (pnt !== 0 && ((pnt >>> 24) & 0xff) < 255) {
       const cover = Math.max(0, Math.min(1, ((pnt >>> 24) & 0xff) / 254));
       const diffuse = 0.42 + 0.8 * vlam;
@@ -385,7 +384,8 @@ export class AvatarRenderer {
       const area = Math.abs((this.xs[b] - this.xs[a]) * (this.ys[c] - this.ys[a]) - (this.xs[c] - this.xs[a]) * (this.ys[b] - this.ys[a]));
       if (area <= 1e-4) continue;
 
-      if ((this.skin === 0 || (this.holo && !this.holoHair)) && mesh.faceGroup[t] > 1.5) continue;
+      // Hair surfaces are omitted in every skin mode; dedicated fibre strokes remain a separate overlay.
+      if (mesh.faceGroup[t] > 1.5) continue;
       const fadeAvg = (fade[a] + fade[b] + fade[c]) / 3;
       const cutoff = this.skin > 0 ? 0.15 : 0.4;
       if (fadeAvg < cutoff) continue;
@@ -489,11 +489,8 @@ export class AvatarRenderer {
 
     for (let k = 0; k < st.count; k++) {
       const f0 = st.face0[k], f1 = st.face1[k];
-      // Blue holograms intentionally omit hair surfaces; omit their exposed wire edges too.
-      if (
-        this.blueMix && this.holo && !this.holoHair &&
-        (this.mesh.faceGroup[f0] > 1.5 || (f1 >= 0 && this.mesh.faceGroup[f1] > 1.5))
-      ) continue;
+      // Hair polygons are hidden in every style, so do not draw their structural edges either.
+      if (this.mesh.faceGroup[f0] > 1.5 || (f1 >= 0 && this.mesh.faceGroup[f1] > 1.5)) continue;
       const front0 = this.faceFront[f0] === 1;
       const front1 = f1 >= 0 ? this.faceFront[f1] === 1 : front0;
       if (!front0 && !front1) continue;
