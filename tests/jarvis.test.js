@@ -14,6 +14,7 @@ import {
   recolourHair,
 } from '../src/avatar/HeadMesh.js';
 import { textToVisemes, VisemeStream, pcmVisemes, HoloAvatar } from '../src/avatar/Visemes.js';
+import { AvatarRenderer } from '../src/avatar/AvatarRenderer.js';
 import {
   parseMapRings,
   parseCities,
@@ -50,6 +51,59 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
       holo.step(0.016, 0.65, true, 'IDLE', [{ level: 0.7, open: 0.8, wide: 0.2 }]);
       assert.ok(holo.mouth > 0, 'HoloAvatar mouth > 0 when speaking');
     }
+  });
+
+  it('animates a visible mouth cavity and eases back to a closed resting pose', () => {
+    const mesh = HeadMesh.parse(readArrayBuffer('avatar/head_mesh.bin'));
+    const avatar = new HoloAvatar(mesh);
+    avatar.step(0.02, 1, true, 'IDLE', [{ level: 1, open: 1, wide: 0.1 }], 0.02);
+    avatar.pose();
+
+    const averageY = (chain) => chain.reduce((sum, i) => sum + avatar.pv[3 * i + 1], 0) / chain.length;
+    const openGap = averageY(mesh.mouthUpper) - averageY(mesh.mouthLower);
+    const peakMouth = avatar.mouth;
+    assert.ok(peakMouth > 0.3, `open mouth drive is visible (${peakMouth})`);
+    assert.ok(openGap > 0.03, `upper/lower lips separate for the mouth cavity (${openGap})`);
+
+    const renderer = Object.create(AvatarRenderer.prototype);
+    renderer.mesh = mesh;
+    renderer.xs = new Float32Array(mesh.vertexCount);
+    renderer.ys = new Float32Array(mesh.vertexCount);
+    renderer.holo = false;
+    renderer.skin = 1;
+    renderer.lips = 0;
+    const cameraDistance = 4.6;
+    for (let i = 0; i < mesh.vertexCount; i++) {
+      const z = avatar.pv[3 * i + 2];
+      const scale = (cameraDistance / Math.max(cameraDistance - z, 0.35)) * 200;
+      renderer.xs[i] = avatar.pv[3 * i] * scale;
+      renderer.ys[i] = -avatar.pv[3 * i + 1] * scale;
+    }
+    let fills = 0;
+    const gradient = { addColorStop() {} };
+    const ctx = {
+      save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, closePath() {},
+      fill() { fills++; }, clip() {}, stroke() {}, ellipse() {},
+      createLinearGradient() { return gradient; }, createRadialGradient() { return gradient; },
+    };
+    renderer.drawMouth(ctx, avatar, 200, 1, 0xff00d4ff, 1);
+    assert.ok(fills >= 3, 'draws the mouth cavity, teeth and tongue while speaking');
+
+    for (let i = 0; i < 20; i++) {
+      avatar.step(0.02, 0, false, 'IDLE', [{ level: 0, open: 0, wide: 0 }], 0.02);
+    }
+    avatar.pose();
+    assert.ok(avatar.mouth < peakMouth * 0.1, 'mouth relaxes back toward closed after speech');
+    assert.ok(averageY(mesh.mouthUpper) - averageY(mesh.mouthLower) < openGap * 0.2, 'lip gap returns toward rest');
+    for (let i = 0; i < mesh.vertexCount; i++) {
+      const z = avatar.pv[3 * i + 2];
+      const scale = (cameraDistance / Math.max(cameraDistance - z, 0.35)) * 200;
+      renderer.xs[i] = avatar.pv[3 * i] * scale;
+      renderer.ys[i] = -avatar.pv[3 * i + 1] * scale;
+    }
+    const restingFills = fills;
+    renderer.drawMouth(ctx, avatar, 200, 1, 0xff00d4ff, 1);
+    assert.equal(fills, restingFills, 'closed mouth has no dark cavity overlay');
   });
 
   it('parses JHR1 3D hairstyles and fits them onto a head mesh', () => {
@@ -253,6 +307,21 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
       }
       if (spec.type === 'http') assert.ok(spec.url.startsWith('https://'), `${spec.name} uses HTTPS`);
     }
+  });
+
+  it('keeps the app, lockfile and GitHub release tag on the bumped package version', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8'));
+    const lock = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'package-lock.json'), 'utf8'));
+    const workflow = fs.readFileSync(path.resolve(process.cwd(), '.github/workflows/build-exe.yml'), 'utf8');
+    const app = fs.readFileSync(path.resolve(process.cwd(), 'src/App.jsx'), 'utf8');
+    assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
+    assert.notEqual(pkg.version, '2.0.0', 'new release increments the previous 2.0.0 tag');
+    assert.equal(lock.version, pkg.version);
+    assert.equal(lock.packages[''].version, pkg.version);
+    assert.match(app, /v\{packageJson\.version\}/);
+    assert.match(workflow, /node -p "require\('\.\/package\.json'\)\.version"/);
+    assert.match(workflow, /gh release create \$tag/);
+    assert.doesNotMatch(workflow, /gh release create v2\.0\.0/);
   });
 
   it('formats nested JSON, array fields, and missing required plugin parameters safely', async () => {

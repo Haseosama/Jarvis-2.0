@@ -316,10 +316,10 @@ const HAIR_PIVOT_X = 0;
 const HAIR_PIVOT_Y = 0.55;
 const HAIR_PIVOT_Z = -0.25;
 
-const TAU_OPEN = 0.022;
-const TAU_SHUT = 0.012;
-const TAU_REST = 0.055;
-const TAU_SHAPE = 0.018;
+const TAU_OPEN = 0.028;
+const TAU_SHUT = 0.026;
+const TAU_REST = 0.075;
+const TAU_SHAPE = 0.026;
 const MIC_FLOOR = 0.14;
 const CLOSE_FRAC = 0.10;
 

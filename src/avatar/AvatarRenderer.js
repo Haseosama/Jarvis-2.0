@@ -51,6 +51,17 @@ function smooth01(e0, e1, x) {
   return t * t * (3 - 2 * t);
 }
 
+function traceChain(ctx, xs, ys, chain, reverse = false) {
+  if (!chain || chain.length === 0) return;
+  const first = reverse ? chain.length - 1 : 0;
+  const step = reverse ? -1 : 1;
+  ctx.moveTo(xs[chain[first]], ys[chain[first]]);
+  for (let i = first + step; reverse ? i >= 0 : i < chain.length; i += step) {
+    const vi = chain[i];
+    ctx.lineTo(xs[vi], ys[vi]);
+  }
+}
+
 export class AvatarRenderer {
   constructor(mesh) {
     this.mesh = mesh;
@@ -1022,6 +1033,108 @@ export class AvatarRenderer {
     return { ux, uy };
   }
 
+  // Draw an actual inner mouth rather than letting the animated lip seams sit on skin.
+  // The cavity follows the same projected lip chains as the deforming head mesh.
+  drawMouth(ctx, avatar, r, face, primary, strokePx) {
+    const upper = this.mesh.mouthUpper;
+    const lower = this.mesh.mouthLower;
+    if (!upper || !lower || upper.length < 3 || lower.length < 3) return;
+
+    let left = Infinity, right = -Infinity, upperY = 0, lowerY = 0;
+    for (let i = 0; i < upper.length; i++) {
+      const x = this.xs[upper[i]];
+      left = Math.min(left, x);
+      right = Math.max(right, x);
+      upperY += this.ys[upper[i]];
+      lowerY += this.ys[lower[i]];
+    }
+    upperY /= upper.length;
+    lowerY /= lower.length;
+    const gap = lowerY - upperY;
+    const width = right - left;
+    const open = Math.max(0, Math.min(1, avatar.mouth || 0));
+    if (gap < 0.55 || width < 2 || open < 0.008) return;
+
+    const isHolo = this.holo || this.skin === 0;
+    const cavityTop = isHolo ? 'rgba(2,9,25,0.98)' : 'rgba(43,12,18,0.98)';
+    const cavityBottom = isHolo ? 'rgba(4,23,54,0.98)' : 'rgba(83,24,31,0.98)';
+    const teethColor = isHolo ? 'rgba(174,237,255,0.94)' : 'rgba(255,239,218,0.97)';
+
+    ctx.save();
+    ctx.beginPath();
+    traceChain(ctx, this.xs, this.ys, upper);
+    traceChain(ctx, this.xs, this.ys, lower, true);
+    ctx.closePath();
+    const cavity = ctx.createLinearGradient(0, upperY, 0, lowerY);
+    cavity.addColorStop(0, cavityTop);
+    cavity.addColorStop(1, cavityBottom);
+    ctx.fillStyle = cavity;
+    ctx.fill();
+    ctx.clip();
+
+    // A softly curved upper row makes open vowels read as a real mouth at avatar/PiP sizes.
+    const toothDepth = Math.max(0.7, Math.min(gap * 0.36, r * 0.026));
+    if (gap > 1.1 && toothDepth > 0.75) {
+      ctx.beginPath();
+      traceChain(ctx, this.xs, this.ys, upper);
+      for (let i = upper.length - 1; i >= 0; i--) {
+        const vi = upper[i];
+        const t = i / (upper.length - 1);
+        const arch = Math.pow(Math.max(0, Math.sin(Math.PI * t)), 0.42);
+        ctx.lineTo(this.xs[vi], this.ys[vi] + toothDepth * arch);
+      }
+      ctx.closePath();
+      ctx.fillStyle = teethColor;
+      ctx.fill();
+
+      ctx.strokeStyle = isHolo ? 'rgba(47,148,194,0.38)' : 'rgba(112,71,66,0.22)';
+      ctx.lineWidth = Math.max(0.55, strokePx * 0.32);
+      ctx.beginPath();
+      for (const fraction of [0.25, 0.5, 0.75]) {
+        const i = Math.round(fraction * (upper.length - 1));
+        const vi = upper[i];
+        const t = i / (upper.length - 1);
+        const arch = Math.pow(Math.max(0, Math.sin(Math.PI * t)), 0.42);
+        ctx.moveTo(this.xs[vi], this.ys[vi] + 0.25);
+        ctx.lineTo(this.xs[vi], this.ys[vi] + toothDepth * arch);
+      }
+      ctx.stroke();
+    }
+
+    if (open > 0.28 && gap > 3) {
+      const tongueY = upperY + gap * 0.82;
+      const tongue = ctx.createRadialGradient((left + right) / 2, tongueY, 0, (left + right) / 2, tongueY, width * 0.19);
+      tongue.addColorStop(0, isHolo ? 'rgba(63,178,227,0.60)' : 'rgba(209,91,103,0.72)');
+      tongue.addColorStop(1, isHolo ? 'rgba(19,73,135,0.12)' : 'rgba(117,37,49,0.12)');
+      ctx.fillStyle = tongue;
+      ctx.beginPath();
+      ctx.ellipse((left + right) / 2, tongueY, width * 0.17, Math.min(gap * 0.11, r * 0.014), 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    const lipTone = this.lips > 0 ? LIP_TONES[this.lips - 1] : null;
+    const lipLine = isHolo ? DEEP_BLUE : lipTone || (this.skin > 0 ? 0xff6e2a38 : primary);
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = intToCss(lipLine, (isHolo ? 0.88 : 0.92) * face);
+    ctx.lineWidth = Math.max(0.8, strokePx * (1.15 + open * 0.22));
+    for (const chain of [upper, lower]) {
+      ctx.beginPath();
+      traceChain(ctx, this.xs, this.ys, chain);
+      ctx.stroke();
+    }
+    if (!isHolo && open > 0.04) {
+      ctx.strokeStyle = `rgba(255,224,218,${(0.12 * face * open).toFixed(3)})`;
+      ctx.lineWidth = Math.max(0.6, strokePx * 0.48);
+      ctx.beginPath();
+      traceChain(ctx, this.xs, this.ys, lower);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // ── Brows, Lashes, Eyelids, Catchlights & Lip Chains (drawFeatures) ────────
 
   drawFeatures(ctx, avatar, r, primary, strokePx) {
@@ -1233,23 +1346,8 @@ export class AvatarRenderer {
       }
     }
 
-    // 3. Upper & lower mouth lip lines
-    const lipLine = this.holo ? DEEP_BLUE : this.skin > 0 ? 0xff6e2a38 : primary;
-    for (const [chain, alpha] of [
-      [mesh.mouthUpper, 200 / 255],
-      [mesh.mouthLower, 170 / 255],
-    ]) {
-      if (!chain || chain.length === 0) continue;
-      ctx.strokeStyle = intToCss(lipLine, alpha * face);
-      ctx.lineWidth = strokePx * 1.2;
-      ctx.beginPath();
-      for (let k = 0; k < chain.length; k++) {
-        const vi = chain[k];
-        if (k === 0) ctx.moveTo(this.xs[vi], this.ys[vi]);
-        else ctx.lineTo(this.xs[vi], this.ys[vi]);
-      }
-      ctx.stroke();
-    }
+    // 3. Animated oral cavity, teeth, tongue and shaped lip edges
+    this.drawMouth(ctx, avatar, r, face, primary, strokePx);
 
     ctx.restore();
   }

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import packageJson from '../package.json';
 import AvatarView from './avatar/AvatarView.jsx';
 import { POLYGON_LEVELS } from './avatar/HeadMesh.js';
 import SpaceView from './space/SpaceView.jsx';
@@ -178,7 +179,7 @@ export default function App() {
           <div className={`hud-orb state-${aiState.toLowerCase()}`} />
           <div>
             <div className="hud-title">JARVIS 2.0</div>
-            <div className="hud-subtitle">PC STANDALONE EDITION • v2.0.0</div>
+            <div className="hud-subtitle">PC STANDALONE EDITION • v{packageJson.version}</div>
           </div>
         </div>
 

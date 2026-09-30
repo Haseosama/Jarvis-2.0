@@ -1,5 +1,7 @@
 # JARVIS 2.0 — Édition PC Autonome (Sans Backend)
 
+**Version actuelle : 2.0.1** — la release GitHub est étiquetée à partir de `package.json`. Incrémenter cette version avant toute publication.
+
 Adaptation complète sur PC (Windows / Desktop autonome) de **[Jarvis-Android v0.9.53](https://github.com/Haseosama/Jarvis-Android)**, conçue pour fonctionner en tant qu'exécutable `.exe` autonome sans aucun serveur backend externe.
 
 ---
@@ -10,7 +12,7 @@ Adaptation complète sur PC (Windows / Desktop autonome) de **[Jarvis-Android v0
 - **Trois visages 3D** : Classique (`84 555 polygones` par défaut), Léa et Marc. Les avatars Cartoon, Adam et Mei ne sont pas inclus.
 - **Densité réglable** : sélecteur Éco, Léger, Standard, Haute Définition et Ultra; le compteur de polygones s’actualise sur l’avatar.
 - **Circuits PCB activables ou désactivables**, styles hologramme/peau, 23 coiffures 3D (`JHR1`), 11 teintes de cheveux et 5 teintes de lèvres.
-- **Lip-sync audio-locked** : analyse formantique FFT F1/F2 sur PCM 24 kHz, phonèmes français et synchronisation des visèmes avec l’horloge de lecture audio.
+- **Lip-sync audio-locked** : analyse formantique FFT F1/F2 sur PCM 24 kHz, phonèmes français et synchronisation des visèmes avec l’horloge de lecture audio. La bouche dessine maintenant une cavité animée, les dents et la langue, avec des lèvres mieux lissées en parole et dans la miniature.
 
 ### 2. 🎙️ Voix Gemini Live (24 kHz), ModelLadder REST & Moteur Local Hors-Ligne
 - **Gemini Live WebSocket** (`BidiGenerateContent`) : flux audio bidirectionnel temps réel (entrée micro 16 kHz PCM16, sortie 24 kHz PCM16) avec appel d'outils en direct.
@@ -70,3 +72,7 @@ L'installateur autonome **`out/Jarvis-2.0-Setup.exe`** est généré et installe
 npm run build:exe
 ```
 Génère le dossier **`release/Jarvis-2.0-Windows-Portable/`** contenant `Lancer-Jarvis-2.0.bat` qui compile et exécute automatiquement **`Jarvis-2.0.exe`** avec le compilateur natif Windows (`csc.exe`), sans aucun serveur externe requis.
+
+### Versionner une nouvelle release
+
+Avant chaque push destiné à publier une nouvelle version, incrémenter `package.json` et `package-lock.json` (par exemple `npm version patch --no-git-tag-version`). Le workflow récupère cette version pour créer le tag et la release GitHub correspondants; les anciennes releases restent disponibles.

@@ -23,6 +23,14 @@ jobs:
           node-version: 22
           cache: 'npm'
 
+      - name: Read package version
+        id: app-version
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          if ($LASTEXITCODE -ne 0 -or -not $version) { throw "Could not read package version" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
       - name: Install dependencies
         run: npm install
 
@@ -68,13 +76,18 @@ jobs:
           name: Jarvis-2.0-Windows-EXE
           path: artifacts/*
 
-      - name: Publish GitHub Release v2.0.0
+      - name: Publish GitHub Release v${{ steps.app-version.outputs.version }}
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          $version = "${{ steps.app-version.outputs.version }}"
+          $tag = "v$version"
           $notes = @"
-          ## 🚀 Jarvis 2.0 — Édition PC Autonome (Sans Backend)
+          ## 🚀 Jarvis $version — Édition PC Autonome (Sans Backend)
+
+          ### Nouveautés de cette version
+          - Bouche d’avatar retravaillée : cavité buccale animée, rangée de dents, langue subtile, contour des lèvres mieux défini et fermeture labiale plus progressive.
 
           Adaptation complète sur PC (Windows x64) de **Jarvis-Android v0.9.53**, fonctionnant de manière 100% autonome sans serveur backend externe.
 
@@ -90,8 +103,8 @@ jobs:
           - **Plugins corrigés** : 82 plugins JSON avec rendu des structures de réponses, validation des paramètres et routines PC; catalogue rechargable dans l'interface.
           - **Médias & Productivité** : radios, podcasts, YouTube, génération de PDF/Word/Excel/CSV/Markdown, Obsidian, tâches, agenda, minuteurs, dépenses et habitudes.
           "@
-          $exists = gh release view v2.0.0 2>$null
+          $exists = gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) {
-            gh release delete v2.0.0 --yes --cleanup-tag
+            gh release delete $tag --yes --cleanup-tag
           }
-          gh release create v2.0.0 (Get-ChildItem "artifacts\*" | ForEach-Object { $_.FullName }) --title "Jarvis 2.0 — Édition PC Autonome (.exe sans backend)" --notes $notes --target "${{ github.sha }}"
+          gh release create $tag (Get-ChildItem "artifacts\*" | ForEach-Object { $_.FullName }) --title "Jarvis $version — Édition PC Autonome (.exe sans backend)" --notes $notes --target "${{ github.sha }}"
