@@ -12,6 +12,7 @@ import {
   CircuitTraces,
   NetworkWeb,
   recolourHair,
+  removeHairPaint,
 } from '../src/avatar/HeadMesh.js';
 import { textToVisemes, VisemeStream, pcmVisemes, HoloAvatar } from '../src/avatar/Visemes.js';
 import { AvatarRenderer } from '../src/avatar/AvatarRenderer.js';
@@ -24,6 +25,7 @@ import {
   parseTleCatalog,
   tleStateAt,
   moonPhase,
+  observerFromCoordinates,
 } from '../src/space/SpaceEngine.js';
 import { hostBridge } from '../src/core/hostBridge.js';
 import { PluginEngine } from '../src/core/PluginEngine.js';
@@ -106,6 +108,20 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     assert.equal(fills, restingFills, 'closed mouth has no dark cavity overlay');
   });
 
+  it('removes residual scalp hair paint for bald avatars while preserving opaque facial details', () => {
+    const mesh = HeadMesh.parse(readArrayBuffer('avatar/head_mesh.bin'));
+    const sourceHairPaint = mesh.paint.filter((p) => p !== 0 && ((p >>> 24) & 0xff) < 255).length;
+    const opaqueDetails = mesh.paint.filter((p) => p !== 0 && ((p >>> 24) & 0xff) === 255).length;
+    assert.ok(sourceHairPaint > 1000, 'source mesh contains hair-colour remnants to remove');
+
+    const baldMesh = removeHairPaint(mesh);
+    assert.notEqual(baldMesh, mesh);
+    assert.equal(baldMesh.faceCount, mesh.faceCount);
+    assert.equal(baldMesh.paint.filter((p) => p !== 0 && ((p >>> 24) & 0xff) < 255).length, 0);
+    assert.equal(baldMesh.paint.filter((p) => p !== 0 && ((p >>> 24) & 0xff) === 255).length, opaqueDetails);
+    assert.equal(removeHairPaint(baldMesh), baldMesh, 'removal is safe to repeat');
+  });
+
   it('parses JHR1 3D hairstyles and fits them onto a head mesh', () => {
     const headAb = readArrayBuffer('avatar/head_mesh_lea.bin');
     const head = HeadMesh.parse(headAb);
@@ -169,6 +185,16 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
 
     const phase = moonPhase(now);
     assert.ok(phase.lit >= 0 && phase.lit <= 1);
+  });
+
+  it('uses validated current-device coordinates as the observer for the local sky chart', () => {
+    assert.deepEqual(observerFromCoordinates({ latitude: 44.84, longitude: -0.58 }), {
+      latDeg: 44.84,
+      lonDeg: -0.58,
+      label: 'Ma position',
+    });
+    assert.equal(observerFromCoordinates({ latitude: 91, longitude: 0 }), null);
+    assert.equal(observerFromCoordinates({ latitude: 0, longitude: Infinity }), null);
   });
 
   it('normalizes live ADS-B aircraft into selectable flight telemetry', () => {

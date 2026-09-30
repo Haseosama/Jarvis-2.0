@@ -363,6 +363,7 @@ export default function App() {
             <SpaceView
               mode={spaceConfig.mode}
               observer={spaceConfig.observer}
+              onObserverChange={(observer) => setSpaceConfig((prev) => ({ ...prev, observer }))}
               onClose={() => setActiveView('avatar')}
             />
           )}

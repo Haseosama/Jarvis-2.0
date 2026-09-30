@@ -17,6 +17,7 @@ import {
   tleStateAt,
   lookAt,
   moonPhase,
+  observerFromCoordinates,
 } from './SpaceEngine.js';
 import { hostBridge } from '../core/hostBridge.js';
 import {
@@ -31,14 +32,15 @@ export default function SpaceView({
   observer = { latDeg: 48.8566, lonDeg: 2.3522, label: 'Paris' },
   markers = [],
   onClose,
+  onObserverChange,
 }) {
   const canvasRef = useRef(null);
   const [activeTab, setActiveTab] = useState(mode === 'sky' ? 'sky' : 'map');
   const [mapData, setMapData] = useState(null);
   const [stars, setStars] = useState([]);
-  const [zoom, setZoom] = useState(1.65);
-  const [centerLon, setCenterLon] = useState(observer.lonDeg || 2.3522);
-  const [centerLat, setCenterLat] = useState(observer.latDeg || 46.5);
+  const [zoom, setZoom] = useState(observer.label === 'Ma position' ? 4.2 : 1.65);
+  const [centerLon, setCenterLon] = useState(observer.lonDeg ?? 2.3522);
+  const [centerLat, setCenterLat] = useState(observer.latDeg ?? 46.5);
   const [selectedSat, setSelectedSat] = useState(DEFAULT_SATELLITES[0]);
   const [satelliteCatalog, setSatelliteCatalog] = useState([]);
   const [satelliteFeed, setSatelliteFeed] = useState('');
@@ -63,14 +65,62 @@ export default function SpaceView({
   const [selectedObject, setSelectedObject] = useState(null);
   const [nowMs, setNowMs] = useState(Date.now());
   const [feedRefreshKey, setFeedRefreshKey] = useState(0);
+  const [locatingPosition, setLocatingPosition] = useState(false);
+  const [locationMessage, setLocationMessage] = useState('');
   const dragRef = useRef(null);
   const justDraggedRef = useRef(false);
   const mapHitsRef = useRef([]);
   const mapViewRef = useRef({ centerLat, centerLon });
   mapViewRef.current = { centerLat, centerLon };
 
+  const locateCurrentPosition = () => {
+    if (locatingPosition) return;
+    const geolocation = typeof navigator !== 'undefined' ? navigator.geolocation : null;
+    if (typeof geolocation?.getCurrentPosition !== 'function') {
+      setLocationMessage('La géolocalisation n’est pas disponible dans cet environnement.');
+      return;
+    }
+    setLocatingPosition(true);
+    setLocationMessage('Recherche de votre position…');
+    try {
+      geolocation.getCurrentPosition(
+        ({ coords }) => {
+          const currentObserver = observerFromCoordinates(coords);
+          if (!currentObserver) {
+            setLocationMessage('La position renvoyée par le système est invalide.');
+            setLocatingPosition(false);
+            return;
+          }
+          onObserverChange?.(currentObserver);
+          setCenterLat(currentObserver.latDeg);
+          setCenterLon(currentObserver.lonDeg);
+          setZoom(4.2);
+          setFeedRefreshKey((key) => key + 1);
+          const accuracy = Number.isFinite(coords.accuracy) ? ` (précision ±${Math.round(coords.accuracy)} m)` : '';
+          setLocationMessage(`Carte centrée sur votre position${accuracy}.`);
+          setLocatingPosition(false);
+        },
+        (error) => {
+          const message = error?.code === 1
+            ? 'Autorisez la localisation pour afficher votre position actuelle.'
+            : error?.code === 3
+            ? 'La localisation a expiré. Réessayez.'
+            : 'Position actuelle indisponible; la position configurée est conservée.';
+          setLocationMessage(message);
+          setLocatingPosition(false);
+        },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 5 * 60_000 }
+      );
+    } catch {
+      setLocationMessage('La géolocalisation a été bloquée par le navigateur.');
+      setLocatingPosition(false);
+    }
+  };
+
   useEffect(() => {
-    setActiveTab(mode === 'sky' ? 'sky' : 'map');
+    const openSky = mode === 'sky';
+    setActiveTab(openSky ? 'sky' : 'map');
+    if (openSky) locateCurrentPosition();
   }, [mode]);
 
   useEffect(() => {
@@ -398,7 +448,10 @@ export default function SpaceView({
           </button>
           <button
             className={`space-tab ${activeTab === 'sky' ? 'active' : ''}`}
-            onClick={() => setActiveTab('sky')}
+            onClick={() => {
+              setActiveTab('sky');
+              locateCurrentPosition();
+            }}
           >
             ✨ Voûte Céleste
           </button>
@@ -410,9 +463,17 @@ export default function SpaceView({
           </button>
         </div>
         <div className="space-header-right">
-          <span className="space-badge">
-            📍 {observer.label || 'Observateur'} ({observer.latDeg.toFixed(2)}°N, {observer.lonDeg.toFixed(2)}°E)
+          <span className="space-badge" title={locationMessage || 'Position utilisée pour les calculs du ciel et le centre de la carte'}>
+            📍 {observer.label || 'Observateur'} ({Math.abs(observer.latDeg).toFixed(2)}°{observer.latDeg >= 0 ? 'N' : 'S'}, {Math.abs(observer.lonDeg).toFixed(2)}°{observer.lonDeg >= 0 ? 'E' : 'O'})
           </span>
+          <button
+            className="space-mini-btn"
+            onClick={locateCurrentPosition}
+            disabled={locatingPosition}
+            title={locationMessage || 'Centrer la carte et le ciel sur votre position actuelle'}
+          >
+            {locatingPosition ? '⏳ Position…' : '📍 Ma position'}
+          </button>
           <button
             className="space-mini-btn"
             onClick={() => setFeedRefreshKey((key) => key + 1)}

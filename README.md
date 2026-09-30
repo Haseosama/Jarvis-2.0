@@ -1,6 +1,6 @@
 # JARVIS 2.0 — Édition PC Autonome (Sans Backend)
 
-**Version actuelle : 2.0.1** — la release GitHub est étiquetée à partir de `package.json`. Incrémenter cette version avant toute publication.
+**Version actuelle : 2.0.2** — la release GitHub est étiquetée à partir de `package.json`. Incrémenter cette version avant toute publication.
 
 Adaptation complète sur PC (Windows / Desktop autonome) de **[Jarvis-Android v0.9.53](https://github.com/Haseosama/Jarvis-Android)**, conçue pour fonctionner en tant qu'exécutable `.exe` autonome sans aucun serveur backend externe.
 
@@ -10,7 +10,7 @@ Adaptation complète sur PC (Windows / Desktop autonome) de **[Jarvis-Android v0
 
 ### 1. 🎭 Avatar 3D Temps Réel & Synchronisation Labiale (60 FPS)
 - **Trois visages 3D** : Classique (`84 555 polygones` par défaut), Léa et Marc. Les avatars Cartoon, Adam et Mei ne sont pas inclus.
-- **Densité réglable** : sélecteur Éco, Léger, Standard, Haute Définition et Ultra; le compteur de polygones s’actualise sur l’avatar.
+- **Densité réglable** : sélecteur Éco, Léger, Standard, Haute Définition et Ultra; le compteur de polygones s’actualise sur l’avatar. En mode « Sans cheveux », le résidu de peinture du cuir chevelu est supprimé, sans enlever les détails du visage.
 - **Circuits PCB activables ou désactivables**, styles hologramme/peau, 23 coiffures 3D (`JHR1`), 11 teintes de cheveux et 5 teintes de lèvres.
 - **Lip-sync audio-locked** : analyse formantique FFT F1/F2 sur PCM 24 kHz, phonèmes français et synchronisation des visèmes avec l’horloge de lecture audio. La bouche dessine maintenant une cavité animée, les dents et la langue, avec des lèvres mieux lissées en parole et dans la miniature.
 
@@ -33,7 +33,7 @@ Adaptation complète sur PC (Windows / Desktop autonome) de **[Jarvis-Android v0
 - **Vols en direct** : avions détectés par ADS-B dans un rayon de 250 NM autour du centre de carte (source adsb.fi, repli airplanes.live). Survolez la zone en glissant la carte pour charger un autre secteur.
 - **Satellites** : cibles ISS, Tiangong et Hubble, plus un catalogue TLE CelesTrak (stations, navigation, météo, science, Starlink et militaire). Les TLE sont propagés localement par un modèle Kepler/J2 approché; l’ISS utilise aussi sa télémétrie publique en direct.
 - **Fiches interactives** : cliquez sur un avion pour consulter télémétrie, immatriculation, type, opérateur, route/trace et sources lorsqu’elles sont disponibles; cliquez sur un satellite pour afficher NORAD, éléments orbitaux, position, altitude, vitesse et visibilité locale.
-- **Voûte Céleste Nocturne** (`stars.tsv`, catalogue Yale Bright Star) : dôme polaire interactif avec constellations, Soleil, phase de la Lune et planètes (Mercure, Vénus, Mars, Jupiter, Saturne).
+- **Voûte Céleste Nocturne** (`stars.tsv`, catalogue Yale Bright Star) : dôme polaire interactif avec constellations, Soleil, phase de la Lune et planètes (Mercure, Vénus, Mars, Jupiter, Saturne). À l’ouverture, Jarvis demande la position actuelle pour afficher le ciel observé localement et recentrer la carte; un bouton permet de la mettre à jour.
 - **Lancements Spatiaux, Séismes USGS M4.5+ & Aurores Boréales (Kp)**.
 
 ### 5. 📻 Radios en Direct, Podcasts & Lecteur Vidéo YouTube

@@ -479,6 +479,23 @@ export class HeadMesh {
   }
 }
 
+/**
+ * Removes the original scalp/hair colour overlay from a head mesh when the user
+ * selects the bald option. Fully opaque facial details (eyes/brows) are retained.
+ */
+export function removeHairPaint(mesh) {
+  const paint = new Int32Array(mesh.paint);
+  let removed = 0;
+  for (let i = 0; i < paint.length; i++) {
+    const value = paint[i] >>> 0;
+    if (value !== 0 && ((value >>> 24) & 0xff) < 255) {
+      paint[i] = 0;
+      removed++;
+    }
+  }
+  return removed ? new HeadMesh({ ...mesh, paint }) : mesh;
+}
+
 // ── Colour & Hair Helpers ───────────────────────────────────────────────────
 
 function mixRgb(a, b, t) {

@@ -8,6 +8,7 @@ import {
   HeadMesh,
   HairStyle,
   recolourHair,
+  removeHairPaint,
 } from './HeadMesh.js';
 import { HoloAvatar } from './Visemes.js';
 import {
@@ -98,6 +99,7 @@ export default function AvatarView({
   const [ready, setReady] = useState(false);
 
   const faceSpec = resolveFaceSpec(faceId, config);
+  const isBald = hairStyleId === 'none' || config?.avatarHair === 'none';
   const effectiveHairId =
     hairStyleId && hairStyleId !== 'auto' && hairStyleId !== 'none'
       ? hairStyleId
@@ -132,12 +134,13 @@ export default function AvatarView({
           if (style) {
             finalMesh = style.fitOn(baseMesh, targetColours);
           }
-        } else if (shade) {
+        } else if (!isBald && shade) {
           finalMesh = recolourHair(baseMesh, faceSpec.hairColours, targetColours);
         }
 
         // Apply selected polygon level (eco / low / medium / high / ultra)
         finalMesh = HeadMesh.applyPolygonLevel(finalMesh, effectivePolyLevel);
+        if (isBald) finalMesh = removeHairPaint(finalMesh);
 
         if (cancelled) return;
         engineRef.current.renderer = new AvatarRenderer(finalMesh);
@@ -152,7 +155,7 @@ export default function AvatarView({
     return () => {
       cancelled = true;
     };
-  }, [faceSpec, effectiveHairId, effectiveShadeId, effectivePolyLevel]);
+  }, [faceSpec, effectiveHairId, effectiveShadeId, effectivePolyLevel, isBald]);
 
   const propsRef = useRef({});
   propsRef.current = {

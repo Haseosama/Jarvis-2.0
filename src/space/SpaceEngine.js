@@ -4,6 +4,15 @@ const DEG = Math.PI / 180;
 const TWO_PI = Math.PI * 2;
 const AU_KM = 149597870.7;
 
+export function observerFromCoordinates(coords) {
+  const latDeg = Number(coords?.latitude);
+  const lonDeg = Number(coords?.longitude);
+  if (!Number.isFinite(latDeg) || !Number.isFinite(lonDeg) || latDeg < -90 || latDeg > 90 || lonDeg < -180 || lonDeg > 180) {
+    return null;
+  }
+  return { latDeg, lonDeg, label: 'Ma position' };
+}
+
 export function mercX(lon) {
   return (lon + 180) / 360;
 }
