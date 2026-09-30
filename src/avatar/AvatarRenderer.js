@@ -24,6 +24,11 @@ const BLUE_HOT = 0xff8fc1ff;
 
 const SKIN_TONES = [0xf1c9a8, 0xd9a47c, 0xb07a54, 0x7a4e36, 0x69b4f0];
 const LIP_TONES = [0xd9707f, 0xc02836, 0x8e3a6b, 0xe8735a];
+const CLASSIC_TO_LEA_IRIS = new Map([
+  [0xff16324f, 0xff0e4a36],
+  [0xff3f7ca6, 0xff3dbe8c],
+  [0xff1f4560, 0xff16553f],
+]);
 
 function argb(a, r, g, b) {
   return ((a & 0xff) << 24) | ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
@@ -67,6 +72,12 @@ export class AvatarRenderer {
     this.mesh = mesh;
     this.nV = mesh.vertexCount;
     this.nF = mesh.faceCount;
+    this.classicEyeMask = new Uint8Array(this.nV);
+    for (let e = 0; e < (mesh.eyeFirst?.length || 0); e++) {
+      const start = mesh.eyeFirst[e];
+      const end = Math.min(this.nV, start + mesh.eyeCount[e]);
+      this.classicEyeMask.fill(1, start, end);
+    }
     this.xs = new Float32Array(this.nV);
     this.ys = new Float32Array(this.nV);
     this.faceColor = new Int32Array(this.nF);
@@ -230,7 +241,10 @@ export class AvatarRenderer {
 
     const sourcePaint = mesh.paint[vi];
     const isHairPaint = sourcePaint !== 0 && ((sourcePaint >>> 24) & 0xff) < 255;
-    const pnt = isHairPaint ? 0 : sourcePaint;
+    let pnt = isHairPaint ? 0 : sourcePaint;
+    if (!this.holo && this.classicEyes && this.classicEyeMask?.[vi]) {
+      pnt = CLASSIC_TO_LEA_IRIS.get(pnt >>> 0) ?? pnt;
+    }
     if (pnt !== 0 && ((pnt >>> 24) & 0xff) < 255) {
       const cover = Math.max(0, Math.min(1, ((pnt >>> 24) & 0xff) / 254));
       const diffuse = 0.42 + 0.8 * vlam;
@@ -1150,40 +1164,6 @@ export class AvatarRenderer {
     ctx.restore();
   }
 
-  drawClassicEyeDetail(ctx, x, y, r, face, open, primary, strokePx) {
-    if (!this.classicEyes || open < 0.12) return;
-    const rx = Math.max(2, r * 0.041);
-    const ry = rx * 0.82;
-    const visibility = face * Math.min(1, open * 1.15);
-    const rim = this.holo ? mixInt(primary, 0xffd5f2ff, 0.24) : 0xff173849;
-    const irisLight = this.holo ? primary : 0xff76a9c4;
-
-    ctx.save();
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = intToCss(rim, 0.72 * visibility);
-    ctx.lineWidth = Math.max(0.65, strokePx * 0.7);
-    ctx.beginPath();
-    ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.strokeStyle = intToCss(irisLight, (this.holo ? 0.40 : 0.52) * visibility);
-    ctx.lineWidth = Math.max(0.5, strokePx * 0.48);
-    ctx.beginPath();
-    for (let i = 0; i < 14; i++) {
-      const angle = (i / 14) * Math.PI * 2;
-      const inner = 0.48 + 0.06 * (i % 3);
-      ctx.moveTo(x + Math.cos(angle) * rx * inner, y + Math.sin(angle) * ry * inner);
-      ctx.lineTo(x + Math.cos(angle) * rx * 0.9, y + Math.sin(angle) * ry * 0.9);
-    }
-    ctx.stroke();
-
-    ctx.fillStyle = intToCss(this.holo ? DEEP_BLUE : 0xff071019, 0.88 * visibility);
-    ctx.beginPath();
-    ctx.ellipse(x, y, rx * 0.27, ry * 0.30, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
   // ── Brows, Lashes, Eyelids, Catchlights & Lip Chains (drawFeatures) ────────
 
   drawFeatures(ctx, avatar, r, primary, strokePx) {
@@ -1382,7 +1362,6 @@ export class AvatarRenderer {
       if (open > 0.4 && mesh.eyeFirst.length > e) {
         const pole = mesh.eyeFirst[e] + 17;
         if (pole < this.nV) {
-          this.drawClassicEyeDetail(ctx, this.xs[pole], this.ys[pole], r, face, open, primary, strokePx);
           ctx.fillStyle = `rgba(255,255,255,${((235 / 255) * face * open).toFixed(3)})`;
           ctx.beginPath();
           ctx.arc(this.xs[pole] - r * 0.010, this.ys[pole] - r * 0.010, Math.max(1.2, r * 0.0075), 0, Math.PI * 2);

@@ -196,30 +196,39 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     assert.equal(lines, 0, 'the test mesh has no tracks to alter');
   });
 
-  it('adds iris depth and radial detail to the classic 3D eyes only', () => {
+  it('uses Léa 3D eye colors for a more natural Classic iris without hologram tint changes', () => {
     const renderer = Object.create(AvatarRenderer.prototype);
+    renderer.mesh = {
+      paint: new Int32Array([0xff3f7ca6 | 0]),
+      lipMask: new Float32Array([0]),
+      fade: new Float32Array([1]),
+    };
+    renderer.classicEyeMask = new Uint8Array([1]);
     renderer.classicEyes = true;
     renderer.holo = false;
     renderer.skin = 2;
-    let ellipses = 0;
-    let segments = 0;
-    const ctx = {
-      save() {}, restore() {}, beginPath() {},
-      ellipse() { ellipses++; },
-      moveTo() {}, lineTo() { segments++; },
-      stroke() {}, fill() {},
-    };
+    renderer.androidLook = false;
+    renderer.lips = 0;
+    renderer.lipTint = 0.7;
 
-    renderer.drawClassicEyeDetail(ctx, 40, 50, 170, 1, 1, 0xff00d4ff, 1);
-    assert.ok(ellipses >= 2, 'draws a defined iris ring and pupil');
-    assert.ok(segments >= 14, 'adds radial iris texture');
+    const normal = new Float32Array([0, 0, 1]);
+    const args = [0, normal, 0, 0xffabcdef, 0xff00d4ff, 0xff000000];
+    const classicIris = renderer.vertexColour(...args);
+    renderer.mesh.paint[0] = 0xff3dbe8c | 0;
+    renderer.classicEyeMask[0] = 0;
+    const leaIris = renderer.vertexColour(...args);
+    assert.equal(classicIris, leaIris, 'Classic iris reuses the Léa green iris palette');
 
-    renderer.classicEyes = false;
-    ellipses = 0;
-    segments = 0;
-    renderer.drawClassicEyeDetail(ctx, 40, 50, 170, 1, 1, 0xff00d4ff, 1);
-    assert.equal(ellipses, 0, 'leaves Léa and Marc eye rendering unchanged');
-    assert.equal(segments, 0);
+    renderer.mesh.paint[0] = 0xff3f7ca6 | 0;
+    renderer.classicEyeMask[0] = 0;
+    const unmodifiedFace = renderer.vertexColour(...args);
+    assert.notEqual(classicIris, unmodifiedFace, 'iris recoloring is scoped to Classic eye vertices');
+
+    renderer.holo = true;
+    renderer.classicEyeMask[0] = 1;
+    const hologramEye = renderer.vertexColour(...args);
+    renderer.classicEyeMask[0] = 0;
+    assert.equal(hologramEye, renderer.vertexColour(...args), 'hologram eye colors remain unchanged');
   });
 
   it('suppresses translucent scalp hair paint in every avatar style', () => {
