@@ -90,7 +90,7 @@ jobs:
           - Bouche d’avatar retravaillée : cavité buccale animée, rangée de dents, langue subtile, contour des lèvres mieux défini et fermeture labiale plus progressive.
           - Avatar sans cheveux : suppression des résidus de peinture capillaire sur le crâne, en conservant les détails du visage.
           - Voûte céleste : position géographique actuelle demandée à l’ouverture et centrage local de la carte, avec commande pour actualiser la position.
-          - Avatar holographique : densité réduite des points lumineux bleus, lignes polygonales conservées.
+          - Avatar holographique : densité réduite des points lumineux bleus, lignes polygonales conservées; suppression des arêtes capillaires translucides en mode hologramme bleu.
 
           Adaptation complète sur PC (Windows x64) de **Jarvis-Android v0.9.53**, fonctionnant de manière 100% autonome sans serveur backend externe.
 
@@ -108,6 +108,6 @@ jobs:
           "@
           $exists = gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) {
-            gh release delete $tag --yes --cleanup-tag
+            throw "Release $tag already exists. Increment package.json to preserve previously published tags."
           }
           gh release create $tag (Get-ChildItem "artifacts\*" | ForEach-Object { $_.FullName }) --title "Jarvis $version — Édition PC Autonome (.exe sans backend)" --notes $notes --target "${{ github.sha }}"

@@ -227,7 +227,10 @@ export class AvatarRenderer {
         Math.min(255, Math.max(0, ((rgb & 0xff) * k) | 0))
       );
 
-    const pnt = mesh.paint[vi];
+    const sourcePaint = mesh.paint[vi];
+    const isHairPaint = sourcePaint !== 0 && ((sourcePaint >>> 24) & 0xff) < 255;
+    const ignoreHairPaint = this.blueMix && this.holo && !this.holoHair && isHairPaint;
+    const pnt = ignoreHairPaint ? 0 : sourcePaint;
     if (pnt !== 0 && ((pnt >>> 24) & 0xff) < 255) {
       const cover = Math.max(0, Math.min(1, ((pnt >>> 24) & 0xff) / 254));
       const diffuse = 0.42 + 0.8 * vlam;
@@ -486,6 +489,11 @@ export class AvatarRenderer {
 
     for (let k = 0; k < st.count; k++) {
       const f0 = st.face0[k], f1 = st.face1[k];
+      // Blue holograms intentionally omit hair surfaces; omit their exposed wire edges too.
+      if (
+        this.blueMix && this.holo && !this.holoHair &&
+        (this.mesh.faceGroup[f0] > 1.5 || (f1 >= 0 && this.mesh.faceGroup[f1] > 1.5))
+      ) continue;
       const front0 = this.faceFront[f0] === 1;
       const front1 = f1 >= 0 ? this.faceFront[f1] === 1 : front0;
       if (!front0 && !front1) continue;

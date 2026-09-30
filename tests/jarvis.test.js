@@ -108,6 +108,75 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     assert.equal(fills, restingFills, 'closed mouth has no dark cavity overlay');
   });
 
+  it('suppresses translucent scalp hair paint only in the blue hologram', () => {
+    const renderer = Object.create(AvatarRenderer.prototype);
+    renderer.mesh = {
+      paint: new Int32Array([0x80aa2200 | 0]),
+      lipMask: new Float32Array([0]),
+      fade: new Float32Array([1]),
+    };
+    renderer.skin = 5;
+    renderer.holo = true;
+    renderer.blueMix = true;
+    renderer.holoHair = false;
+    renderer.androidLook = false;
+    renderer.lips = 0;
+    renderer.lipTint = 0.7;
+
+    const normal = new Float32Array([0, 0, 1]);
+    const flat = 0xffabcdef;
+    const primary = 0xff00d4ff;
+    const bg = 0xff000000;
+    const withHairPaint = renderer.vertexColour(0, normal, 0, flat, primary, bg);
+    renderer.mesh.paint[0] = 0;
+    const withoutHairPaint = renderer.vertexColour(0, normal, 0, flat, primary, bg);
+    assert.equal(withHairPaint, withoutHairPaint, 'blue hologram replaces translucent scalp paint with the hologram surface');
+
+    renderer.mesh.paint[0] = 0x80aa2200 | 0;
+    renderer.blueMix = false;
+    assert.notEqual(renderer.vertexColour(0, normal, 0, flat, primary, bg), withoutHairPaint, 'gold hologram keeps its existing hair paint');
+    renderer.blueMix = true;
+    renderer.holoHair = true;
+    assert.notEqual(renderer.vertexColour(0, normal, 0, flat, primary, bg), withoutHairPaint, 'optical-fibre hair mode keeps its existing hair paint');
+  });
+
+  it('hides transparent hair edges only in the blue hologram', () => {
+    const renderer = Object.create(AvatarRenderer.prototype);
+    renderer.mesh = { faceGroup: new Float32Array([0, 2.5, 0]), fade: new Float32Array(4).fill(1) };
+    renderer.structure = {
+      count: 2,
+      face0: new Int32Array([0, 2]),
+      face1: new Int32Array([1, -1]),
+      a: new Int32Array([0, 2]),
+      b: new Int32Array([1, 3]),
+      crease: new Float32Array([1, 1]),
+    };
+    renderer.faceFront = new Uint8Array([1, 1, 1]);
+    renderer.xs = new Float32Array([0, 10, 20, 30]);
+    renderer.ys = new Float32Array(4);
+    renderer.scanY = 100;
+    const renderedSegments = () => {
+      const segments = [];
+      let start = null;
+      const ctx = {
+        beginPath() {},
+        moveTo(x, y) { start = [x, y]; },
+        lineTo(x, y) { segments.push([start, [x, y]]); },
+        stroke() {},
+      };
+      renderer.drawWire(ctx, new Float32Array(12), 0, 0xff00d4ff, 0xff000000, 1);
+      return segments;
+    };
+
+    renderer.holo = true;
+    renderer.holoHair = false;
+    renderer.blueMix = true;
+    assert.deepEqual(renderedSegments(), [[[20, 0], [30, 0]]], 'blue hologram keeps regular edges but hides hair edges');
+
+    renderer.blueMix = false;
+    assert.equal(renderedSegments().length, 2, 'gold hologram keeps its existing hair-edge rendering');
+  });
+
   it('renders a sparser sample of blue hologram points without removing the polygon web', () => {
     const renderer = Object.create(AvatarRenderer.prototype);
     const count = 100;
