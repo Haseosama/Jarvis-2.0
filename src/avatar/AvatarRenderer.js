@@ -130,6 +130,12 @@ export class AvatarRenderer {
     this.closeUp = false;
   }
 
+  get faceCenterX() {
+    const centres = this.mesh.eyeCentre;
+    if (!this.classicEyes || !centres || centres.length < 6) return 0;
+    return 0.5 * (centres[0] + centres[3]);
+  }
+
   get circuits() {
     if (!this._circuits) {
       this._circuits = new CircuitTraces(this.mesh);
@@ -347,11 +353,12 @@ export class AvatarRenderer {
     // 3. Ambient particles remain in non-holographic styles only.
     this.drawDriftingParticles(ctx, cx, cy, r, avatar.time, primary, strokePx);
 
-    // 4. Project 3D vertices to screen space
+    // 4. Project 3D vertices to screen space, centering Classic on its eye line.
+    const faceCenterX = this.faceCenterX;
     for (let i = 0; i < this.nV; i++) {
       const w = Math.max(CAM_D - v[3 * i + 2], 0.35);
       const k = (CAM_D / w) * r;
-      this.xs[i] = cx + v[3 * i] * k;
+      this.xs[i] = cx + (v[3 * i] - faceCenterX) * k;
       this.ys[i] = cy - v[3 * i + 1] * k;
     }
 

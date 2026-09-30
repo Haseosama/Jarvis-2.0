@@ -196,6 +196,19 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     assert.equal(lines, 0, 'the test mesh has no tracks to alter');
   });
 
+  it('centers the Classic face projection on its eye line while leaving other faces untouched', () => {
+    const renderer = Object.create(AvatarRenderer.prototype);
+    renderer.mesh = { eyeCentre: new Float32Array([-0.272, 0.017, 0.211, 0.202, 0.017, 0.241]) };
+    renderer.classicEyes = true;
+    const eyeLineCenter = (renderer.mesh.eyeCentre[0] + renderer.mesh.eyeCentre[3]) / 2;
+    assert.equal(renderer.faceCenterX, eyeLineCenter);
+    assert.ok(Math.abs(((renderer.mesh.eyeCentre[0] - renderer.faceCenterX) + (renderer.mesh.eyeCentre[3] - renderer.faceCenterX)) / 2) < 1e-6,
+      'left and right eyes are centered around the canvas axis');
+
+    renderer.classicEyes = false;
+    assert.equal(renderer.faceCenterX, 0, 'Léa and Marc retain their original projection');
+  });
+
   it('uses Léa 3D eye colors for a more natural Classic iris without hologram tint changes', () => {
     const renderer = Object.create(AvatarRenderer.prototype);
     renderer.mesh = {
