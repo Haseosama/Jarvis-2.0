@@ -107,6 +107,7 @@ export class AvatarRenderer {
     this.holoHair = false;
     this.blueMix = true;
     this.fibreOverlay = true;
+    this.classicEyes = false;
     this.browColour = 0xff34241c;
     this.browScale = 1.0;
     this.lashScale = 1.0;
@@ -329,24 +330,8 @@ export class AvatarRenderer {
       this.drawHalo(ctx, cx, cy, r, amp, avatar.time);
     }
 
-    // 3. Drifting points of light in the dark (26 particles as in AvatarRenderer.kt)
-    const particleCount = this.closeUp ? 10 : 26;
-    for (let k = 0; k < particleCount; k++) {
-      const h = (Math.imul(k, -1640531535) >>> 8) & 0xffff;
-      const ang = (h % 628) / 100 + 0.05 * avatar.time * (k % 2 === 0 ? 1 : -1);
-      const dist = r * (1.15 + 0.85 * ((((h / 7) | 0) % 100) / 100));
-      const tw = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(avatar.time * (0.8 + (h % 5) * 0.3) + k));
-      ctx.fillStyle = `rgba(${prR},${prG},${prB},${((150 * tw) / 255).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.arc(
-        cx + Math.cos(ang) * dist * 0.8,
-        cy + Math.sin(ang) * dist * 1.05,
-        (1.2 + (h % 3)) * Math.min(1, strokePx),
-        0,
-        Math.PI * 2
-      );
-      ctx.fill();
-    }
+    // 3. Ambient particles remain in non-holographic styles only.
+    this.drawDriftingParticles(ctx, cx, cy, r, avatar.time, primary, strokePx);
 
     // 4. Project 3D vertices to screen space
     for (let i = 0; i < this.nV; i++) {
@@ -468,15 +453,32 @@ export class AvatarRenderer {
       }
     }
 
-    // 10. Optical-Fibre Hologram Hair or Realistic Hair Strands
-    if (this.holoHair) {
-      this.drawFiberHair(ctx, nrm, primary, GOLD_CIRCUIT, avatar.time, strokePx);
-    } else if (this.fibreOverlay && this.skin > 0 && !this.holo) {
-      this.drawFibres(ctx, v, nrm, strokePx);
-    }
+    // 10. Scalp hair strands and fibre locks are intentionally omitted in every avatar style.
 
     // 11. Facial features (160 brow hairs, smooth lid curves, 15+7 lashes, catchlights, lip chains)
     this.drawFeatures(ctx, avatar, r, primary, strokePx);
+  }
+
+  drawDriftingParticles(ctx, cx, cy, r, time, primary, strokePx) {
+    if (this.holo) return;
+    const prR = (primary >> 16) & 0xff, prG = (primary >> 8) & 0xff, prB = primary & 0xff;
+    const particleCount = this.closeUp ? 10 : 26;
+    for (let k = 0; k < particleCount; k++) {
+      const h = (Math.imul(k, -1640531535) >>> 8) & 0xffff;
+      const ang = (h % 628) / 100 + 0.05 * time * (k % 2 === 0 ? 1 : -1);
+      const dist = r * (1.15 + 0.85 * ((((h / 7) | 0) % 100) / 100));
+      const tw = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(time * (0.8 + (h % 5) * 0.3) + k));
+      ctx.fillStyle = `rgba(${prR},${prG},${prB},${((150 * tw) / 255).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(
+        cx + Math.cos(ang) * dist * 0.8,
+        cy + Math.sin(ang) * dist * 1.05,
+        (1.2 + (h % 3)) * Math.min(1, strokePx),
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+    }
   }
 
   // ── Structural Wireframe & Scanner Sweep (AvatarRenderer.kt drawWire) ───────
@@ -573,7 +575,10 @@ export class AvatarRenderer {
       ctx.stroke();
     }
 
-    // 2. Twinkling polygon nodes (sparsely sampled so the hologram does not look noisy)
+    // Hologram styles keep the polygon lines but omit every isolated blue node.
+    if (this.holo) return;
+
+    // 2. Twinkling polygon nodes for the network-only style
     const nodeBuckets = [[], [], []];
     const nodeKeep = this.holo ? [0, 0.22, 0.45] : [0.10, 0.24, 0.46];
     const closeUpDensity = this.closeUp ? 0.82 : 1;
@@ -689,6 +694,7 @@ export class AvatarRenderer {
     const outerR = Math.max(0.95, strokePx * 1.25);
     const innerR = Math.max(0.42, strokePx * 0.52);
     for (let kind = 0; kind < 2; kind++) {
+      if (this.holo && kind === 1) continue; // keep the blue circuit lines, not isolated blue terminal dots
       const padPoints = [];
       for (let idx = 0; idx < c.pads.length; idx++) {
         const p = c.pads[idx];
@@ -1144,6 +1150,40 @@ export class AvatarRenderer {
     ctx.restore();
   }
 
+  drawClassicEyeDetail(ctx, x, y, r, face, open, primary, strokePx) {
+    if (!this.classicEyes || open < 0.12) return;
+    const rx = Math.max(2, r * 0.041);
+    const ry = rx * 0.82;
+    const visibility = face * Math.min(1, open * 1.15);
+    const rim = this.holo ? mixInt(primary, 0xffd5f2ff, 0.24) : 0xff173849;
+    const irisLight = this.holo ? primary : 0xff76a9c4;
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = intToCss(rim, 0.72 * visibility);
+    ctx.lineWidth = Math.max(0.65, strokePx * 0.7);
+    ctx.beginPath();
+    ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = intToCss(irisLight, (this.holo ? 0.40 : 0.52) * visibility);
+    ctx.lineWidth = Math.max(0.5, strokePx * 0.48);
+    ctx.beginPath();
+    for (let i = 0; i < 14; i++) {
+      const angle = (i / 14) * Math.PI * 2;
+      const inner = 0.48 + 0.06 * (i % 3);
+      ctx.moveTo(x + Math.cos(angle) * rx * inner, y + Math.sin(angle) * ry * inner);
+      ctx.lineTo(x + Math.cos(angle) * rx * 0.9, y + Math.sin(angle) * ry * 0.9);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = intToCss(this.holo ? DEEP_BLUE : 0xff071019, 0.88 * visibility);
+    ctx.beginPath();
+    ctx.ellipse(x, y, rx * 0.27, ry * 0.30, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   // ── Brows, Lashes, Eyelids, Catchlights & Lip Chains (drawFeatures) ────────
 
   drawFeatures(ctx, avatar, r, primary, strokePx) {
@@ -1342,6 +1382,7 @@ export class AvatarRenderer {
       if (open > 0.4 && mesh.eyeFirst.length > e) {
         const pole = mesh.eyeFirst[e] + 17;
         if (pole < this.nV) {
+          this.drawClassicEyeDetail(ctx, this.xs[pole], this.ys[pole], r, face, open, primary, strokePx);
           ctx.fillStyle = `rgba(255,255,255,${((235 / 255) * face * open).toFixed(3)})`;
           ctx.beginPath();
           ctx.arc(this.xs[pole] - r * 0.010, this.ys[pole] - r * 0.010, Math.max(1.2, r * 0.0075), 0, Math.PI * 2);

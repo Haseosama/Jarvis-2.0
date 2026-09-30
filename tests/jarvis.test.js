@@ -108,6 +108,120 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     assert.equal(fills, restingFills, 'closed mouth has no dark cavity overlay');
   });
 
+  it('does not render scalp strands in optical-fibre or 3D-skin styles', () => {
+    const renderer = Object.create(AvatarRenderer.prototype);
+    renderer.mesh = {
+      vertexCount: 0, faceCount: 0,
+      verts: new Float32Array(0), normals: new Float32Array(0),
+      faces: new Int32Array(0), faceGroup: new Float32Array(0),
+      fade: new Float32Array(0), paint: new Int32Array(0), lipMask: new Float32Array(0),
+    };
+    renderer.nV = 0; renderer.nF = 0;
+    renderer.xs = new Float32Array(0); renderer.ys = new Float32Array(0);
+    renderer.faceColor = new Int32Array(0); renderer.faceFront = new Uint8Array(0);
+    renderer.faceZ = new Float32Array(0); renderer.order = new Int32Array(0);
+    renderer.lut = new Int32Array(192); renderer.lutKey = '';
+    renderer.closeUp = false; renderer.halo = false; renderer.showCircuits = false;
+    renderer.fibreOverlay = true; renderer.classicEyes = false;
+    renderer.drawWeb = () => {}; renderer.drawWire = () => {}; renderer.drawFeatures = () => {};
+    let scalpStrandDraws = 0;
+    renderer.drawFiberHair = () => { scalpStrandDraws++; };
+    renderer.drawFibres = () => { scalpStrandDraws++; };
+
+    const gradient = { addColorStop() {} };
+    const ctx = {
+      save() {}, restore() {}, beginPath() {}, arc() {}, fill() {},
+      createRadialGradient() { return gradient; },
+    };
+    const avatar = {
+      pose() {}, pv: new Float32Array(0), pn: new Float32Array(0),
+      glow: 0, scan: 0, time: 0,
+    };
+    const styles = [
+      { holo: true, holoHair: true, blueMix: false, skin: 2 },
+      { holo: false, holoHair: false, blueMix: false, skin: 2 },
+    ];
+    for (const style of styles) {
+      Object.assign(renderer, style);
+      renderer.draw(ctx, avatar, 100, 100, 80, 0xff00d4ff, 0xff5ce1e6, 0xff060e14);
+    }
+    assert.equal(scalpStrandDraws, 0, 'neither optical fibres nor realistic scalp strands are rendered');
+  });
+
+  it('suppresses drifting blue particles in hologram styles', () => {
+    const renderer = Object.create(AvatarRenderer.prototype);
+    renderer.closeUp = false;
+    let dots = 0;
+    const ctx = {
+      beginPath() {},
+      arc() { dots++; },
+      fill() {},
+    };
+
+    renderer.holo = true;
+    renderer.drawDriftingParticles(ctx, 100, 100, 80, 1, 0xff00d4ff, 1);
+    assert.equal(dots, 0, 'hologram styles have no ambient particle dots');
+
+    renderer.holo = false;
+    renderer.drawDriftingParticles(ctx, 100, 100, 80, 1, 0xff00d4ff, 1);
+    assert.equal(dots, 26, 'non-hologram styles retain their ambient particles');
+  });
+
+  it('removes blue circuit terminal dots on holograms while leaving track lines', () => {
+    const renderer = Object.create(AvatarRenderer.prototype);
+    renderer._circuits = {
+      count: 1,
+      triA: new Int32Array([0]), triB: new Int32Array([0]), triC: new Int32Array([0]),
+      wu: new Float32Array([0]), wv: new Float32Array([0]),
+      segments: new Int32Array(0), segTrack: new Int32Array(0), segAlong: new Float32Array(0),
+      trackKind: new Int32Array([1]), fade: new Float32Array([1]), pads: new Int32Array([0, 0]),
+    };
+    renderer.cx = new Float32Array(1);
+    renderer.cy = new Float32Array(1);
+    renderer.cz = new Float32Array(1);
+    renderer.xs = new Float32Array([10]);
+    renderer.ys = new Float32Array([12]);
+    renderer.holo = true;
+    renderer.blueMix = true;
+    let dots = 0;
+    let lines = 0;
+    const ctx = {
+      save() {}, restore() {}, beginPath() {}, moveTo() {},
+      lineTo() { lines++; }, stroke() {},
+      arc() { dots++; }, fill() {},
+    };
+
+    renderer.drawCircuits(ctx, new Float32Array([0, 0, 1]), 0, 0xff00d4ff, 0xff000000, 1, 0);
+    assert.equal(dots, 0, 'blue terminal pads are not drawn as isolated hologram dots');
+    assert.equal(lines, 0, 'the test mesh has no tracks to alter');
+  });
+
+  it('adds iris depth and radial detail to the classic 3D eyes only', () => {
+    const renderer = Object.create(AvatarRenderer.prototype);
+    renderer.classicEyes = true;
+    renderer.holo = false;
+    renderer.skin = 2;
+    let ellipses = 0;
+    let segments = 0;
+    const ctx = {
+      save() {}, restore() {}, beginPath() {},
+      ellipse() { ellipses++; },
+      moveTo() {}, lineTo() { segments++; },
+      stroke() {}, fill() {},
+    };
+
+    renderer.drawClassicEyeDetail(ctx, 40, 50, 170, 1, 1, 0xff00d4ff, 1);
+    assert.ok(ellipses >= 2, 'draws a defined iris ring and pupil');
+    assert.ok(segments >= 14, 'adds radial iris texture');
+
+    renderer.classicEyes = false;
+    ellipses = 0;
+    segments = 0;
+    renderer.drawClassicEyeDetail(ctx, 40, 50, 170, 1, 1, 0xff00d4ff, 1);
+    assert.equal(ellipses, 0, 'leaves Léa and Marc eye rendering unchanged');
+    assert.equal(segments, 0);
+  });
+
   it('suppresses translucent scalp hair paint in every avatar style', () => {
     const renderer = Object.create(AvatarRenderer.prototype);
     renderer.mesh = {
@@ -182,7 +296,7 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     }
   });
 
-  it('renders a sparser sample of blue hologram points without removing the polygon web', () => {
+  it('removes isolated hologram dots while retaining polygon lines and network nodes', () => {
     const renderer = Object.create(AvatarRenderer.prototype);
     const count = 100;
     renderer.skin = 5;
@@ -210,8 +324,15 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
       arc() { dots++; },
     };
     renderer.drawWeb(ctx, new Float32Array([0, 0, 0.2]), 0, 0xff00d4ff, 1, 0);
-    assert.ok(dots >= 25 && dots <= 50, `100 potential hologram nodes should show a reduced sample, got ${dots}`);
-    assert.ok(edgeSegments > 0, 'polygon web edges remain visible while blue points are reduced');
+    assert.equal(dots, 0, 'hologram styles draw no isolated polygon dots');
+    assert.ok(edgeSegments > 0, 'hologram polygon web lines remain visible');
+
+    renderer.holo = false;
+    renderer.skin = 0;
+    dots = 0;
+    edgeSegments = 0;
+    renderer.drawWeb(ctx, new Float32Array([0, 0, 0.2]), 0, 0xff00d4ff, 1, 0);
+    assert.ok(dots > 0, 'network-only style retains its node visualization');
   });
 
   it('removes residual scalp hair paint for bald avatars while preserving opaque facial details', () => {

@@ -90,7 +90,7 @@ jobs:
           - Bouche d’avatar retravaillée : cavité buccale animée, rangée de dents, langue subtile, contour des lèvres mieux défini et fermeture labiale plus progressive.
           - Avatar sans cheveux : suppression des résidus de peinture capillaire sur le crâne, en conservant les détails du visage.
           - Voûte céleste : position géographique actuelle demandée à l’ouverture et centrage local de la carte, avec commande pour actualiser la position.
-          - Avatar 3D : polygones capillaires supprimés dans les modes hologramme bleu/or, fibres optiques, réseau et peau; les fibres optiques restent dessinées en brins, sans surface polygonale.
+          - Avatar 3D : surfaces et mèches capillaires supprimées (y compris fibres optiques et peau 3D); points bleus isolés retirés des hologrammes bleu/or/fibres; iris du Classique 3D retravaillé.
 
           Adaptation complète sur PC (Windows x64) de **Jarvis-Android v0.9.53**, fonctionnant de manière 100% autonome sans serveur backend externe.
 

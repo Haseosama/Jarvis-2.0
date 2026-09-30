@@ -265,6 +265,7 @@ export default function AvatarView({
       renderer.halo = p.faceSpec.halo;
       renderer.lipTint = p.faceSpec.lipTint;
       renderer.fibreOverlay = p.faceSpec.fibres !== false;
+      renderer.classicEyes = p.faceSpec.id === 'classic';
       renderer.draw(ctx, avatar, cx, cy, r, p.primaryHex, p.accentHex, p.bgHex);
 
       ctx.restore();
