@@ -92,7 +92,7 @@ export class HeadMesh {
     this.edgeCount = (this.edges.length / 2) | 0;
   }
 
-  /** Apply a restrained lower-face sculpt to Classic: a cleaner jaw taper and less chin fullness. */
+  /** Match Classic's face proportions to the masculine, angular reference without changing any colors. */
   static refineClassicFace(mesh) {
     const verts = new Float32Array(mesh.verts);
     const eyeCentre = mesh.eyeCentre;
@@ -104,24 +104,69 @@ export class HeadMesh {
       const y = mesh.verts[3 * i + 1];
       const z = mesh.verts[3 * i + 2];
       const jaw = mesh.jaw?.[i] || 0;
+      const brow = mesh.brow?.[i] || 0;
       if (mesh.lipMask?.[i] > 0.05) continue;
 
       const front = smooth(-0.08, 0.24, z);
       if (front <= 0) continue;
-      const cheekWeight = smooth(-0.48, -0.08, y) * (1 - smooth(0.10, 0.34, y)) * front;
-      const chinWeight = jaw < 0.12
-        ? 0
-        : smooth(-0.92, -0.72, y) * (1 - smooth(-0.62, -0.49, y)) * front * jaw;
-      const taper = 0.025 * cheekWeight + 0.060 * chinWeight;
-      if (taper <= 0 && chinWeight <= 0) continue;
+      const absX = Math.abs(x - centreX);
+      const cheek = smooth(-0.35, -0.12, y) * (1 - smooth(0.28, 0.48, y)) * front;
+      const nose = smooth(-0.42, -0.30, y) * (1 - smooth(-0.02, 0.10, y)) *
+        (1 - smooth(0.14, 0.25, absX)) * front;
+      const jawBand = smooth(-1.00, -0.76, y) * (1 - smooth(-0.46, -0.30, y)) * front * jaw;
+      const chinFront = smooth(-0.84, -0.68, y) * (1 - smooth(-0.55, -0.48, y)) *
+        (1 - smooth(0.23, 0.43, absX)) * front * jaw;
+      const underChin = smooth(-0.99, -0.86, y) * (1 - smooth(-0.79, -0.70, y)) * front * jaw;
+      const browRidge = smooth(0.04, 0.14, y) * (1 - smooth(0.32, 0.42, y)) * front * brow;
 
-      verts[3 * i] = centreX + (x - centreX) * (1 - taper);
-      // Lift and gently flatten only the front underside of the chin; the mouth landmarks stay in place.
-      verts[3 * i + 1] = y + 0.028 * chinWeight;
-      verts[3 * i + 2] = z - 0.072 * chinWeight;
+      const widthScale = 1 + 0.045 * cheek + 0.115 * jawBand + 0.085 * nose;
+      if (widthScale === 1 && chinFront === 0 && underChin === 0 && nose === 0 && browRidge === 0) continue;
+      verts[3 * i] = centreX + (x - centreX) * widthScale;
+      // Broaden the nasal bridge and project it slightly; keep the eye and lip landmarks untouched.
+      verts[3 * i + 1] = y + 0.045 * underChin;
+      verts[3 * i + 2] = z + 0.052 * nose + 0.052 * browRidge + 0.045 * chinFront - 0.052 * underChin;
     }
 
-    return new HeadMesh({ ...mesh, verts });
+    // Refit smooth head normals to the deformed surface; vertex paint/material colors are untouched.
+    const normals = new Float32Array(mesh.normals);
+    const normalSums = new Float64Array(headVertices * 3);
+    for (let face = 0; face < mesh.faceCount; face++) {
+      if (mesh.faceGroup?.[face] > 1.5) continue;
+      const a = mesh.faces[3 * face];
+      const b = mesh.faces[3 * face + 1];
+      const c = mesh.faces[3 * face + 2];
+      if (a >= headVertices || b >= headVertices || c >= headVertices) continue;
+      const abx = verts[3 * b] - verts[3 * a];
+      const aby = verts[3 * b + 1] - verts[3 * a + 1];
+      const abz = verts[3 * b + 2] - verts[3 * a + 2];
+      const acx = verts[3 * c] - verts[3 * a];
+      const acy = verts[3 * c + 1] - verts[3 * a + 1];
+      const acz = verts[3 * c + 2] - verts[3 * a + 2];
+      const nx = aby * acz - abz * acy;
+      const ny = abz * acx - abx * acz;
+      const nz = abx * acy - aby * acx;
+      for (const index of [a, b, c]) {
+        normalSums[3 * index] += nx;
+        normalSums[3 * index + 1] += ny;
+        normalSums[3 * index + 2] += nz;
+      }
+    }
+    for (let i = 0; i < headVertices; i++) {
+      let nx = normalSums[3 * i];
+      let ny = normalSums[3 * i + 1];
+      let nz = normalSums[3 * i + 2];
+      const length = Math.hypot(nx, ny, nz);
+      if (length < 1e-9) continue;
+      const old = 3 * i;
+      if (nx * mesh.normals[old] + ny * mesh.normals[old + 1] + nz * mesh.normals[old + 2] < 0) {
+        nx = -nx; ny = -ny; nz = -nz;
+      }
+      normals[old] = nx / length;
+      normals[old + 1] = ny / length;
+      normals[old + 2] = nz / length;
+    }
+
+    return new HeadMesh({ ...mesh, verts, normals });
   }
 
   static parse(arrayBuffer) {

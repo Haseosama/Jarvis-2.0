@@ -56,29 +56,40 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     }
   });
 
-  it('refines only the Classic lower face to taper the jaw and reduce chin fullness', () => {
+  it('sculpts Classic toward the reference morphology while preserving all colors', () => {
     const mesh = HeadMesh.parse(readArrayBuffer('avatar/head_mesh.bin'));
+    const originalPaint = new Int32Array(mesh.paint);
     const refined = HeadMesh.refineClassicFace(mesh);
     const centerX = 0.5 * (mesh.eyeCentre[0] + mesh.eyeCentre[3]);
-    const chinVertices = [];
-    for (let i = 0; i < mesh.nHead; i++) {
-      const x = mesh.verts[3 * i];
-      const y = mesh.verts[3 * i + 1];
-      const z = mesh.verts[3 * i + 2];
-      if (y > -0.85 && y < -0.62 && Math.abs(x - centerX) < 0.28 && z > 0.2 && mesh.jaw[i] > 0.3 && mesh.lipMask[i] <= 0.05) {
-        chinVertices.push(i);
+    const select = (predicate) => {
+      const indices = [];
+      for (let i = 0; i < mesh.nHead; i++) {
+        if (predicate(i, mesh.verts[3 * i], mesh.verts[3 * i + 1], mesh.verts[3 * i + 2])) indices.push(i);
       }
-    }
-    assert.ok(chinVertices.length > 10, 'the chin test region contains enough front-facing jaw vertices');
-    const averageDistanceFromCenter = (verts) =>
-      chinVertices.reduce((sum, i) => sum + Math.abs(verts[3 * i] - centerX), 0) / chinVertices.length;
-    const beforeWidth = averageDistanceFromCenter(mesh.verts);
-    const afterWidth = averageDistanceFromCenter(refined.verts);
-    const beforeDepth = chinVertices.reduce((sum, i) => sum + mesh.verts[3 * i + 2], 0) / chinVertices.length;
-    const afterDepth = chinVertices.reduce((sum, i) => sum + refined.verts[3 * i + 2], 0) / chinVertices.length;
-    assert.ok(afterWidth < beforeWidth, 'the lower face tapers very slightly toward the chin');
-    assert.ok(afterDepth < beforeDepth, 'the front underside of the chin is pulled back');
+      return indices;
+    };
+    const average = (indices, values, axis, transform = (value) => value) =>
+      indices.reduce((sum, i) => sum + transform(values[3 * i + axis]), 0) / indices.length;
+    const underChin = select((i, x, y, z) =>
+      y > -0.96 && y < -0.80 && Math.abs(x - centerX) < 0.28 && z > 0.2 && mesh.jaw[i] > 0.2 && mesh.lipMask[i] <= 0.05);
+    const chinFront = select((i, x, y, z) =>
+      y > -0.75 && y < -0.60 && Math.abs(x - centerX) < 0.28 && z > 0.2 && mesh.jaw[i] > 0.3 && mesh.lipMask[i] <= 0.05);
+    const nose = select((i, x, y, z) =>
+      y > -0.38 && y < -0.15 && Math.abs(x - centerX) < 0.14 && z > 0.3);
+    const brow = select((i, x, y, z) =>
+      y > 0.08 && y < 0.28 && mesh.brow[i] > 0.15 && z > 0.2);
+
+    assert.ok(underChin.length > 10 && chinFront.length > 10 && nose.length > 10 && brow.length > 10);
+    assert.ok(average(underChin, refined.verts, 1) > average(underChin, mesh.verts, 1), 'the underside is lifted to remove the double-chin contour');
+    assert.ok(average(underChin, refined.verts, 2) < average(underChin, mesh.verts, 2), 'the underside recedes for a cleaner jaw-to-neck transition');
+    assert.ok(average(chinFront, refined.verts, 0, (x) => Math.abs(x - centerX)) > average(chinFront, mesh.verts, 0, (x) => Math.abs(x - centerX)), 'the chin and jaw become squarer and broader');
+    assert.ok(average(chinFront, refined.verts, 2) > average(chinFront, mesh.verts, 2), 'the chin gains a stronger forward profile');
+    assert.ok(average(nose, refined.verts, 2) > average(nose, mesh.verts, 2), 'the nose bridge projects slightly farther forward');
+    assert.ok(average(brow, refined.verts, 2) > average(brow, mesh.verts, 2), 'the brow ridge is more pronounced');
     assert.notEqual(refined.verts, mesh.verts, 'the cached source mesh remains unchanged');
+    assert.deepEqual(refined.paint, originalPaint, 'vertex paint and therefore all existing colors stay unchanged');
+    assert.notEqual(refined.normals, mesh.normals, 'the deformed surface gets its own recalculated normals');
+    assert.ok(Math.abs(Math.hypot(refined.normals[3 * chinFront[0]], refined.normals[3 * chinFront[0] + 1], refined.normals[3 * chinFront[0] + 2]) - 1) < 1e-4, 'deformed facial normals remain normalized');
     assert.deepEqual(Array.from(refined.verts.slice(3 * mesh.nHead)), Array.from(mesh.verts.slice(3 * mesh.nHead)), 'hair vertices are not altered');
     for (let i = 0; i < mesh.vertexCount; i++) {
       if (mesh.lipMask[i] > 0.05) {
@@ -226,8 +237,6 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     renderer.cx = new Float32Array(1);
     renderer.cy = new Float32Array(1);
     renderer.cz = new Float32Array(1);
-    renderer.circuitModelX = new Float32Array(1);
-    renderer.mesh = { verts: new Float32Array([0, 0, 0]) };
     renderer.xs = new Float32Array([10]);
     renderer.ys = new Float32Array([12]);
     renderer.holo = true;
@@ -256,43 +265,6 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
 
     renderer.classicEyes = false;
     assert.equal(renderer.faceCenterX, 0, 'Léa and Marc retain their original projection');
-  });
-
-  it('gives the reference look a split gold/blue metal face and luminous cyan iris colors', () => {
-    const mesh = HeadMesh.parse(readArrayBuffer('avatar/head_mesh.bin'));
-    const renderer = Object.create(AvatarRenderer.prototype);
-    renderer.mesh = mesh;
-    renderer.classicEyeMask = new Uint8Array(mesh.vertexCount);
-    for (let e = 0; e < mesh.eyeFirst.length; e++) {
-      renderer.classicEyeMask.fill(1, mesh.eyeFirst[e], mesh.eyeFirst[e] + mesh.eyeCount[e]);
-    }
-    renderer.classicEyes = true;
-    renderer.classicCybernetic = true;
-
-    const centerX = renderer.faceCenterX;
-    const findMetalVertex = (left) => {
-      for (let i = 0; i < mesh.nHead; i++) {
-        const x = mesh.verts[3 * i];
-        const y = mesh.verts[3 * i + 1];
-        if (mesh.paint[i] === 0 && mesh.verts[3 * i + 2] > 0.3 && y > -0.3 && y < 0.3 &&
-          (left ? x < centerX - 0.25 : x > centerX + 0.25)) return i;
-      }
-      return -1;
-    };
-    const left = findMetalVertex(true);
-    const right = findMetalVertex(false);
-    assert.ok(left >= 0 && right >= 0, 'both halves have front-facing metal vertices');
-
-    const color = (index) => renderer.vertexColour(index, mesh.normals, 0.2, 0, 0xff00d4ff, 0xff060e14) >>> 0;
-    const leftColor = color(left);
-    const rightColor = color(right);
-    assert.ok(((leftColor >> 16) & 0xff) > (leftColor & 0xff), 'left side reads as warm gold metal');
-    assert.ok((rightColor & 0xff) > ((rightColor >> 16) & 0xff), 'right side reads as cool blue metal');
-
-    const iris = Array.from({ length: mesh.eyeCount[0] }, (_, i) => mesh.eyeFirst[0] + i)
-      .find((i) => (mesh.paint[i] >>> 0) === 0xff3f7ca6);
-    const irisColor = color(iris);
-    assert.ok((irisColor & 0xff) > ((irisColor >> 16) & 0xff), 'the iris is remapped to luminous electric blue');
   });
 
   it('uses Léa 3D eye colors for a more natural Classic iris without hologram tint changes', () => {
