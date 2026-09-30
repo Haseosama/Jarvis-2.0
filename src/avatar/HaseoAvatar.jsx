@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { createHaseoSkinTexture } from './HaseoSkinTexture.js';
 
 const MODEL_URL = './assets/avatar/haseo.fbx';
-const SKIN_TONES = [0xf1c9a8, 0xd9a47c, 0xb07a54, 0x7a4e36];
 const clamp = (value, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, Number(value) || 0));
 const rgb = (argb) => (Number(argb) >>> 0) & 0x00ffffff;
 
@@ -45,10 +45,11 @@ function loadHaseoTemplate() {
   return haseoTemplatePromise;
 }
 
-function createSurfaceMaterial(skinMode, primaryHex) {
+function createSurfaceMaterial(skinMode, primaryHex, skinTexture) {
   if (skinMode === 0) {
     return new THREE.MeshBasicMaterial({
       color: rgb(primaryHex),
+      map: skinTexture,
       side: THREE.DoubleSide,
       wireframe: true,
       transparent: true,
@@ -58,14 +59,15 @@ function createSurfaceMaterial(skinMode, primaryHex) {
 
   if (skinMode >= 5) {
     const palette = {
-      5: { color: 0xffca67, emissive: 0x7c3800, intensity: 0.48 },
-      6: { color: 0x67d8e8, emissive: 0x07566c, intensity: 0.42 },
-      7: { color: 0x78caff, emissive: 0x123c80, intensity: 0.50 },
-      8: { color: 0x477fe2, emissive: 0x091d55, intensity: 0.52 },
-    }[skinMode] || { color: 0x78caff, emissive: 0x123c80, intensity: 0.5 };
+      5: { emissive: 0x7c3800, intensity: 0.48 },
+      6: { emissive: 0x07566c, intensity: 0.42 },
+      7: { emissive: 0x123c80, intensity: 0.50 },
+      8: { emissive: 0x091d55, intensity: 0.52 },
+    }[skinMode] || { emissive: 0x123c80, intensity: 0.5 };
 
     return new THREE.MeshStandardMaterial({
-      color: palette.color,
+      color: 0xffffff,
+      map: skinTexture,
       emissive: palette.emissive,
       emissiveIntensity: palette.intensity,
       metalness: 0.16,
@@ -78,7 +80,8 @@ function createSurfaceMaterial(skinMode, primaryHex) {
   }
 
   return new THREE.MeshStandardMaterial({
-    color: SKIN_TONES[Math.max(0, Math.min(SKIN_TONES.length - 1, skinMode - 1))] || SKIN_TONES[0],
+    color: 0xffffff,
+    map: skinTexture,
     roughness: 0.66,
     metalness: 0,
     side: THREE.DoubleSide,
@@ -195,13 +198,20 @@ export default function HaseoAvatar({
         surface = meshes[0];
         if (!surface) throw new Error('No mesh found in Haseo FBX');
 
-        const box = new THREE.Box3().setFromObject(imported);
+        // FBXLoader's object bounds include every extreme morph target, which makes
+        // the neutral face look tiny. Fit and center the actual neutral vertices only.
+        const box = new THREE.Box3().setFromBufferAttribute(surface.geometry.attributes.position);
+        box.applyMatrix4(surface.matrixWorld);
         const center = box.getCenter(new THREE.Vector3());
         const boundsSize = box.getSize(new THREE.Vector3());
         imported.position.sub(center);
         root = imported;
 
-        surfaceMaterial = createSurfaceMaterial(livePropsRef.current.skinMode, livePropsRef.current.primaryHex);
+        const initialStyle = livePropsRef.current;
+        const initialStyleKey = [initialStyle.skinMode, initialStyle.primaryHex, initialStyle.accentHex, initialStyle.showCircuits].join(':');
+        const skinTexture = createHaseoSkinTexture(initialStyle.skinMode, initialStyle.accentHex, initialStyle.showCircuits);
+        surfaceMaterial = createSurfaceMaterial(initialStyle.skinMode, initialStyle.primaryHex, skinTexture);
+        surfaceMaterial.userData.haseoStyleKey = initialStyleKey;
         surface.material = surfaceMaterial;
         surface.frustumCulled = false;
 
@@ -212,7 +222,7 @@ export default function HaseoAvatar({
             side: THREE.DoubleSide,
             wireframe: true,
             transparent: true,
-            opacity: 0.2,
+            opacity: 0.08,
             depthTest: true,
             depthWrite: false,
             polygonOffset: true,
@@ -221,6 +231,8 @@ export default function HaseoAvatar({
           })
         );
         wireMaterial = wireMesh.material;
+        wireMesh.visible = false;
+        wireMaterial.color.setHex(rgb(initialStyle.accentHex));
         wireMesh.position.copy(surface.position);
         wireMesh.quaternion.copy(surface.quaternion);
         wireMesh.scale.copy(surface.scale);
@@ -237,6 +249,7 @@ export default function HaseoAvatar({
           root,
           surface,
           wireMesh,
+          styleKey: initialStyleKey,
           bounds: { height: boundsSize.y },
           nextBlinkAt: performance.now() + 2600,
           blinkStart: -1,
@@ -327,7 +340,10 @@ export default function HaseoAvatar({
       root?.traverse((object) => {
         if (!object.isMesh) return;
         const materials = Array.isArray(object.material) ? object.material : [object.material];
-        for (const material of materials) material?.dispose?.();
+        for (const material of materials) {
+          material?.map?.dispose?.();
+          material?.dispose?.();
+        }
       });
       surfaceMaterial?.dispose?.();
       wireMaterial?.dispose?.();
@@ -342,19 +358,20 @@ export default function HaseoAvatar({
     const renderer = rendererRef.current;
     if (!model || !renderer) return;
 
-    const material = createSurfaceMaterial(skinMode, primaryHex);
-    model.surface.material.dispose();
-    model.surface.material = material;
-    const wire = model.wireMesh;
-    const showWire = skinMode === 0 || (skinMode >= 5 && showCircuits);
-    wire.visible = showWire && skinMode !== 0;
-    if (skinMode === 0) {
-      material.color.setHex(rgb(primaryHex));
-      wire.visible = false;
-    } else {
-      wire.material.color.setHex(rgb(accentHex));
-      wire.material.opacity = skinMode === 6 ? 0.12 : 0.2;
+    const styleKey = [skinMode, primaryHex, accentHex, showCircuits].join(':');
+    if (model.styleKey !== styleKey) {
+      const texture = createHaseoSkinTexture(skinMode, accentHex, showCircuits);
+      const material = createSurfaceMaterial(skinMode, primaryHex, texture);
+      material.userData.haseoStyleKey = styleKey;
+      model.surface.material.map?.dispose?.();
+      model.surface.material.dispose();
+      model.surface.material = material;
+      model.styleKey = styleKey;
     }
+    const wire = model.wireMesh;
+    wire.visible = skinMode >= 5 && showCircuits;
+    wire.material.color.setHex(rgb(accentHex));
+    wire.material.opacity = skinMode === 6 ? 0.06 : 0.08;
   }, [skinMode, showCircuits, primaryHex, accentHex, loaded]);
 
   return (

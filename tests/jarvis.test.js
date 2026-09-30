@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { buildHaseoSkinPixels, HASEO_EYE_UV_CENTERS } from '../src/avatar/HaseoSkinTexture.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -609,6 +610,29 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     assert.ok(meshes[0].morphTargetDictionary.AA !== undefined);
     assert.ok(meshes[0].morphTargetDictionary.EyeBlink_L !== undefined);
     assert.equal(textureRequests, 1, 'the missing sidecar is intercepted locally');
+
+    meshes[0].geometry.computeBoundingBox();
+    const neutralBounds = new THREE.Box3().setFromBufferAttribute(meshes[0].geometry.attributes.position);
+    const neutralHeight = neutralBounds.getSize(new THREE.Vector3()).y;
+    const morphHeight = meshes[0].geometry.boundingBox.getSize(new THREE.Vector3()).y;
+    assert.ok(morphHeight > neutralHeight * 2, 'camera framing must use the neutral face bounds, not extreme blendshape bounds');
+  });
+
+  it('builds blue cybernetic Haseo skin texture and blue irises procedurally', () => {
+    const size = 512;
+    const textured = buildHaseoSkinPixels(7, 0xff5ce1e6, true, size);
+    const plain = buildHaseoSkinPixels(7, 0xff5ce1e6, false, size);
+    const sample = (data, u, v) => {
+      const offset = 4 * (Math.floor(v * size) * size + Math.floor(u * size));
+      return Array.from(data.subarray(offset, offset + 3));
+    };
+
+    assert.equal(textured.length, size * size * 4);
+    for (const eye of HASEO_EYE_UV_CENTERS) {
+      const pupil = sample(textured, eye[0], eye[1]);
+      assert.ok(pupil[2] > pupil[0], 'pupils use a blue tone');
+    }
+    assert.notDeepEqual(sample(textured, 0.32, 0.652), sample(plain, 0.32, 0.652), 'circuit paths are omitted when circuits are disabled');
   });
 
   it('subdivides Classic avatar to 84,000+ polygons and generates PCB electrical circuits', async () => {
