@@ -74,17 +74,28 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
       y > -0.96 && y < -0.80 && Math.abs(x - centerX) < 0.28 && z > 0.2 && mesh.jaw[i] > 0.2 && mesh.lipMask[i] <= 0.05);
     const chinFront = select((i, x, y, z) =>
       y > -0.75 && y < -0.60 && Math.abs(x - centerX) < 0.28 && z > 0.2 && mesh.jaw[i] > 0.3 && mesh.lipMask[i] <= 0.05);
+    const jawCorner = select((i, x, y, z) =>
+      y > -0.78 && y < -0.50 && Math.abs(x - centerX) > 0.22 && Math.abs(x - centerX) < 0.55 && z > 0.2 && mesh.jaw[i] > 0.1 && mesh.lipMask[i] <= 0.05);
+    const cheek = select((i, x, y, z) =>
+      y > -0.15 && y < 0.22 && Math.abs(x - centerX) > 0.25 && Math.abs(x - centerX) < 0.45 && z > 0.2 && mesh.lipMask[i] <= 0.05);
     const nose = select((i, x, y, z) =>
-      y > -0.38 && y < -0.15 && Math.abs(x - centerX) < 0.14 && z > 0.3);
+      y > -0.38 && y < -0.15 && Math.abs(x - centerX) < 0.12 && z > 0.3);
     const brow = select((i, x, y, z) =>
       y > 0.08 && y < 0.28 && mesh.brow[i] > 0.15 && z > 0.2);
 
-    assert.ok(underChin.length > 10 && chinFront.length > 10 && nose.length > 10 && brow.length > 10);
+    assert.ok(underChin.length > 10 && chinFront.length > 10 && jawCorner.length > 10 && cheek.length > 10 && nose.length > 10 && brow.length > 10);
     assert.ok(average(underChin, refined.verts, 1) > average(underChin, mesh.verts, 1), 'the underside is lifted to remove the double-chin contour');
     assert.ok(average(underChin, refined.verts, 2) < average(underChin, mesh.verts, 2), 'the underside recedes for a cleaner jaw-to-neck transition');
-    assert.ok(average(chinFront, refined.verts, 0, (x) => Math.abs(x - centerX)) > average(chinFront, mesh.verts, 0, (x) => Math.abs(x - centerX)), 'the chin and jaw become squarer and broader');
+    assert.ok(average(chinFront, refined.verts, 0, (x) => Math.abs(x - centerX)) > average(chinFront, mesh.verts, 0, (x) => Math.abs(x - centerX)), 'the chin stays broad and square');
     assert.ok(average(chinFront, refined.verts, 2) > average(chinFront, mesh.verts, 2), 'the chin gains a stronger forward profile');
-    assert.ok(average(nose, refined.verts, 2) > average(nose, mesh.verts, 2), 'the nose bridge projects slightly farther forward');
+    assert.ok(average(jawCorner, refined.verts, 0, (x) => Math.abs(x - centerX)) > average(jawCorner, mesh.verts, 0, (x) => Math.abs(x - centerX)), 'the jaw corners gain definition');
+    assert.ok(average(cheek, refined.verts, 0, (x) => Math.abs(x - centerX)) < average(cheek, mesh.verts, 0, (x) => Math.abs(x - centerX)), 'cheek fullness is reduced so the face reads less round');
+    assert.ok(average(cheek, refined.verts, 2) < average(cheek, mesh.verts, 2), 'the cheeks are subtly flattened');
+    for (const i of nose) {
+      assert.equal(refined.verts[3 * i], mesh.verts[3 * i], 'nose width is left unchanged');
+      assert.equal(refined.verts[3 * i + 1], mesh.verts[3 * i + 1]);
+      assert.equal(refined.verts[3 * i + 2], mesh.verts[3 * i + 2], 'nose projection is left unchanged');
+    }
     assert.ok(average(brow, refined.verts, 2) > average(brow, mesh.verts, 2), 'the brow ridge is more pronounced');
     assert.notEqual(refined.verts, mesh.verts, 'the cached source mesh remains unchanged');
     assert.deepEqual(refined.paint, originalPaint, 'vertex paint and therefore all existing colors stay unchanged');

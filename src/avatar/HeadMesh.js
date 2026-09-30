@@ -110,21 +110,22 @@ export class HeadMesh {
       const front = smooth(-0.08, 0.24, z);
       if (front <= 0) continue;
       const absX = Math.abs(x - centreX);
-      const cheek = smooth(-0.35, -0.12, y) * (1 - smooth(0.28, 0.48, y)) * front;
-      const nose = smooth(-0.42, -0.30, y) * (1 - smooth(-0.02, 0.10, y)) *
-        (1 - smooth(0.14, 0.25, absX)) * front;
+      const cheekSide = smooth(0.12, 0.26, absX);
+      const cheek = smooth(-0.35, -0.12, y) * (1 - smooth(0.28, 0.48, y)) * cheekSide * front;
       const jawBand = smooth(-1.00, -0.76, y) * (1 - smooth(-0.46, -0.30, y)) * front * jaw;
+      const jawCorner = smooth(0.22, 0.40, absX) * (1 - smooth(0.56, 0.72, absX)) *
+        smooth(-0.78, -0.66, y) * (1 - smooth(-0.38, -0.26, y)) * front * jaw;
       const chinFront = smooth(-0.84, -0.68, y) * (1 - smooth(-0.55, -0.48, y)) *
         (1 - smooth(0.23, 0.43, absX)) * front * jaw;
       const underChin = smooth(-0.99, -0.86, y) * (1 - smooth(-0.79, -0.70, y)) * front * jaw;
       const browRidge = smooth(0.04, 0.14, y) * (1 - smooth(0.32, 0.42, y)) * front * brow;
 
-      const widthScale = 1 + 0.045 * cheek + 0.115 * jawBand + 0.085 * nose;
-      if (widthScale === 1 && chinFront === 0 && underChin === 0 && nose === 0 && browRidge === 0) continue;
+      // Reduce cheek fullness, but keep a distinct, squarer jaw angle. Leave the nose itself alone.
+      const widthScale = 1 - 0.060 * cheek + 0.100 * jawBand + 0.075 * jawCorner;
+      if (widthScale === 1 && chinFront === 0 && underChin === 0 && browRidge === 0 && cheek === 0) continue;
       verts[3 * i] = centreX + (x - centreX) * widthScale;
-      // Broaden the nasal bridge and project it slightly; keep the eye and lip landmarks untouched.
-      verts[3 * i + 1] = y + 0.045 * underChin;
-      verts[3 * i + 2] = z + 0.052 * nose + 0.052 * browRidge + 0.045 * chinFront - 0.052 * underChin;
+      verts[3 * i + 1] = y + 0.045 * underChin - 0.014 * jawCorner;
+      verts[3 * i + 2] = z - 0.026 * cheek + 0.052 * browRidge + 0.045 * chinFront - 0.052 * underChin;
     }
 
     // Refit smooth head normals to the deformed surface; vertex paint/material colors are untouched.

@@ -1,6 +1,6 @@
 # JARVIS 2.0 — Édition PC Autonome (Sans Backend)
 
-**Version actuelle : 2.0.13** — la release GitHub est étiquetée à partir de `package.json`. Incrémenter cette version avant toute publication.
+**Version actuelle : 2.0.14** — la release GitHub est étiquetée à partir de `package.json`. Incrémenter cette version avant toute publication.
 
 Adaptation complète sur PC (Windows / Desktop autonome) de **[Jarvis-Android v0.9.53](https://github.com/Haseosama/Jarvis-Android)**, conçue pour fonctionner en tant qu'exécutable `.exe` autonome sans aucun serveur backend externe.
 
@@ -11,7 +11,7 @@ Adaptation complète sur PC (Windows / Desktop autonome) de **[Jarvis-Android v0
 ### 1. 🎭 Avatar 3D Temps Réel & Synchronisation Labiale (60 FPS)
 - **Trois visages 3D** : Classique (`84 555 polygones` par défaut), Léa et Marc. Les avatars Cartoon, Adam et Mei ne sont pas inclus.
 - **Densité réglable** : sélecteur Éco, Léger, Standard, Haute Définition et Ultra; le compteur de polygones s’actualise sur l’avatar. En mode « Sans cheveux », le résidu de peinture du cuir chevelu est supprimé, sans enlever les détails du visage.
-- **Morphologie du Classique inspirée de la référence** : nez et arcade sourcilière plus marqués, mâchoire plus carrée, menton mieux défini et dessous du menton relevé. Les couleurs et les repères des lèvres restent inchangés.
+- **Morphologie du Classique inspirée de la référence** : joues moins rondes, angles de mâchoire plus nets, menton mieux défini et dessous du menton relevé; forme du nez et palette conservées.
 - **Miniature PiP déplaçable** : glisser l’avatar vers n’importe quelle zone de la fenêtre; sa position est mémorisée et reste dans les limites de l’écran.
 - **Circuits PCB activables ou désactivables**, styles hologramme/peau, 23 coiffures 3D (`JHR1`), 11 teintes de cheveux et 5 teintes de lèvres.
 - **Lip-sync audio-locked** : analyse formantique FFT F1/F2 sur PCM 24 kHz, phonèmes français et synchronisation des visèmes avec l’horloge de lecture audio. La bouche dessine maintenant une cavité animée, les dents et la langue, avec des lèvres mieux lissées en parole et dans la miniature. Le réseau holographique affiche moins de points bleus, tout en gardant ses lignes polygonales.
