@@ -964,8 +964,9 @@ export class NetworkWeb {
     for (let t = 0; t < nF; t++) {
       const a = f[3 * t], b = f[3 * t + 1], c = f[3 * t + 2];
       const avgFade = (mesh.fade[a] + mesh.fade[b] + mesh.fade[c]) / 3;
+      const skinFace = mesh.faceGroup[t] >= 0.5 && mesh.faceGroup[t] <= 1.5;
       const plain = mesh.paint[a] === 0 && mesh.paint[b] === 0 && mesh.paint[c] === 0;
-      if (avgFade > 0.2 && plain) {
+      if (skinFace && avgFade > 0.2 && plain) {
         const abx = v[3 * b] - v[3 * a], aby = v[3 * b + 1] - v[3 * a + 1], abz = v[3 * b + 2] - v[3 * a + 2];
         const acx = v[3 * c] - v[3 * a], acy = v[3 * c + 1] - v[3 * a + 1], acz = v[3 * c + 2] - v[3 * a + 2];
         const cx = aby * acz - abz * acy, cy = abz * acx - abx * acz, cz = abx * acy - aby * acx;
@@ -1011,6 +1012,7 @@ export class NetworkWeb {
       }
       const t = lo;
       const a = f[3 * t], b = f[3 * t + 1], c = f[3 * t + 2];
+      if (mesh.faceGroup[t] < 0.5 || mesh.faceGroup[t] > 1.5) continue;
       if ((mesh.fade[a] + mesh.fade[b] + mesh.fade[c]) / 3 <= 0.2) continue;
       if (mesh.paint[a] !== 0 || mesh.paint[b] !== 0 || mesh.paint[c] !== 0) continue;
 

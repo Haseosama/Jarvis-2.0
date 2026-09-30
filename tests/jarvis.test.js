@@ -388,9 +388,23 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     assert.ok(circuits.segments.length > 500, 'Expected >500 circuit segment endpoints');
     assert.ok(circuits.pads.length > 100, 'Expected >100 circuit pads');
 
-    const web = new NetworkWeb(highClassic);
+    const webMesh = new HeadMesh({
+      ...highClassic,
+      paint: new Int32Array(highClassic.vertexCount),
+    });
+    const web = new NetworkWeb(webMesh);
     assert.ok(web.count > 5000, `Expected >5,000 polygon web nodes, got ${web.count}`);
     assert.ok(web.edges.length > 20000, 'Expected >20,000 polygon web edge endpoints');
+    const skinTriangles = new Set();
+    for (let t = 0; t < webMesh.faceCount; t++) {
+      if (webMesh.faceGroup[t] < 0.5 || webMesh.faceGroup[t] > 1.5) continue;
+      const a = webMesh.faces[3 * t], b = webMesh.faces[3 * t + 1], c = webMesh.faces[3 * t + 2];
+      skinTriangles.add([a, b, c].sort((x, y) => x - y).join(','));
+    }
+    for (let i = 0; i < web.count; i++) {
+      const key = [web.triA[i], web.triB[i], web.triC[i]].sort((x, y) => x - y).join(',');
+      assert.ok(skinTriangles.has(key), 'polygon web samples only face skin, never hair polygons');
+    }
 
     assert.equal(ALL_VOICES.length, 30);
     for (const v of ALL_VOICES) {
