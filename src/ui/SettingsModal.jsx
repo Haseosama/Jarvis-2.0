@@ -135,6 +135,9 @@ export default function SettingsModal({ onClose, onTestVoice }) {
                       🚫 Sans circuits électriques
                     </button>
                   </div>
+                  <p className="settings-hint">
+                    En mode Classique, activez l’hologramme bleu et les circuits, sans coiffure sélectionnée, pour retrouver le métal bicolore or/bleu et les yeux cyan de la photo de référence.
+                  </p>
 
                   <h4>Sélecteur de Polygones (Densité 3D & Performance PC)</h4>
                   <div className="settings-chip-row">

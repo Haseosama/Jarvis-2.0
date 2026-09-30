@@ -21,6 +21,25 @@ const ANDROID_GLOW = 0xff35c9ff;
 export const DEEP_BLUE = 0xff0c2160;
 const GOLD_CIRCUIT = 0xffffb640;
 const BLUE_HOT = 0xff8fc1ff;
+const CYBER_BLUE_CIRCUIT = 0xff168fe8;
+const CYBER_BLUE_HOT = 0xff9be8ff;
+const CYBER_GOLD_METAL = 0xff49351f;
+const CYBER_BLUE_METAL = 0xff223342;
+const CYBER_GRAPHITE = 0xff101923;
+const CLASSIC_CYBER_IRIS_PAINT = new Set([0xff16324f, 0xff3f7ca6, 0xff1f4560]);
+const CLASSIC_CYBER_PAINT = new Map([
+  [0xff05070a, 0xff03080d],
+  [0xff16324f, 0xff062b58],
+  [0xff3f7ca6, 0xff37b9ff],
+  [0xff1f4560, 0xff0877ca],
+  [0xffd9d3ca, 0xff53616d],
+  [0xffe3ded5, 0xff63727e],
+  [0xffddd6cc, 0xff596773],
+  [0xffcfc7bc, 0xff46535f],
+  [0xffc2b9ad, 0xff36434f],
+  [0xffb5ab9e, 0xff293641],
+  [0xff2b1f1c, 0xff111923],
+]);
 
 const SKIN_TONES = [0xf1c9a8, 0xd9a47c, 0xb07a54, 0x7a4e36, 0x69b4f0];
 const LIP_TONES = [0xd9707f, 0xc02836, 0x8e3a6b, 0xe8735a];
@@ -102,6 +121,7 @@ export class AvatarRenderer {
     this.cx = null;
     this.cy = null;
     this.cz = null;
+    this.circuitModelX = null;
     this.etchKeep = null;
 
     // Optical-fibre hologram hair
@@ -119,6 +139,7 @@ export class AvatarRenderer {
     this.blueMix = true;
     this.fibreOverlay = true;
     this.classicEyes = false;
+    this.classicCybernetic = false;
     this.browColour = 0xff34241c;
     this.browScale = 1.0;
     this.lashScale = 1.0;
@@ -142,6 +163,7 @@ export class AvatarRenderer {
       this.cx = new Float32Array(this._circuits.count);
       this.cy = new Float32Array(this._circuits.count);
       this.cz = new Float32Array(this._circuits.count);
+      this.circuitModelX = new Float32Array(this._circuits.count);
     }
     return this._circuits;
   }
@@ -231,6 +253,46 @@ export class AvatarRenderer {
     }
   }
 
+  classicCyberneticVertexColour(vi, vx, vy, vz, vlam, amp, bgColor, paint, isHairPaint) {
+    const mesh = this.mesh;
+    const eye = Boolean(this.classicEyeMask?.[vi]);
+    const mappedEye = eye ? CLASSIC_CYBER_PAINT.get(paint >>> 0) : undefined;
+    const lit = (rgb, k) => argb(
+      255,
+      Math.min(255, Math.max(0, (((rgb >> 16) & 0xff) * k) | 0)),
+      Math.min(255, Math.max(0, (((rgb >> 8) & 0xff) * k) | 0)),
+      Math.min(255, Math.max(0, ((rgb & 0xff) * k) | 0))
+    );
+
+    if (paint !== 0 && !isHairPaint && mappedEye === undefined) {
+      return mixInt(bgColor, lit(paint, 0.78 + 0.38 * vlam), mesh.fade[vi]);
+    }
+
+    let colour;
+    if (mappedEye !== undefined) {
+      colour = lit(mappedEye, paint === 0xff3f7ca6 ? 1.05 + 0.20 * amp : 0.88 + 0.18 * amp);
+    } else {
+      const side = smooth01(-0.025, 0.025, mesh.verts[3 * vi] - this.faceCenterX);
+      const metal = mixInt(CYBER_GOLD_METAL, CYBER_BLUE_METAL, side);
+      const diffuse = (0.56 + 0.72 * vlam) * (0.96 + 0.10 * amp);
+      colour = lit(metal, diffuse);
+      const specular = Math.pow(Math.max(0, Math.min(1, vx * -0.22 + vy * 0.28 + vz * 0.93)), 24);
+      const sheen = Math.round(specular * 76);
+      colour = argb(
+        255,
+        Math.min(255, ((colour >> 16) & 0xff) + sheen),
+        Math.min(255, ((colour >> 8) & 0xff) + sheen),
+        Math.min(255, (colour & 0xff) + sheen)
+      );
+      const beardShade = smooth01(0.28, 0.88, mesh.jaw[vi] || 0) * (1 - smooth01(-0.74, -0.34, mesh.verts[3 * vi + 1]));
+      if (beardShade > 0.02) colour = mixInt(colour, CYBER_GRAPHITE, beardShade * 0.42);
+      const lip = Math.max(0, Math.min(1, mesh.lipMask[vi] || 0));
+      if (lip > 0.02) colour = mixInt(colour, CYBER_GRAPHITE, lip * 0.72);
+    }
+
+    return mixInt(bgColor, colour, Math.max(0, Math.min(1, mesh.fade[vi] * 1.15)));
+  }
+
   vertexColour(vi, nrm, amp, flat, primaryColor, bgColor) {
     const mesh = this.mesh;
     let vx = nrm[3 * vi], vy = nrm[3 * vi + 1], vz = nrm[3 * vi + 2];
@@ -248,6 +310,9 @@ export class AvatarRenderer {
     const sourcePaint = mesh.paint[vi];
     const isHairPaint = sourcePaint !== 0 && ((sourcePaint >>> 24) & 0xff) < 255;
     let pnt = isHairPaint ? 0 : sourcePaint;
+    if (this.classicCybernetic) {
+      return this.classicCyberneticVertexColour(vi, vx, vy, vz, vlam, amp, bgColor, pnt, isHairPaint);
+    }
     if (!this.holo && this.classicEyes && this.classicEyeMask?.[vi]) {
       pnt = CLASSIC_TO_LEA_IRIS.get(pnt >>> 0) ?? pnt;
     }
@@ -473,11 +538,57 @@ export class AvatarRenderer {
         this.drawCircuits(ctx, nrm, amp, primary, bg, strokePx, avatar.time);
       }
     }
+    if (this.classicCybernetic) this.drawClassicCyberEyes(ctx, amp, strokePx);
 
     // 10. Scalp hair strands and fibre locks are intentionally omitted in every avatar style.
 
     // 11. Facial features (160 brow hairs, smooth lid curves, 15+7 lashes, catchlights, lip chains)
     this.drawFeatures(ctx, avatar, r, primary, strokePx);
+  }
+
+  drawClassicCyberEyes(ctx, amp, strokePx) {
+    const mesh = this.mesh;
+    const irisPaint = CLASSIC_CYBER_IRIS_PAINT;
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    for (let e = 0; e < (mesh.eyeFirst?.length || 0); e++) {
+      const start = mesh.eyeFirst[e];
+      const end = Math.min(this.nV, start + mesh.eyeCount[e]);
+      let x = 0, y = 0, count = 0, radius = 0;
+      for (let i = start; i < end; i++) {
+        if (!irisPaint.has(mesh.paint[i] >>> 0)) continue;
+        x += this.xs[i];
+        y += this.ys[i];
+        count++;
+      }
+      if (!count) continue;
+      x /= count;
+      y /= count;
+      for (let i = start; i < end; i++) {
+        if (!irisPaint.has(mesh.paint[i] >>> 0)) continue;
+        radius = Math.max(radius, Math.hypot(this.xs[i] - x, this.ys[i] - y));
+      }
+      const glowRadius = Math.max(3, radius * 3.1);
+      const glow = ctx.createRadialGradient(x, y, 0, x, y, glowRadius);
+      glow.addColorStop(0, `rgba(34,176,255,${(0.40 + 0.12 * amp).toFixed(3)})`);
+      glow.addColorStop(0.38, 'rgba(30,139,255,0.24)');
+      glow.addColorStop(1, 'rgba(0,116,255,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(132,225,255,0.92)';
+      ctx.lineWidth = Math.max(0.65, strokePx * 0.42);
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(1, radius * 0.54), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(226,250,255,0.96)';
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(0.8, radius * 0.19), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   drawDriftingParticles(ctx, cx, cy, r, time, primary, strokePx) {
@@ -641,12 +752,14 @@ export class AvatarRenderer {
     const c = this.circuits;
     if (!c || c.count === 0) return;
 
+    const meshVerts = this.mesh.verts;
     for (let i = 0; i < c.count; i++) {
       const a = c.triA[i], b = c.triB[i], d = c.triC[i];
       const u = c.wu[i], q = c.wv[i], w = 1 - u - q;
       this.cx[i] = w * this.xs[a] + u * this.xs[b] + q * this.xs[d];
       this.cy[i] = w * this.ys[a] + u * this.ys[b] + q * this.ys[d];
       this.cz[i] = w * nrm[3 * a + 2] + u * nrm[3 * b + 2] + q * nrm[3 * d + 2];
+      this.circuitModelX[i] = w * meshVerts[3 * a] + u * meshVerts[3 * b] + q * meshVerts[3 * d];
     }
 
     const circuitBuckets = [[], [], [], [], [], []];
@@ -663,7 +776,10 @@ export class AvatarRenderer {
       const d = (c.segAlong[k] - phase) / 0.07;
       const a = (0.42 + 0.58 * Math.exp(-d * d)) * face * (c.fade[i] + c.fade[j]) * 0.5 * gain;
       const level = a > 0.75 ? 2 : a > 0.45 ? 1 : 0;
-      const kind = this.blueMix ? c.trackKind[c.segTrack[k]] : 0;
+      const segmentX = 0.5 * (this.circuitModelX[i] + this.circuitModelX[j]);
+      const kind = this.classicCybernetic
+        ? (segmentX >= this.faceCenterX ? 1 : 0)
+        : this.blueMix ? c.trackKind[c.segTrack[k]] : 0;
       const bk = kind * 3 + level;
       circuitBuckets[bk].push(i, j);
     }
@@ -690,6 +806,21 @@ export class AvatarRenderer {
       }
       ctx.stroke();
     }
+    if (this.classicCybernetic) {
+      for (let level = 0; level < 3; level++) {
+        const arr = circuitBuckets[3 + level];
+        if (!arr.length) continue;
+        ctx.lineWidth = Math.max(1.4, strokePx * (2.6 + 0.9 * level));
+        ctx.strokeStyle = intToCss(CYBER_BLUE_CIRCUIT, haloAlphas[level]);
+        ctx.beginPath();
+        for (let m = 0; m < arr.length; m += 2) {
+          const i = arr[m], j = arr[m + 1];
+          ctx.moveTo(this.cx[i], this.cy[i]);
+          ctx.lineTo(this.cx[j], this.cy[j]);
+        }
+        ctx.stroke();
+      }
+    }
 
     // 2. Crisp gold & deep-blue electronic circuit tracks + bright running light pulses
     const lineAlphas = [195 / 255, 238 / 255, 1.0];
@@ -699,8 +830,12 @@ export class AvatarRenderer {
       const kind = (bk / 3) | 0;
       const level = bk % 3;
       ctx.lineWidth = Math.max(0.68, strokePx * (0.78 + 0.32 * level));
-      const base = kind === 1 ? DEEP_BLUE : gold;
-      const hot = kind === 1 ? blueHot : goldHot;
+      const base = kind === 1
+        ? this.classicCybernetic ? CYBER_BLUE_CIRCUIT : DEEP_BLUE
+        : gold;
+      const hot = kind === 1
+        ? this.classicCybernetic ? CYBER_BLUE_HOT : blueHot
+        : goldHot;
       ctx.strokeStyle = intToCss(level === 2 ? hot : base, lineAlphas[level]);
       ctx.beginPath();
       for (let m = 0; m < arr.length; m += 2) {
@@ -715,11 +850,13 @@ export class AvatarRenderer {
     const outerR = Math.max(0.95, strokePx * 1.25);
     const innerR = Math.max(0.42, strokePx * 0.52);
     for (let kind = 0; kind < 2; kind++) {
-      if (this.holo && kind === 1) continue; // keep the blue circuit lines, not isolated blue terminal dots
+      if (this.holo && kind === 1 && !this.classicCybernetic) continue; // blue pads are retained only for the photo-inspired split-metal look
       const padPoints = [];
       for (let idx = 0; idx < c.pads.length; idx++) {
         const p = c.pads[idx];
-        const trackK = this.blueMix ? c.trackKind[(idx / 2) | 0] : 0;
+        const trackK = this.classicCybernetic
+          ? (this.circuitModelX[p] >= this.faceCenterX ? 1 : 0)
+          : this.blueMix ? c.trackKind[(idx / 2) | 0] : 0;
         if (trackK !== kind) continue;
         if (smooth01(0.10, 0.45, this.cz[p]) <= 0) continue;
         padPoints.push(p);
@@ -1183,7 +1320,7 @@ export class AvatarRenderer {
     for (const vi of lipsOut) midX += this.xs[vi];
     midX = lipsOut.length ? midX / lipsOut.length : 0;
 
-    const hairCol = this.holo ? DEEP_BLUE : this.browColour;
+    const hairCol = this.classicCybernetic ? CYBER_GRAPHITE : this.holo ? DEEP_BLUE : this.browColour;
 
     ctx.save();
     ctx.lineCap = 'round';
@@ -1270,9 +1407,9 @@ export class AvatarRenderer {
 
     // 2. Eyelids, Eyelashes & Eyeball Catchlights (AvatarRenderer.kt drawEyes)
     const open = Math.max(0, Math.min(1, (1 - avatar.blink) * avatar.lids));
-    const lash = this.holo ? DEEP_BLUE : this.skin > 0 ? 0xff1e120e : primary;
-    const fold = this.holo ? DEEP_BLUE : this.skin > 0 ? 0xff6b4636 : primary;
-    const foldAlpha = this.holo ? 130 / 255 : 70 / 255;
+    const lash = this.classicCybernetic ? CYBER_GRAPHITE : this.holo ? DEEP_BLUE : this.skin > 0 ? 0xff1e120e : primary;
+    const fold = this.classicCybernetic ? CYBER_GRAPHITE : this.holo ? DEEP_BLUE : this.skin > 0 ? 0xff6b4636 : primary;
+    const foldAlpha = this.holo && !this.classicCybernetic ? 130 / 255 : 70 / 255;
 
     for (let e = 0; e < this.lidCurves.length; e++) {
       const up = this.lidCurves[e][1];

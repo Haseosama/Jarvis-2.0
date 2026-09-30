@@ -226,6 +226,8 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     renderer.cx = new Float32Array(1);
     renderer.cy = new Float32Array(1);
     renderer.cz = new Float32Array(1);
+    renderer.circuitModelX = new Float32Array(1);
+    renderer.mesh = { verts: new Float32Array([0, 0, 0]) };
     renderer.xs = new Float32Array([10]);
     renderer.ys = new Float32Array([12]);
     renderer.holo = true;
@@ -254,6 +256,43 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
 
     renderer.classicEyes = false;
     assert.equal(renderer.faceCenterX, 0, 'Léa and Marc retain their original projection');
+  });
+
+  it('gives the reference look a split gold/blue metal face and luminous cyan iris colors', () => {
+    const mesh = HeadMesh.parse(readArrayBuffer('avatar/head_mesh.bin'));
+    const renderer = Object.create(AvatarRenderer.prototype);
+    renderer.mesh = mesh;
+    renderer.classicEyeMask = new Uint8Array(mesh.vertexCount);
+    for (let e = 0; e < mesh.eyeFirst.length; e++) {
+      renderer.classicEyeMask.fill(1, mesh.eyeFirst[e], mesh.eyeFirst[e] + mesh.eyeCount[e]);
+    }
+    renderer.classicEyes = true;
+    renderer.classicCybernetic = true;
+
+    const centerX = renderer.faceCenterX;
+    const findMetalVertex = (left) => {
+      for (let i = 0; i < mesh.nHead; i++) {
+        const x = mesh.verts[3 * i];
+        const y = mesh.verts[3 * i + 1];
+        if (mesh.paint[i] === 0 && mesh.verts[3 * i + 2] > 0.3 && y > -0.3 && y < 0.3 &&
+          (left ? x < centerX - 0.25 : x > centerX + 0.25)) return i;
+      }
+      return -1;
+    };
+    const left = findMetalVertex(true);
+    const right = findMetalVertex(false);
+    assert.ok(left >= 0 && right >= 0, 'both halves have front-facing metal vertices');
+
+    const color = (index) => renderer.vertexColour(index, mesh.normals, 0.2, 0, 0xff00d4ff, 0xff060e14) >>> 0;
+    const leftColor = color(left);
+    const rightColor = color(right);
+    assert.ok(((leftColor >> 16) & 0xff) > (leftColor & 0xff), 'left side reads as warm gold metal');
+    assert.ok((rightColor & 0xff) > ((rightColor >> 16) & 0xff), 'right side reads as cool blue metal');
+
+    const iris = Array.from({ length: mesh.eyeCount[0] }, (_, i) => mesh.eyeFirst[0] + i)
+      .find((i) => (mesh.paint[i] >>> 0) === 0xff3f7ca6);
+    const irisColor = color(iris);
+    assert.ok((irisColor & 0xff) > ((irisColor >> 16) & 0xff), 'the iris is remapped to luminous electric blue');
   });
 
   it('uses Léa 3D eye colors for a more natural Classic iris without hologram tint changes', () => {

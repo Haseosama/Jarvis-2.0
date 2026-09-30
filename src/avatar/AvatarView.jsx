@@ -171,6 +171,7 @@ export default function AvatarView({
     circuitsEnabled,
     faceSpec,
     effectiveShadeId,
+    effectiveHairId,
     primaryHex,
     accentHex,
     bgHex,
@@ -268,6 +269,11 @@ export default function AvatarView({
       renderer.lipTint = p.faceSpec.lipTint;
       renderer.fibreOverlay = p.faceSpec.fibres !== false;
       renderer.classicEyes = p.faceSpec.id === 'classic';
+      renderer.classicCybernetic =
+        p.faceSpec.id === 'classic' &&
+        p.skinMode === BLUE_HOLO_SKIN &&
+        p.circuitsEnabled &&
+        !p.effectiveHairId;
       renderer.draw(ctx, avatar, cx, cy, r, p.primaryHex, p.accentHex, p.bgHex);
 
       ctx.restore();
