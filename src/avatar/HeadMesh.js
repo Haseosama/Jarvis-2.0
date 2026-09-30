@@ -80,6 +80,22 @@ export const BUILT_IN_FACES = [
     credit: 'Sculpt basé sur "Realistic Male Head" (Ouail, CC BY 4.0)',
     hairColours: { body: 0x33302f, root: 0x151313, tip: 0x4e4a46, grey: 0.12, greyRgb: 0x77736e },
   },
+  {
+    id: 'haseo',
+    label: 'Haseo',
+    gender: 'custom',
+    asset: './assets/avatar/haseo.fbx',
+    subdivide: false,
+    browColour: 0xff242a34,
+    fibres: false,
+    browScale: 1.0,
+    lashScale: 1.0,
+    androidLook: false,
+    halo: false,
+    lipTint: 0,
+    credit: 'Modèle FBX fourni par Haseosama (sans texture)',
+    hairColours: { body: 0x30343a, root: 0x15181d, tip: 0x555e6a, grey: 0, greyRgb: 0x8e8b86 },
+  },
 ];
 
 const LANDMARK_NAMES = ['eye_l', 'eye_r', 'brow_l', 'brow_r', 'lips_out', 'lips_in'];

@@ -80,7 +80,7 @@ export default function SettingsModal({ onClose, onTestVoice }) {
 
               {cfg.avatarMode === '3d' && (
                 <>
-                  <h4>Visage 3D (Classique 84 000 polygones, Léa, Marc)</h4>
+                  <h4>Visage 3D (Classique, Léa, Marc, Haseo)</h4>
                   <div className="settings-chip-row">
                     {BUILT_IN_FACES.map((f) => (
                       <button
@@ -93,7 +93,7 @@ export default function SettingsModal({ onClose, onTestVoice }) {
                           })
                         }
                       >
-                        🌐 {f.label} ({f.gender === 'male' ? 'H' : 'F'})
+                        🌐 {f.label}{f.gender === 'custom' ? '' : ` (${f.gender === 'male' ? 'H' : 'F'})`}
                       </button>
                     ))}
                   </div>

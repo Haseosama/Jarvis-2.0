@@ -1,5 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import * as THREE from 'three';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -574,11 +576,42 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     assert.ok(Array.isArray(win.windows));
   });
 
-  it('subdivides Classic avatar to 84,000+ polygons, generates PCB electrical circuits, and keeps only Classic/Léa/Marc', async () => {
+  it('registers Haseo as an independent FBX face while keeping the existing faces', async () => {
     assert.deepEqual(
       BUILT_IN_FACES.map((f) => f.id),
-      ['classic', 'lea', 'marc']
+      ['classic', 'lea', 'marc', 'haseo']
     );
+    const haseo = BUILT_IN_FACES.find((face) => face.id === 'haseo');
+    assert.equal(haseo.label, 'Haseo');
+    assert.equal(haseo.asset, './assets/avatar/haseo.fbx');
+    assert.equal(normalizeFaceId('char:Haseo'), 'haseo');
+    const fbx = fs.readFileSync(path.join(ASSETS_DIR, 'avatar/haseo.fbx'));
+    assert.ok(fbx.subarray(0, 18).toString('ascii').startsWith('Kaydara FBX Binary'));
+    assert.ok(fbx.byteLength > 2_000_000, 'the complete FBX asset is bundled locally');
+  });
+
+  it('parses Haseo FBX geometry and facial morph targets without requesting the missing texture', () => {
+    let textureRequests = 0;
+    const noTextureLoader = {
+      path: undefined,
+      setPath(value) { this.path = value; return this; },
+      load() { textureRequests += 1; return new THREE.Texture(); },
+    };
+    const manager = new THREE.LoadingManager();
+    manager.addHandler(/\.png$/i, noTextureLoader);
+    const model = new FBXLoader(manager).parse(readArrayBuffer('avatar/haseo.fbx'), '');
+    const meshes = [];
+    model.traverse((object) => { if (object.isMesh) meshes.push(object); });
+
+    assert.equal(meshes.length, 1);
+    assert.ok(meshes[0].geometry.attributes.position.count > 50_000);
+    assert.ok(meshes[0].morphTargetDictionary.JawOpen !== undefined);
+    assert.ok(meshes[0].morphTargetDictionary.AA !== undefined);
+    assert.ok(meshes[0].morphTargetDictionary.EyeBlink_L !== undefined);
+    assert.equal(textureRequests, 1, 'the missing sidecar is intercepted locally');
+  });
+
+  it('subdivides Classic avatar to 84,000+ polygons and generates PCB electrical circuits', async () => {
     assert.equal(normalizeFaceId('female01'), 'lea');
     assert.equal(normalizeFaceId('male02'), 'marc');
     assert.equal(normalizeFaceId('char:adam'), 'classic');

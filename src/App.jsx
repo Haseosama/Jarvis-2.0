@@ -355,6 +355,7 @@ export default function App() {
                     { id: 'classic', label: 'Classique 3D' },
                     { id: 'lea', label: 'Léa 3D' },
                     { id: 'marc', label: 'Marc 3D' },
+                    { id: 'haseo', label: 'Haseo' },
                   ].map((f) => (
                     <button
                       key={f.id}

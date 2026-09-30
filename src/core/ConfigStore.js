@@ -110,7 +110,7 @@ export function normalizeFaceId(rawId) {
   const s = String(rawId || 'classic').trim().toLowerCase().replace(/^char:/, '');
   if (s === 'female01') return 'lea';
   if (s === 'male02') return 'marc';
-  if (['classic', 'lea', 'marc'].includes(s)) return s;
+  if (['classic', 'lea', 'marc', 'haseo'].includes(s)) return s;
   return 'classic';
 }
 
@@ -137,7 +137,7 @@ const DEFAULT_CONFIG = {
   speechRate: 1.05,
   // Avatar
   avatarMode: '3d', // '3d' | 'reactor'
-  avatarFaceId: 'classic', // 'classic' | 'lea' | 'marc'
+  avatarFaceId: 'classic', // 'classic' | 'lea' | 'marc' | 'haseo'
   avatarSkin: 7, // 7 = Hologramme bleu, 5 = Hologramme or, 6 = Hologramme + fibres, 0 = Réseau lumineux, 1..4 = Peau
   avatarCircuits: true, // true = afficher les circuits électriques, false = sans circuits
   avatarPolygonLevel: 'high', // 'eco' | 'low' | 'medium' | 'high' | 'ultra'

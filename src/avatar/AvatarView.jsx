@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
   BUILT_IN_FACES,
   HAIR_SHADES,
@@ -17,6 +17,7 @@ import {
   drawGlowReactor,
 } from './AvatarRenderer.js';
 
+const HaseoAvatar = lazy(() => import('./HaseoAvatar.jsx'));
 const meshCache = new Map();
 const hairCache = new Map();
 
@@ -123,6 +124,12 @@ export default function AvatarView({
   useEffect(() => {
     let cancelled = false;
     async function prepare() {
+      if (faceSpec.id === 'haseo') {
+        engineRef.current.renderer = null;
+        engineRef.current.avatar = null;
+        setReady(true);
+        return;
+      }
       try {
         const baseMesh = await loadHeadMesh(faceSpec.asset);
         const shade = HAIR_SHADES.find((s) => s.id === effectiveShadeId);
@@ -290,14 +297,32 @@ export default function AvatarView({
         justifyContent: 'center',
       }}
     >
-      <canvas
-        ref={canvasRef}
-        style={{
-          width: '100%',
-          height: '100%',
-          display: 'block',
-        }}
-      />
+      {faceSpec.id === 'haseo' && showFace ? (
+        <Suspense fallback={<div className="haseo-avatar-status">Chargement du visage Haseo…</div>}>
+          <HaseoAvatar
+            state={state}
+            outputLevel={outputLevel}
+            audioLevel={audioLevel}
+            viseme={viseme}
+            timeline={timeline}
+            skinMode={skinMode}
+            showCircuits={circuitsEnabled}
+            primaryHex={primaryHex}
+            accentHex={accentHex}
+            closeUp={closeUp}
+            onPolygonCountChange={onPolygonCountChange}
+          />
+        </Suspense>
+      ) : (
+        <canvas
+          ref={canvasRef}
+          style={{
+            width: '100%',
+            height: '100%',
+            display: 'block',
+          }}
+        />
+      )}
     </div>
   );
 }
