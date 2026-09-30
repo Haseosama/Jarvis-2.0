@@ -108,6 +108,38 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     assert.equal(fills, restingFills, 'closed mouth has no dark cavity overlay');
   });
 
+  it('renders a sparser sample of blue hologram points without removing the polygon web', () => {
+    const renderer = Object.create(AvatarRenderer.prototype);
+    const count = 100;
+    renderer.skin = 5;
+    renderer.holo = true;
+    renderer.closeUp = false;
+    renderer.web = {
+      count,
+      triA: new Int32Array(count),
+      triB: new Int32Array(count),
+      triC: new Int32Array(count),
+      wu: new Float32Array(count),
+      wv: new Float32Array(count),
+      fade: new Float32Array(count).fill(1),
+      edges: new Int32Array([0, 1]),
+    };
+    renderer.wx = new Float32Array(count);
+    renderer.wy = new Float32Array(count);
+    renderer.wz = new Float32Array(count);
+    renderer.xs = new Float32Array([0]);
+    renderer.ys = new Float32Array([0]);
+    let dots = 0;
+    let edgeSegments = 0;
+    const ctx = {
+      beginPath() {}, moveTo() {}, lineTo() { edgeSegments++; }, stroke() {}, fill() {},
+      arc() { dots++; },
+    };
+    renderer.drawWeb(ctx, new Float32Array([0, 0, 0.2]), 0, 0xff00d4ff, 1, 0);
+    assert.ok(dots >= 25 && dots <= 50, `100 potential hologram nodes should show a reduced sample, got ${dots}`);
+    assert.ok(edgeSegments > 0, 'polygon web edges remain visible while blue points are reduced');
+  });
+
   it('removes residual scalp hair paint for bald avatars while preserving opaque facial details', () => {
     const mesh = HeadMesh.parse(readArrayBuffer('avatar/head_mesh.bin'));
     const sourceHairPaint = mesh.paint.filter((p) => p !== 0 && ((p >>> 24) & 0xff) < 255).length;

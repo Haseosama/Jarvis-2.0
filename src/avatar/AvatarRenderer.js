@@ -568,8 +568,10 @@ export class AvatarRenderer {
       ctx.stroke();
     }
 
-    // 2. Twinkling polygon nodes (3 size/brightness buckets)
+    // 2. Twinkling polygon nodes (sparsely sampled so the hologram does not look noisy)
     const nodeBuckets = [[], [], []];
+    const nodeKeep = this.holo ? [0, 0.22, 0.45] : [0.10, 0.24, 0.46];
+    const closeUpDensity = this.closeUp ? 0.82 : 1;
     for (let i = 0; i < w.count; i++) {
       const nz = this.wz[i];
       if (nz < 0 || w.fade[i] < 0.25) continue;
@@ -579,6 +581,8 @@ export class AvatarRenderer {
       const hash = (Math.imul(i, -1640531535) >>> 16) & 0xff;
       const bk = br > 0.85 || hash > 236 ? 2 : br > 0.5 ? 1 : 0;
       if (this.holo && (bk < 1 || nz > 0.65)) continue;
+      const sample = (Math.imul(i + 1, 0x45d9f3b) >>> 8) & 0xff;
+      if (sample > nodeKeep[bk] * closeUpDensity * 255) continue;
       nodeBuckets[bk].push(i);
     }
 
