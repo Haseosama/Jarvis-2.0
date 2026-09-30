@@ -92,7 +92,7 @@ jobs:
           - Voûte céleste : position géographique actuelle demandée à l’ouverture et centrage local de la carte, avec commande pour actualiser la position.
           - Avatar 3D : surfaces et mèches capillaires supprimées (y compris fibres optiques et peau 3D); points bleus isolés retirés des hologrammes bleu/or/fibres; iris du Classique naturalisé avec la palette de Léa et ligne des yeux recentrée.
           - Classique affiné après retour visuel : nez d’origine conservé, joues moins rondes, angle de mâchoire plus net et menton mieux défini; couleurs inchangées.
-          - Haseo : cadrage du visage corrigé à l’échelle des autres avatars, peau bleue cybernétique texturée de façon procédurale et iris/pupilles bleus. Le Classique reste disponible.
+          - Haseo : pupilles recalées au centre des yeux à partir des morphs du FBX, selon l’alignement concentrique de Léa; peau bleue plus naturelle, texturée de façon procédurale, avec circuits électriques lumineux intégrés. Le Classique reste disponible.
           - Miniature PiP déplaçable dans toute la fenêtre, avec position mémorisée.
 
           Adaptation complète sur PC (Windows x64) de **Jarvis-Android v0.9.53**, fonctionnant de manière 100% autonome sans serveur backend externe.
@@ -102,7 +102,7 @@ jobs:
           - **`Jarvis-2.0-Windows-Portable.zip`** : Archive portable autonome contenant `Jarvis-2.0.exe` et toutes les ressources 3D/spatiales/plugins.
 
           ### ✨ Nouveautés & Fonctionnalités
-          - **Avatar 3D & Lip-Sync** : Classique, Léa, Marc et Haseo; densité réglable de 20k à 148k polygones, circuits PCB ON/OFF, 23 coiffures, 11 teintes de cheveux, peau cybernétique procédurale de Haseo, hologramme/peau et lip-sync synchronisé sur l'audio.
+          - **Avatar 3D & Lip-Sync** : Classique, Léa, Marc et Haseo; densité réglable de 20k à 148k polygones, circuits PCB ON/OFF, 23 coiffures, 11 teintes de cheveux, peau bleue naturelle et circuits électriques texturés de Haseo, hologramme/peau et lip-sync synchronisé sur l'audio.
           - **Audio & IA** : Gemini Live WebSocket (24 kHz PCM + analyse formantique F1/F2), repli REST avec rotation de clés, 30 voix Gemini, et moteur local même sans clé API.
           - **Contrôle PC & Vision** : applications, souris/clavier/fenêtres, volume/luminosité/média, gestionnaire de fenêtres/processus, capture d'écran, webcam, WhatsApp Web & Email.
           - **Carte monde, vols & satellites** : avions ADS-B cliquables avec télémétrie, route et identification lorsqu'elles sont disponibles; catalogue CelesTrak TLE avec fiches détaillées, ISS/Tiangong/Hubble, carte du ciel, lancements, séismes et aurores.

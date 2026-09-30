@@ -1,20 +1,32 @@
 import * as THREE from 'three';
 
+// Fallback values extracted from the FBX EyeBlink morph peaks. Runtime layout is
+// calculated from those morphs so an iris stays inside the actual eye aperture.
 export const HASEO_EYE_UV_CENTERS = [
-  [0.4425, 0.609],
-  [0.384, 0.555],
+  [0.44186, 0.6081],
+  [0.38517, 0.55481],
 ];
 
+// Léa's iris and pupil are concentric with her eye centre. Use that same centred
+// treatment for Haseo; the detected eyelid span determines the iris proportions.
+export const LEA_IRIS_APERTURE_RATIO = 0.2;
+
+const FALLBACK_EYE_LAYOUT = HASEO_EYE_UV_CENTERS.map((center) => ({
+  center,
+  radius: [0.008, 0.009],
+}));
+
 const PALETTES = {
-  0: { base: [5, 20, 58], light: [16, 59, 120], glow: [38, 205, 255] },
-  1: { base: [106, 69, 56], light: [231, 177, 143], glow: [58, 203, 255] },
-  2: { base: [94, 52, 36], light: [209, 140, 97], glow: [58, 203, 255] },
-  3: { base: [73, 38, 27], light: [173, 104, 69], glow: [58, 203, 255] },
-  4: { base: [43, 27, 24], light: [119, 73, 56], glow: [58, 203, 255] },
-  5: { base: [77, 46, 14], light: [211, 155, 59], glow: [255, 205, 92] },
-  6: { base: [8, 60, 78], light: [43, 173, 194], glow: [81, 238, 255] },
-  7: { base: [7, 35, 103], light: [31, 101, 199], glow: [66, 222, 255] },
-  8: { base: [4, 18, 60], light: [25, 60, 139], glow: [68, 178, 255] },
+  0: { base: [29, 54, 78], light: [105, 143, 165], glow: [80, 220, 255] },
+  1: { base: [119, 76, 59], light: [228, 180, 151], glow: [66, 211, 245] },
+  2: { base: [105, 64, 44], light: [213, 157, 123], glow: [66, 211, 245] },
+  3: { base: [82, 48, 35], light: [180, 124, 95], glow: [66, 211, 245] },
+  4: { base: [53, 36, 31], light: [133, 91, 72], glow: [66, 211, 245] },
+  5: { base: [116, 78, 55], light: [224, 182, 143], glow: [255, 207, 111] },
+  6: { base: [53, 94, 101], light: [142, 180, 177], glow: [105, 233, 240] },
+  // The default blue remains, but is muted and desaturated like cool human skin.
+  7: { base: [48, 80, 101], light: [143, 174, 187], glow: [100, 225, 247] },
+  8: { base: [24, 44, 67], light: [92, 126, 150], glow: [94, 191, 237] },
 };
 
 function clamp01(value) {
@@ -61,22 +73,23 @@ function strokeSegment(data, size, a, b, color, width, alpha) {
 }
 
 function drawTrace(data, size, points, glow, accent) {
-  const dark = [3, 17, 49];
+  const etchedEdge = [12, 35, 53];
+  const luminousCore = [126, 244, 255];
   for (let i = 1; i < points.length; i++) {
-    strokeSegment(data, size, points[i - 1], points[i], glow, size * 0.005, 0.11);
-    strokeSegment(data, size, points[i - 1], points[i], dark, size * 0.0018, 0.60);
-    strokeSegment(data, size, points[i - 1], points[i], accent, size * 0.0010, 0.63);
+    strokeSegment(data, size, points[i - 1], points[i], glow, size * 0.007, 0.20);
+    strokeSegment(data, size, points[i - 1], points[i], etchedEdge, size * 0.0028, 0.76);
+    strokeSegment(data, size, points[i - 1], points[i], accent, size * 0.0017, 0.96);
+    strokeSegment(data, size, points[i - 1], points[i], luminousCore, size * 0.0006, 0.78);
   }
-  const end = points[points.length - 1];
-  stamp(data, size, end[0] * size, end[1] * size, size * 0.003, glow, 0.32);
-  stamp(data, size, end[0] * size, end[1] * size, size * 0.0015, accent, 0.95);
 }
 
-function drawIris(data, size, center) {
-  const cx = center[0] * size;
-  const cy = center[1] * size;
-  const rx = size * 0.0085;
-  const ry = size * 0.0105;
+function drawIris(data, size, eye) {
+  const [u, v] = eye.center;
+  const [radiusU, radiusV] = eye.radius;
+  const cx = u * size;
+  const cy = v * size;
+  const rx = size * radiusU;
+  const ry = size * radiusV;
   const x0 = Math.floor(cx - rx - 1);
   const x1 = Math.ceil(cx + rx + 1);
   const y0 = Math.floor(cy - ry - 1);
@@ -86,25 +99,87 @@ function drawIris(data, size, center) {
     for (let x = x0; x <= x1; x++) {
       const dx = (x - cx) / rx;
       const dy = (y - cy) / ry;
-      const radius = Math.hypot(dx, dy);
-      if (radius > 1) continue;
+      const r = Math.hypot(dx, dy);
+      if (r > 1) continue;
+      const rays = 0.5 + 0.5 * Math.sin(Math.atan2(dy, dx) * 18 + r * 24);
       let color;
-      if (radius > 0.78) color = [4, 26, 78];
-      else if (radius > 0.30) {
-        const ray = 0.5 + 0.5 * Math.sin(Math.atan2(dy, dx) * 22 + radius * 28);
-        const t = clamp01((0.78 - radius) / 0.48 + ray * 0.16);
-        color = [20 + 48 * t, 83 + 132 * t, 177 + 74 * t];
-      } else color = [3, 13, 41];
+      if (r > 0.84) color = [14, 31, 47];
+      else if (r > 0.34) {
+        const t = clamp01((0.84 - r) / 0.5 + rays * 0.12);
+        color = [35 + 40 * t, 105 + 78 * t, 150 + 70 * t];
+      } else color = [4, 15, 29];
       blendPixel(data, size, x, y, color, 1);
     }
   }
 
-  // A crisp deep-blue pupil, with a small cyan catchlight like the supplied reference.
-  stamp(data, size, cx, cy, size * 0.0027, [2, 12, 36], 1);
-  stamp(data, size, cx - size * 0.0018, cy - size * 0.0027, size * 0.0013, [224, 247, 255], 0.95);
+  // A tiny upper catchlight keeps the iris readable without shifting its centre.
+  stamp(data, size, cx - rx * 0.22, cy - ry * 0.25, Math.max(1, Math.min(rx, ry) * 0.16), [229, 246, 250], 0.9);
 }
 
-export function buildHaseoSkinPixels(skinMode = 7, accentHex = 0xff5ce1e6, showCircuits = true, size = 1024) {
+function hashPixel(x, y) {
+  let hash = (Math.imul(x + 1, 374761393) + Math.imul(y + 1, 668265263)) | 0;
+  hash = Math.imul(hash ^ (hash >>> 13), 1274126177);
+  return (hash >>> 0) / 4294967295;
+}
+
+export function deriveHaseoEyeLayout(geometry, morphTargetDictionary = {}) {
+  const uv = geometry?.attributes?.uv;
+  const positionMorphs = geometry?.morphAttributes?.position;
+  if (!uv || !positionMorphs) return FALLBACK_EYE_LAYOUT.map((eye) => ({ ...eye, center: [...eye.center], radius: [...eye.radius] }));
+
+  const eyeNames = ['EyeBlink_L', 'EyeBlink_R'];
+  return eyeNames.map((name, eyeIndex) => {
+    const morphIndex = morphTargetDictionary[name];
+    const morph = Number.isInteger(morphIndex) ? positionMorphs[morphIndex] : null;
+    if (!morph) return FALLBACK_EYE_LAYOUT[eyeIndex];
+
+    let maxDelta = 0;
+    const delta = new Float32Array(uv.count);
+    for (let i = 0; i < uv.count; i++) {
+      const amount = Math.hypot(morph.getX(i), morph.getY(i), morph.getZ(i));
+      delta[i] = amount;
+      if (amount > maxDelta) maxDelta = amount;
+    }
+    if (maxDelta <= 1e-8) return FALLBACK_EYE_LAYOUT[eyeIndex];
+
+    // The strongest blink response marks the eye's centre; lower responses only
+    // describe the lid arc. This mirrors Léa's concentric iris/eye-centre alignment.
+    let peakU = 0;
+    let peakV = 0;
+    let peakWeight = 0;
+    let minU = Infinity;
+    let maxU = -Infinity;
+    let minV = Infinity;
+    let maxV = -Infinity;
+    for (let i = 0; i < uv.count; i++) {
+      const amount = delta[i];
+      if (amount >= maxDelta * 0.98) {
+        const weight = amount * amount;
+        peakU += uv.getX(i) * weight;
+        peakV += uv.getY(i) * weight;
+        peakWeight += weight;
+      }
+      if (amount < maxDelta * 0.05) continue;
+      const u = uv.getX(i);
+      const v = uv.getY(i);
+      minU = Math.min(minU, u);
+      maxU = Math.max(maxU, u);
+      minV = Math.min(minV, v);
+      maxV = Math.max(maxV, v);
+    }
+
+    if (!peakWeight || !Number.isFinite(minU) || !Number.isFinite(minV)) return FALLBACK_EYE_LAYOUT[eyeIndex];
+    return {
+      center: [peakU / peakWeight, peakV / peakWeight],
+      radius: [
+        Math.max(0.004, (maxU - minU) * LEA_IRIS_APERTURE_RATIO),
+        Math.max(0.004, (maxV - minV) * LEA_IRIS_APERTURE_RATIO),
+      ],
+    };
+  });
+}
+
+export function buildHaseoSkinPixels(skinMode = 7, accentHex = 0xff5ce1e6, showCircuits = true, size = 1024, eyeLayout = FALLBACK_EYE_LAYOUT) {
   const palette = PALETTES[skinMode] || PALETTES[7];
   const data = new Uint8Array(size * size * 4);
   const accent = [
@@ -113,30 +188,35 @@ export function buildHaseoSkinPixels(skinMode = 7, accentHex = 0xff5ce1e6, showC
     accentHex & 0xff,
   ];
 
-  // Fine mottling and soft tonal variation give the FBX a blue, skin-like finish
-  // without relying on the missing external image referenced by the original file.
+  // Low-frequency colour clouds, fine pores and subdued grain add skin depth while
+  // keeping Haseo's cool blue tone. The blue remains in the pigment, not a neon wash.
   for (let y = 0; y < size; y++) {
     const v = y / size;
     for (let x = 0; x < size; x++) {
       const u = x / size;
-      let hash = (Math.imul(x + 1, 374761393) + Math.imul(y + 1, 668265263)) | 0;
-      hash = Math.imul(hash ^ (hash >>> 13), 1274126177);
-      const grain = ((hash >>> 0) / 4294967295 - 0.5) * 0.13;
-      const contour = Math.sin(u * 17 + Math.sin(v * 9)) * 0.055 + Math.sin(v * 23 - u * 8) * 0.035;
-      const highlight = Math.max(0, Math.sin((u + v * 0.27) * Math.PI * 2)) * 0.10;
-      const factor = Math.max(0.58, Math.min(1.24, 0.88 + grain + contour + highlight));
+      const coarse = hashPixel(x >> 4, y >> 4) - 0.5;
+      const micro = hashPixel(x, y) - 0.5;
+      const pore = hashPixel(x >> 1, y >> 1);
+      const cloud =
+        Math.sin(u * 8.4 + Math.sin(v * 6.2)) * 0.025 +
+        Math.sin(v * 11.1 - u * 4.8) * 0.019 +
+        Math.cos((u + v) * 15.0) * 0.012 +
+        coarse * 0.075;
+      const softLight = Math.max(0, Math.sin((u * 0.75 + v * 0.42) * Math.PI * 2)) * 0.045;
+      const poreShade = pore > 0.986 ? -0.085 : pore < 0.012 ? 0.045 : 0;
+      const factor = Math.max(0.68, Math.min(1.23, 0.98 + cloud + micro * 0.045 + poreShade + softLight));
+      const warmUndertone = Math.max(0, Math.sin(u * 9.0 + v * 5.0)) * 0.025;
       const offset = 4 * (y * size + x);
-      for (let channel = 0; channel < 3; channel++) {
-        const value = palette.base[channel] * factor + palette.light[channel] * (0.08 + highlight * 0.45);
-        data[offset + channel] = Math.max(0, Math.min(255, value));
-      }
+      data[offset] = Math.max(0, Math.min(255, palette.base[0] * factor + palette.light[0] * (0.10 + softLight) + warmUndertone * 18));
+      data[offset + 1] = Math.max(0, Math.min(255, palette.base[1] * factor + palette.light[1] * (0.10 + softLight)));
+      data[offset + 2] = Math.max(0, Math.min(255, palette.base[2] * factor + palette.light[2] * (0.10 + softLight)));
       data[offset + 3] = 255;
     }
   }
 
-  // Short etched traces around the eye line and cheeks echo the blue cybernetic
-  // skin in the reference image while remaining subtle enough to read as texture.
   if (showCircuits) {
+    // Bright, embedded PCB traces run around the eye line and cheeks. Their paths
+    // stay clear of the irises; no detached terminal dots are added.
     const traces = [
       [[0.305, 0.652], [0.333, 0.652], [0.352, 0.635], [0.373, 0.635], [0.389, 0.618]],
       [[0.351, 0.523], [0.371, 0.523], [0.387, 0.539], [0.405, 0.539], [0.421, 0.555]],
@@ -150,13 +230,13 @@ export function buildHaseoSkinPixels(skinMode = 7, accentHex = 0xff5ce1e6, showC
     for (const trace of traces) drawTrace(data, size, trace, palette.glow, accent);
   }
 
-  for (const eye of HASEO_EYE_UV_CENTERS) drawIris(data, size, eye);
+  for (const eye of eyeLayout) drawIris(data, size, eye);
   return data;
 }
 
-export function createHaseoSkinTexture(skinMode = 7, accentHex = 0xff5ce1e6, showCircuits = true, size = 1024) {
+export function createHaseoSkinTexture(skinMode = 7, accentHex = 0xff5ce1e6, showCircuits = true, size = 1024, eyeLayout = FALLBACK_EYE_LAYOUT) {
   const texture = new THREE.DataTexture(
-    buildHaseoSkinPixels(skinMode, accentHex, showCircuits, size),
+    buildHaseoSkinPixels(skinMode, accentHex, showCircuits, size, eyeLayout),
     size,
     size,
     THREE.RGBAFormat,

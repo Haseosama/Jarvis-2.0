@@ -2,7 +2,12 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
-import { buildHaseoSkinPixels, HASEO_EYE_UV_CENTERS } from '../src/avatar/HaseoSkinTexture.js';
+import {
+  buildHaseoSkinPixels,
+  deriveHaseoEyeLayout,
+  HASEO_EYE_UV_CENTERS,
+  LEA_IRIS_APERTURE_RATIO,
+} from '../src/avatar/HaseoSkinTexture.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -616,23 +621,56 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     const neutralHeight = neutralBounds.getSize(new THREE.Vector3()).y;
     const morphHeight = meshes[0].geometry.boundingBox.getSize(new THREE.Vector3()).y;
     assert.ok(morphHeight > neutralHeight * 2, 'camera framing must use the neutral face bounds, not extreme blendshape bounds');
+
+    const eyeLayout = deriveHaseoEyeLayout(meshes[0].geometry, meshes[0].morphTargetDictionary);
+    assert.equal(eyeLayout.length, 2);
+    eyeLayout.forEach((eye, index) => {
+      assert.ok(Math.abs(eye.center[0] - HASEO_EYE_UV_CENTERS[index][0]) < 0.001);
+      assert.ok(Math.abs(eye.center[1] - HASEO_EYE_UV_CENTERS[index][1]) < 0.001);
+      assert.ok(eye.radius[0] > 0.004 && eye.radius[0] < 0.02);
+      assert.ok(eye.radius[1] > 0.004 && eye.radius[1] < 0.02);
+    });
+
+    // Léa's painted iris layers share the centre of each eye; Haseo follows that
+    // same concentric placement, using his own blink morph to find the UV position.
+    const lea = HeadMesh.parse(readArrayBuffer('avatar/head_mesh_lea.bin'));
+    const leaIrisPaint = new Set([0xff05070a, 0xff0e4a36, 0xff3dbe8c, 0xff16553f]);
+    for (let eye = 0; eye < lea.eyeFirst.length; eye++) {
+      let count = 0;
+      let x = 0;
+      let y = 0;
+      for (let vertex = lea.eyeFirst[eye]; vertex < lea.eyeFirst[eye] + lea.eyeCount[eye]; vertex++) {
+        if (!leaIrisPaint.has(lea.paint[vertex] >>> 0)) continue;
+        x += lea.verts[3 * vertex];
+        y += lea.verts[3 * vertex + 1];
+        count++;
+      }
+      assert.ok(count > 0);
+      assert.ok(Math.abs(x / count - lea.eyeCentre[3 * eye]) < 0.001);
+      assert.ok(Math.abs(y / count - lea.eyeCentre[3 * eye + 1]) < 0.001);
+    }
+    assert.equal(LEA_IRIS_APERTURE_RATIO, 0.2);
   });
 
-  it('builds blue cybernetic Haseo skin texture and blue irises procedurally', () => {
+  it('builds human-like blue Haseo skin with electric circuits and correctly centred irises', () => {
     const size = 512;
-    const textured = buildHaseoSkinPixels(7, 0xff5ce1e6, true, size);
-    const plain = buildHaseoSkinPixels(7, 0xff5ce1e6, false, size);
+    const eyeLayout = HASEO_EYE_UV_CENTERS.map((center) => ({ center, radius: [0.008, 0.009] }));
+    const textured = buildHaseoSkinPixels(7, 0xff5ce1e6, true, size, eyeLayout);
+    const plain = buildHaseoSkinPixels(7, 0xff5ce1e6, false, size, eyeLayout);
     const sample = (data, u, v) => {
       const offset = 4 * (Math.floor(v * size) * size + Math.floor(u * size));
       return Array.from(data.subarray(offset, offset + 3));
     };
 
     assert.equal(textured.length, size * size * 4);
-    for (const eye of HASEO_EYE_UV_CENTERS) {
-      const pupil = sample(textured, eye[0], eye[1]);
+    const skin = sample(plain, 0.7, 0.4);
+    assert.ok(skin[1] > 55 && skin[2] > skin[0], 'the skin keeps a muted, human-like cool complexion');
+    assert.notDeepEqual(sample(plain, 0.7, 0.4), sample(plain, 0.71, 0.41), 'skin has fine natural tonal variation');
+    for (const eye of eyeLayout) {
+      const pupil = sample(textured, eye.center[0], eye.center[1]);
       assert.ok(pupil[2] > pupil[0], 'pupils use a blue tone');
     }
-    assert.notDeepEqual(sample(textured, 0.32, 0.652), sample(plain, 0.32, 0.652), 'circuit paths are omitted when circuits are disabled');
+    assert.notDeepEqual(sample(textured, 0.32, 0.652), sample(plain, 0.32, 0.652), 'electric circuit traces disappear when circuits are disabled');
   });
 
   it('subdivides Classic avatar to 84,000+ polygons and generates PCB electrical circuits', async () => {

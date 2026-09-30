@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
-import { createHaseoSkinTexture } from './HaseoSkinTexture.js';
+import { createHaseoSkinTexture, deriveHaseoEyeLayout } from './HaseoSkinTexture.js';
 
 const MODEL_URL = './assets/avatar/haseo.fbx';
 const clamp = (value, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, Number(value) || 0));
@@ -59,22 +59,22 @@ function createSurfaceMaterial(skinMode, primaryHex, skinTexture) {
 
   if (skinMode >= 5) {
     const palette = {
-      5: { emissive: 0x7c3800, intensity: 0.48 },
-      6: { emissive: 0x07566c, intensity: 0.42 },
-      7: { emissive: 0x123c80, intensity: 0.50 },
-      8: { emissive: 0x091d55, intensity: 0.52 },
-    }[skinMode] || { emissive: 0x123c80, intensity: 0.5 };
+      5: { emissive: 0x34200f, intensity: 0.08 },
+      6: { emissive: 0x123b3e, intensity: 0.08 },
+      7: { emissive: 0x142c3b, intensity: 0.08 },
+      8: { emissive: 0x0d1c2b, intensity: 0.08 },
+    }[skinMode] || { emissive: 0x142c3b, intensity: 0.08 };
 
     return new THREE.MeshStandardMaterial({
       color: 0xffffff,
       map: skinTexture,
       emissive: palette.emissive,
       emissiveIntensity: palette.intensity,
-      metalness: 0.16,
-      roughness: 0.38,
+      metalness: 0.02,
+      roughness: 0.68,
       side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.94,
+      transparent: false,
+      opacity: 1,
       depthWrite: true,
     });
   }
@@ -209,7 +209,8 @@ export default function HaseoAvatar({
 
         const initialStyle = livePropsRef.current;
         const initialStyleKey = [initialStyle.skinMode, initialStyle.primaryHex, initialStyle.accentHex, initialStyle.showCircuits].join(':');
-        const skinTexture = createHaseoSkinTexture(initialStyle.skinMode, initialStyle.accentHex, initialStyle.showCircuits);
+        const eyeLayout = deriveHaseoEyeLayout(surface.geometry, surface.morphTargetDictionary);
+        const skinTexture = createHaseoSkinTexture(initialStyle.skinMode, initialStyle.accentHex, initialStyle.showCircuits, 1024, eyeLayout);
         surfaceMaterial = createSurfaceMaterial(initialStyle.skinMode, initialStyle.primaryHex, skinTexture);
         surfaceMaterial.userData.haseoStyleKey = initialStyleKey;
         surface.material = surfaceMaterial;
@@ -249,6 +250,7 @@ export default function HaseoAvatar({
           root,
           surface,
           wireMesh,
+          eyeLayout,
           styleKey: initialStyleKey,
           bounds: { height: boundsSize.y },
           nextBlinkAt: performance.now() + 2600,
@@ -360,7 +362,7 @@ export default function HaseoAvatar({
 
     const styleKey = [skinMode, primaryHex, accentHex, showCircuits].join(':');
     if (model.styleKey !== styleKey) {
-      const texture = createHaseoSkinTexture(skinMode, accentHex, showCircuits);
+      const texture = createHaseoSkinTexture(skinMode, accentHex, showCircuits, 1024, model.eyeLayout);
       const material = createSurfaceMaterial(skinMode, primaryHex, texture);
       material.userData.haseoStyleKey = styleKey;
       model.surface.material.map?.dispose?.();
@@ -369,9 +371,11 @@ export default function HaseoAvatar({
       model.styleKey = styleKey;
     }
     const wire = model.wireMesh;
-    wire.visible = skinMode >= 5 && showCircuits;
+    // Keep the surface human-looking; electrical tracks are painted into its texture,
+    // rather than drawing a triangle wireframe across the whole face.
+    wire.visible = false;
     wire.material.color.setHex(rgb(accentHex));
-    wire.material.opacity = skinMode === 6 ? 0.06 : 0.08;
+    wire.material.opacity = 0;
   }, [skinMode, showCircuits, primaryHex, accentHex, loaded]);
 
   return (
