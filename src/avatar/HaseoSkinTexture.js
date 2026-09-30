@@ -1,20 +1,13 @@
 import * as THREE from 'three';
 
-// Fallback values extracted from the FBX EyeBlink morph peaks. Runtime layout is
-// calculated from those morphs so an iris stays inside the actual eye aperture.
-export const HASEO_EYE_UV_CENTERS = [
-  [0.44186, 0.6081],
-  [0.38517, 0.55481],
-];
-
-// Léa's iris and pupil are concentric with her eye centre. Use that same centred
-// treatment for Haseo; the detected eyelid span determines the iris proportions.
+// Léa's iris is centred on the middle of her eye opening. Reuse that natural
+// proportion for Haseo: iris radius is 20% of the eyelid opening in each axis.
 export const LEA_IRIS_APERTURE_RATIO = 0.2;
 
-const FALLBACK_EYE_LAYOUT = HASEO_EYE_UV_CENTERS.map((center) => ({
-  center,
-  radius: [0.008, 0.009],
-}));
+const FALLBACK_EYES = [
+  { name: 'EyeBlink_L', center: [0.0279, 0.0392, 0.0684], normal: [0.08, 0.12, 0.99], radius: [0.0069, 0.0053] },
+  { name: 'EyeBlink_R', center: [-0.0349, 0.0359, 0.0676], normal: [-0.08, 0.12, 0.99], radius: [0.0068, 0.0051] },
+];
 
 const PALETTES = {
   0: { base: [29, 54, 78], light: [105, 143, 165], glow: [80, 220, 255] },
@@ -83,39 +76,6 @@ function drawTrace(data, size, points, glow, accent) {
   }
 }
 
-function drawIris(data, size, eye) {
-  const [u, v] = eye.center;
-  const [radiusU, radiusV] = eye.radius;
-  const cx = u * size;
-  const cy = v * size;
-  const rx = size * radiusU;
-  const ry = size * radiusV;
-  const x0 = Math.floor(cx - rx - 1);
-  const x1 = Math.ceil(cx + rx + 1);
-  const y0 = Math.floor(cy - ry - 1);
-  const y1 = Math.ceil(cy + ry + 1);
-
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const dx = (x - cx) / rx;
-      const dy = (y - cy) / ry;
-      const r = Math.hypot(dx, dy);
-      if (r > 1) continue;
-      const rays = 0.5 + 0.5 * Math.sin(Math.atan2(dy, dx) * 18 + r * 24);
-      let color;
-      if (r > 0.84) color = [14, 31, 47];
-      else if (r > 0.34) {
-        const t = clamp01((0.84 - r) / 0.5 + rays * 0.12);
-        color = [35 + 40 * t, 105 + 78 * t, 150 + 70 * t];
-      } else color = [4, 15, 29];
-      blendPixel(data, size, x, y, color, 1);
-    }
-  }
-
-  // A tiny upper catchlight keeps the iris readable without shifting its centre.
-  stamp(data, size, cx - rx * 0.22, cy - ry * 0.25, Math.max(1, Math.min(rx, ry) * 0.16), [229, 246, 250], 0.9);
-}
-
 function hashPixel(x, y) {
   let hash = (Math.imul(x + 1, 374761393) + Math.imul(y + 1, 668265263)) | 0;
   hash = Math.imul(hash ^ (hash >>> 13), 1274126177);
@@ -123,63 +83,124 @@ function hashPixel(x, y) {
 }
 
 export function deriveHaseoEyeLayout(geometry, morphTargetDictionary = {}) {
-  const uv = geometry?.attributes?.uv;
+  const position = geometry?.attributes?.position;
+  const normals = geometry?.attributes?.normal;
   const positionMorphs = geometry?.morphAttributes?.position;
-  if (!uv || !positionMorphs) return FALLBACK_EYE_LAYOUT.map((eye) => ({ ...eye, center: [...eye.center], radius: [...eye.radius] }));
+  if (!position || !positionMorphs) return FALLBACK_EYES.map((eye) => ({ ...eye, center: [...eye.center], normal: [...eye.normal], radius: [...eye.radius] }));
 
-  const eyeNames = ['EyeBlink_L', 'EyeBlink_R'];
-  return eyeNames.map((name, eyeIndex) => {
+  return ['EyeBlink_L', 'EyeBlink_R'].map((name, eyeIndex) => {
     const morphIndex = morphTargetDictionary[name];
     const morph = Number.isInteger(morphIndex) ? positionMorphs[morphIndex] : null;
-    if (!morph) return FALLBACK_EYE_LAYOUT[eyeIndex];
+    if (!morph) return FALLBACK_EYES[eyeIndex];
 
+    const delta = new Float32Array(position.count);
     let maxDelta = 0;
-    const delta = new Float32Array(uv.count);
-    for (let i = 0; i < uv.count; i++) {
+    for (let i = 0; i < position.count; i++) {
       const amount = Math.hypot(morph.getX(i), morph.getY(i), morph.getZ(i));
       delta[i] = amount;
       if (amount > maxDelta) maxDelta = amount;
     }
-    if (maxDelta <= 1e-8) return FALLBACK_EYE_LAYOUT[eyeIndex];
+    if (maxDelta <= 1e-8) return FALLBACK_EYES[eyeIndex];
 
-    // The strongest blink response marks the eye's centre; lower responses only
-    // describe the lid arc. This mirrors Léa's concentric iris/eye-centre alignment.
-    let peakU = 0;
-    let peakV = 0;
-    let peakWeight = 0;
-    let minU = Infinity;
-    let maxU = -Infinity;
-    let minV = Infinity;
-    let maxV = -Infinity;
-    for (let i = 0; i < uv.count; i++) {
-      const amount = delta[i];
-      if (amount >= maxDelta * 0.98) {
-        const weight = amount * amount;
-        peakU += uv.getX(i) * weight;
-        peakV += uv.getY(i) * weight;
-        peakWeight += weight;
-      }
-      if (amount < maxDelta * 0.05) continue;
-      const u = uv.getX(i);
-      const v = uv.getY(i);
-      minU = Math.min(minU, u);
-      maxU = Math.max(maxU, u);
-      minV = Math.min(minV, v);
-      maxV = Math.max(maxV, v);
+    // Find the full eyelid-opening footprint, not just the strongest blink vertices
+    // at its upper edge. This places the pupil in the aperture, as on Léa.
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    const activeThreshold = maxDelta * 0.05;
+    for (let i = 0; i < position.count; i++) {
+      if (delta[i] < activeThreshold) continue;
+      minX = Math.min(minX, position.getX(i));
+      maxX = Math.max(maxX, position.getX(i));
+      minY = Math.min(minY, position.getY(i));
+      maxY = Math.max(maxY, position.getY(i));
     }
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) return FALLBACK_EYES[eyeIndex];
 
-    if (!peakWeight || !Number.isFinite(minU) || !Number.isFinite(minV)) return FALLBACK_EYE_LAYOUT[eyeIndex];
+    const centerX = (minX + maxX) * 0.5;
+    const centerY = (minY + maxY) * 0.5;
+    const spanX = maxX - minX;
+    const spanY = maxY - minY;
+    let zSum = 0;
+    let normalX = 0;
+    let normalY = 0;
+    let normalZ = 0;
+    let weightSum = 0;
+    for (let i = 0; i < position.count; i++) {
+      if (delta[i] < activeThreshold) continue;
+      const dx = (position.getX(i) - centerX) / Math.max(spanX, 1e-6);
+      const dy = (position.getY(i) - centerY) / Math.max(spanY, 1e-6);
+      if (Math.abs(dx) > 0.2 || Math.abs(dy) > 0.2) continue;
+      const weight = delta[i] * delta[i];
+      zSum += position.getZ(i) * weight;
+      if (normals) {
+        normalX += normals.getX(i) * weight;
+        normalY += normals.getY(i) * weight;
+        normalZ += normals.getZ(i) * weight;
+      }
+      weightSum += weight;
+    }
+    if (!weightSum) return FALLBACK_EYES[eyeIndex];
+
+    const normalLength = Math.hypot(normalX, normalY, normalZ) || 1;
     return {
-      center: [peakU / peakWeight, peakV / peakWeight],
+      name,
+      center: [centerX, centerY, zSum / weightSum],
+      normal: normals
+        ? [normalX / normalLength, normalY / normalLength, normalZ / normalLength]
+        : [0, 0, 1],
       radius: [
-        Math.max(0.004, (maxU - minU) * LEA_IRIS_APERTURE_RATIO),
-        Math.max(0.004, (maxV - minV) * LEA_IRIS_APERTURE_RATIO),
+        Math.max(0.003, spanX * LEA_IRIS_APERTURE_RATIO),
+        Math.max(0.003, spanY * LEA_IRIS_APERTURE_RATIO),
       ],
     };
   });
 }
 
-export function buildHaseoSkinPixels(skinMode = 7, accentHex = 0xff5ce1e6, showCircuits = true, size = 1024, eyeLayout = FALLBACK_EYE_LAYOUT) {
+export function buildHaseoIrisPixels(size = 128) {
+  const data = new Uint8Array(size * size * 4);
+  const cx = (size - 1) * 0.5;
+  const cy = (size - 1) * 0.5;
+  const radius = size * 0.47;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = (x - cx) / radius;
+      const dy = (y - cy) / radius;
+      const r = Math.hypot(dx, dy);
+      if (r > 1) continue;
+      const angle = Math.atan2(dy, dx);
+      const ray = 0.5 + 0.5 * Math.sin(angle * 24 + r * 30);
+      let color;
+      if (r > 0.88) color = [5, 20, 35];
+      else if (r > 0.32) {
+        const light = clamp01((0.88 - r) / 0.56 + ray * 0.14);
+        color = [28 + 35 * light, 92 + 93 * light, 139 + 86 * light];
+      } else color = [3, 11, 21];
+      const offset = 4 * (y * size + x);
+      data[offset] = color[0];
+      data[offset + 1] = color[1];
+      data[offset + 2] = color[2];
+      data[offset + 3] = 255;
+    }
+  }
+  // A compact sclera reflection in the upper-left; the black pupil remains centred.
+  stamp(data, size, cx - radius * 0.22, cy - radius * 0.24, size * 0.035, [240, 250, 255], 0.95);
+  return data;
+}
+
+export function createHaseoIrisTexture(size = 128) {
+  const texture = new THREE.DataTexture(buildHaseoIrisPixels(size), size, size, THREE.RGBAFormat, THREE.UnsignedByteType);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.flipY = false;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+export function buildHaseoSkinPixels(skinMode = 7, accentHex = 0xff5ce1e6, showCircuits = true, size = 1024) {
   const palette = PALETTES[skinMode] || PALETTES[7];
   const data = new Uint8Array(size * size * 4);
   const accent = [
@@ -215,8 +236,8 @@ export function buildHaseoSkinPixels(skinMode = 7, accentHex = 0xff5ce1e6, showC
   }
 
   if (showCircuits) {
-    // Bright, embedded PCB traces run around the eye line and cheeks. Their paths
-    // stay clear of the irises; no detached terminal dots are added.
+    // Bright, embedded PCB traces run around the eye line and cheeks. No detached
+    // terminal dots are added; the fine paths remain integrated with skin.
     const traces = [
       [[0.305, 0.652], [0.333, 0.652], [0.352, 0.635], [0.373, 0.635], [0.389, 0.618]],
       [[0.351, 0.523], [0.371, 0.523], [0.387, 0.539], [0.405, 0.539], [0.421, 0.555]],
@@ -230,13 +251,12 @@ export function buildHaseoSkinPixels(skinMode = 7, accentHex = 0xff5ce1e6, showC
     for (const trace of traces) drawTrace(data, size, trace, palette.glow, accent);
   }
 
-  for (const eye of eyeLayout) drawIris(data, size, eye);
   return data;
 }
 
-export function createHaseoSkinTexture(skinMode = 7, accentHex = 0xff5ce1e6, showCircuits = true, size = 1024, eyeLayout = FALLBACK_EYE_LAYOUT) {
+export function createHaseoSkinTexture(skinMode = 7, accentHex = 0xff5ce1e6, showCircuits = true, size = 1024) {
   const texture = new THREE.DataTexture(
-    buildHaseoSkinPixels(skinMode, accentHex, showCircuits, size, eyeLayout),
+    buildHaseoSkinPixels(skinMode, accentHex, showCircuits, size),
     size,
     size,
     THREE.RGBAFormat,

@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import {
+  buildHaseoIrisPixels,
   buildHaseoSkinPixels,
   deriveHaseoEyeLayout,
-  HASEO_EYE_UV_CENTERS,
   LEA_IRIS_APERTURE_RATIO,
 } from '../src/avatar/HaseoSkinTexture.js';
 import fs from 'node:fs';
@@ -624,15 +624,18 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
 
     const eyeLayout = deriveHaseoEyeLayout(meshes[0].geometry, meshes[0].morphTargetDictionary);
     assert.equal(eyeLayout.length, 2);
+    const expectedEyeCenters = [[0.0279, 0.0392, 0.0684], [-0.0349, 0.0359, 0.0676]];
     eyeLayout.forEach((eye, index) => {
-      assert.ok(Math.abs(eye.center[0] - HASEO_EYE_UV_CENTERS[index][0]) < 0.001);
-      assert.ok(Math.abs(eye.center[1] - HASEO_EYE_UV_CENTERS[index][1]) < 0.001);
-      assert.ok(eye.radius[0] > 0.004 && eye.radius[0] < 0.02);
-      assert.ok(eye.radius[1] > 0.004 && eye.radius[1] < 0.02);
+      for (let axis = 0; axis < 3; axis++) {
+        assert.ok(Math.abs(eye.center[axis] - expectedEyeCenters[index][axis]) < 0.002);
+      }
+      assert.ok(eye.radius[0] > 0.003 && eye.radius[0] < 0.01);
+      assert.ok(eye.radius[1] > 0.003 && eye.radius[1] < 0.01);
+      assert.ok(eye.normal[2] > 0.35, 'the iris faces out from the eye socket');
     });
 
     // Léa's painted iris layers share the centre of each eye; Haseo follows that
-    // same concentric placement, using his own blink morph to find the UV position.
+    // same concentric placement, using his own eyelid morph to find the 3D centre.
     const lea = HeadMesh.parse(readArrayBuffer('avatar/head_mesh_lea.bin'));
     const leaIrisPaint = new Set([0xff05070a, 0xff0e4a36, 0xff3dbe8c, 0xff16553f]);
     for (let eye = 0; eye < lea.eyeFirst.length; eye++) {
@@ -654,9 +657,8 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
 
   it('builds human-like blue Haseo skin with electric circuits and correctly centred irises', () => {
     const size = 512;
-    const eyeLayout = HASEO_EYE_UV_CENTERS.map((center) => ({ center, radius: [0.008, 0.009] }));
-    const textured = buildHaseoSkinPixels(7, 0xff5ce1e6, true, size, eyeLayout);
-    const plain = buildHaseoSkinPixels(7, 0xff5ce1e6, false, size, eyeLayout);
+    const textured = buildHaseoSkinPixels(7, 0xff5ce1e6, true, size);
+    const plain = buildHaseoSkinPixels(7, 0xff5ce1e6, false, size);
     const sample = (data, u, v) => {
       const offset = 4 * (Math.floor(v * size) * size + Math.floor(u * size));
       return Array.from(data.subarray(offset, offset + 3));
@@ -666,10 +668,13 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     const skin = sample(plain, 0.7, 0.4);
     assert.ok(skin[1] > 55 && skin[2] > skin[0], 'the skin keeps a muted, human-like cool complexion');
     assert.notDeepEqual(sample(plain, 0.7, 0.4), sample(plain, 0.71, 0.41), 'skin has fine natural tonal variation');
-    for (const eye of eyeLayout) {
-      const pupil = sample(textured, eye.center[0], eye.center[1]);
-      assert.ok(pupil[2] > pupil[0], 'pupils use a blue tone');
-    }
+    const iris = buildHaseoIrisPixels(64);
+    const irisSample = (x, y) => Array.from(iris.subarray(4 * (y * 64 + x), 4 * (y * 64 + x) + 4));
+    const pupil = irisSample(32, 32);
+    const blueIris = irisSample(48, 32);
+    assert.ok(pupil[2] < 40 && pupil[3] === 255, 'the black-blue pupil is centred in the iris texture');
+    assert.ok(blueIris[2] > blueIris[0] && blueIris[3] === 255, 'the iris is visibly blue around the pupil');
+    assert.equal(irisSample(0, 0)[3], 0, 'the iris texture is transparent outside the eye disc');
     assert.notDeepEqual(sample(textured, 0.32, 0.652), sample(plain, 0.32, 0.652), 'electric circuit traces disappear when circuits are disabled');
   });
 

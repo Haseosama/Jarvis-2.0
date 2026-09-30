@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
-import { createHaseoSkinTexture, deriveHaseoEyeLayout } from './HaseoSkinTexture.js';
+import {
+  createHaseoIrisTexture,
+  createHaseoSkinTexture,
+  deriveHaseoEyeLayout,
+} from './HaseoSkinTexture.js';
 
 const MODEL_URL = './assets/avatar/haseo.fbx';
 const clamp = (value, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, Number(value) || 0));
@@ -85,6 +89,38 @@ function createSurfaceMaterial(skinMode, primaryHex, skinTexture) {
     roughness: 0.66,
     metalness: 0,
     side: THREE.DoubleSide,
+  });
+}
+
+function createHaseoEyeOverlays(surface, eyeLayout) {
+  const irisTexture = createHaseoIrisTexture();
+  const irisMaterial = new THREE.MeshBasicMaterial({
+    map: irisTexture,
+    side: THREE.DoubleSide,
+    transparent: true,
+    alphaTest: 0.025,
+    depthTest: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+    toneMapped: false,
+  });
+  const irisGeometry = new THREE.CircleGeometry(1, 48);
+
+  return eyeLayout.map((eye) => {
+    const iris = new THREE.Mesh(irisGeometry, irisMaterial);
+    const normal = new THREE.Vector3(...eye.normal).normalize();
+    if (normal.z < 0) normal.negate();
+    iris.position.set(...eye.center).addScaledVector(normal, 0.0015);
+    iris.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+    iris.scale.set(eye.radius[0], eye.radius[1], 1);
+    iris.userData.haseoIris = true;
+    iris.userData.baseScaleY = eye.radius[1];
+    iris.userData.blinkMorph = eye.name;
+    iris.renderOrder = 2;
+    surface.add(iris);
+    return iris;
   });
 }
 
@@ -210,11 +246,12 @@ export default function HaseoAvatar({
         const initialStyle = livePropsRef.current;
         const initialStyleKey = [initialStyle.skinMode, initialStyle.primaryHex, initialStyle.accentHex, initialStyle.showCircuits].join(':');
         const eyeLayout = deriveHaseoEyeLayout(surface.geometry, surface.morphTargetDictionary);
-        const skinTexture = createHaseoSkinTexture(initialStyle.skinMode, initialStyle.accentHex, initialStyle.showCircuits, 1024, eyeLayout);
+        const skinTexture = createHaseoSkinTexture(initialStyle.skinMode, initialStyle.accentHex, initialStyle.showCircuits);
         surfaceMaterial = createSurfaceMaterial(initialStyle.skinMode, initialStyle.primaryHex, skinTexture);
         surfaceMaterial.userData.haseoStyleKey = initialStyleKey;
         surface.material = surfaceMaterial;
         surface.frustumCulled = false;
+        const eyeMeshes = createHaseoEyeOverlays(surface, eyeLayout);
 
         wireMesh = new THREE.Mesh(
           surface.geometry,
@@ -251,6 +288,7 @@ export default function HaseoAvatar({
           surface,
           wireMesh,
           eyeLayout,
+          eyeMeshes,
           styleKey: initialStyleKey,
           bounds: { height: boundsSize.y },
           nextBlinkAt: performance.now() + 2600,
@@ -322,6 +360,11 @@ export default function HaseoAvatar({
         const blink = blinkAge < 170 ? Math.sin((Math.PI * blinkAge) / 170) : 0;
         setMorph(head, 'EyeBlink_L', blink);
         setMorph(head, 'EyeBlink_R', blink);
+        for (const iris of model.eyeMeshes || []) {
+          const blinkIndex = head.morphTargetDictionary?.[iris.userData.blinkMorph];
+          const eyeBlink = blinkIndex === undefined ? 0 : clamp(head.morphTargetInfluences[blinkIndex]);
+          iris.scale.y = iris.userData.baseScaleY * Math.max(0.08, 1 - eyeBlink * 0.92);
+        }
 
         if (wires && head.morphTargetInfluences && wires.morphTargetInfluences) {
           const n = Math.min(head.morphTargetInfluences.length, wires.morphTargetInfluences.length);
@@ -341,6 +384,7 @@ export default function HaseoAvatar({
       window.removeEventListener('resize', resize);
       root?.traverse((object) => {
         if (!object.isMesh) return;
+        if (object.userData.haseoIris) object.geometry?.dispose?.();
         const materials = Array.isArray(object.material) ? object.material : [object.material];
         for (const material of materials) {
           material?.map?.dispose?.();
@@ -362,7 +406,7 @@ export default function HaseoAvatar({
 
     const styleKey = [skinMode, primaryHex, accentHex, showCircuits].join(':');
     if (model.styleKey !== styleKey) {
-      const texture = createHaseoSkinTexture(skinMode, accentHex, showCircuits, 1024, model.eyeLayout);
+      const texture = createHaseoSkinTexture(skinMode, accentHex, showCircuits);
       const material = createSurfaceMaterial(skinMode, primaryHex, texture);
       material.userData.haseoStyleKey = styleKey;
       model.surface.material.map?.dispose?.();
