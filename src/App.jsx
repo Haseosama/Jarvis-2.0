@@ -11,6 +11,8 @@ import PCControlPanel from './ui/PCControlPanel.jsx';
 import PluginsPanel from './ui/PluginsPanel.jsx';
 import CircuitPanel from './ui/CircuitPanel.jsx';
 import SkillPanel from './ui/SkillPanel.jsx';
+import ModelStudioPanel from './ui/ModelStudioPanel.jsx';
+import { llmStore } from './llm/llmStore.js';
 import AvatarCreator from './ui/AvatarCreator.jsx';
 import SettingsModal from './ui/SettingsModal.jsx';
 import { configStore } from './core/ConfigStore.js';
@@ -56,8 +58,9 @@ const QUICK_COMMANDS = [
 
 export default function App() {
   const [cfg, setCfg] = useState(configStore.get());
-  const [activeView, setActiveView] = useState('avatar'); // 'avatar' | 'space' | 'globe' | 'circuit' | 'skills' | 'media' | 'productivity' | 'pc' | 'plugins'
+  const [activeView, setActiveView] = useState('avatar'); // 'avatar' | 'space' | 'globe' | 'circuit' | 'skills' | 'media' | 'productivity' | 'pc' | 'plugins' | 'studio'
   const [creatorOpen, setCreatorOpen] = useState(false);
+  const [studio, setStudio] = useState({ tab: 'code', seed: '' });
   const [spaceConfig, setSpaceConfig] = useState({
     mode: 'map',
     observer: { latDeg: 44.8378, lonDeg: -0.5792, label: 'Bordeaux' },
@@ -209,6 +212,10 @@ export default function App() {
         setActiveView(sc?.mode === 'globe' ? 'globe' : 'space');
       },
       onOpenAvatarCreator: () => setCreatorOpen(true),
+      onOpenStudio: ({ tab, seed } = {}) => {
+        setStudio({ tab: tab || 'code', seed: seed || '' });
+        setActiveView('studio');
+      },
       onOpenCircuit: (state) => {
         setCircuitState(state);
         setActiveView('circuit');
@@ -294,6 +301,7 @@ export default function App() {
     engineRef.current = engine;
 
     // Pre-connect Gemini Live WebSocket as soon as secrets/config load, even before mic is activated
+    llmStore.init();
     configStore.initSecrets().then(() => {
       if (configStore.getActiveApiKey() && configStore.get().voiceMode !== 'offline') {
         engine.ensureLiveSession().then((ok) => {
@@ -408,6 +416,12 @@ export default function App() {
             onClick={() => setActiveView('pc')}
           >
             🖥️ Contrôle PC
+          </button>
+          <button
+            className={`hud-nav-btn ${activeView === 'studio' ? 'active' : ''}`}
+            onClick={() => setActiveView('studio')}
+          >
+            🤖 Studio IA
           </button>
           <button
             className={`hud-nav-btn ${activeView === 'plugins' ? 'active' : ''}`}
@@ -593,6 +607,8 @@ export default function App() {
           )}
 
           {activeView === 'skills' && <SkillPanel onClose={() => setActiveView('avatar')} />}
+
+          {activeView === 'studio' && <ModelStudioPanel tab={studio.tab} seed={studio.seed} onClose={() => setActiveView('avatar')} />}
 
           {activeView === 'media' && (
             <MediaPlayerPanel

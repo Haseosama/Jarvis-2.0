@@ -1456,3 +1456,43 @@ html, body, #root {
 .creator-footer { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border-cyan); }
 .creator-spacer { flex: 1; }
 @media (max-width: 760px) { .creator-body { grid-template-columns: 1fr; overflow: auto; } .creator-preview { min-height: 280px; } }
+
+/* ===== Studio IA (code, comparateur, fournisseurs) ===== */
+.llm-panel { min-height: 0; }
+.llm-tabs { display: flex; gap: 8px; padding: 8px 14px 0; flex-wrap: wrap; }
+.llm-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 14px 14px; }
+.llm-studio, .llm-compare { display: flex; flex-direction: column; gap: 10px; min-height: 100%; }
+.llm-toolbar, .llm-attach, .llm-slot, .llm-row, .llm-picker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.llm-picker { flex-wrap: nowrap; }
+.llm-picker select, .llm-picker input, .llm-row input, .llm-attach input, .llm-code-bar input, .llm-composer textarea {
+  background: rgba(5, 12, 24, 0.9); color: #e8f6ff; border: 1px solid var(--border-cyan); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 12px; min-width: 0;
+}
+.llm-row input, .llm-attach input { flex: 1; }
+.llm-warn { cursor: help; }
+.llm-notice { padding: 4px 0; }
+.llm-chat { flex: 1; min-height: 200px; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+.llm-msg { padding: 10px; border-radius: 10px; border: 1px solid var(--border-cyan); background: rgba(12, 26, 44, 0.7); }
+.llm-msg.user { border-color: rgba(255, 213, 79, 0.4); }
+.llm-msg.error { border-color: rgba(255, 107, 74, 0.6); }
+.llm-msg-head { font-size: 11px; color: var(--cyan-soft); margin-bottom: 6px; }
+.llm-text { white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.5; }
+.llm-error { color: #ff8a80; }
+.llm-code { margin-top: 8px; }
+.llm-code-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--cyan-soft); }
+.llm-code-bar input { flex: 1; min-width: 120px; }
+.llm-imported { padding: 8px; border: 1px dashed var(--border-cyan); border-radius: 10px; }
+.llm-composer { display: flex; gap: 8px; align-items: stretch; }
+.llm-composer textarea { flex: 1; resize: vertical; font-size: 13px; }
+.llm-composer-side { display: flex; flex-direction: column; gap: 8px; justify-content: space-between; }
+.llm-slot { padding: 6px 8px; border: 1px solid var(--border-cyan); border-radius: 10px; }
+.llm-letter { font-weight: 700; color: var(--amber); }
+.llm-results { display: grid; gap: 10px; align-items: start; }
+.llm-result { padding: 10px; border: 1px solid var(--border-cyan); border-radius: 10px; background: rgba(12, 26, 44, 0.7); display: flex; flex-direction: column; gap: 8px; max-height: 480px; overflow: auto; }
+.llm-result.winner { border-color: var(--amber); box-shadow: 0 0 10px rgba(255, 213, 79, 0.25); }
+.llm-board table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.llm-board th, .llm-board td { text-align: left; padding: 4px 8px; border-bottom: 1px solid rgba(0, 229, 255, 0.15); }
+.llm-board h4 { display: flex; align-items: center; gap: 10px; color: var(--cyan-soft); font-size: 12px; margin: 6px 0; }
+.llm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.llm-card { padding: 10px; border: 1px solid var(--border-cyan); border-radius: 10px; background: rgba(12, 26, 44, 0.7); display: flex; flex-direction: column; gap: 8px; }
+.llm-card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+@media (max-width: 900px) { .llm-results { grid-template-columns: 1fr !important; } }

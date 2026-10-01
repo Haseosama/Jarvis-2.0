@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('jarvisHost', {
   secretGet: (slot) => ipcRenderer.invoke('jarvis:secret-get', slot),
   secretSet: (slot, value) => ipcRenderer.invoke('jarvis:secret-set', slot, value),
   openExternal: (url) => ipcRenderer.invoke('jarvis:open-external', url),
+  openArena: (url) => ipcRenderer.invoke('jarvis:open-arena', url),
   notify: (title, body) => ipcRenderer.invoke('jarvis:notify', title, body),
   clipboardRead: () => ipcRenderer.invoke('jarvis:clipboard-read'),
   clipboardWrite: (text) => ipcRenderer.invoke('jarvis:clipboard-write', text),

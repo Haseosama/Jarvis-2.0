@@ -1,6 +1,6 @@
 # Brahma AI Evo → Jarvis : plan d’intégration
 
-État au 1er octobre 2026 : inventaire du dépôt public `titechprabhasolutions/Brahma-Ai-Evo` terminé; phase 1 en cours, avec une première tranche d’observabilité livrée dans Jarvis. L’utilisateur confirme disposer d’une autorisation/licence couvrant l’intégration et la redistribution. Ne pas recopier l’interface PyQt ni lancer Brahma comme une seconde application : conserver l’interface React/Electron de Jarvis et intégrer les capacités par modules.
+État au 1er octobre 2026 : inventaire du dépôt public `titechprabhasolutions/Brahma-Ai-Evo` terminé; phase 1 en cours, avec une première tranche d’observabilité livrée dans Jarvis. Ne pas recopier l’interface PyQt ni lancer Brahma comme une seconde application : conserver l’interface React/Electron de Jarvis et intégrer les capacités par modules.
 
 ## Inventaire et recouvrement
 

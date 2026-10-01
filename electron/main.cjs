@@ -297,6 +297,64 @@ ipcMain.handle('jarvis:open-external', async (_e, url) => {
   }
 });
 
+// arena.ai: manual browsing only. Separate window with its own persistent profile (the user signs in
+// themselves), no privileged bridge, every permission denied. Jarvis never reads this profile or drives
+// the page: arena.ai's terms of use forbid automated access.
+const ARENA_PARTITION = 'persist:jarvis-arena';
+let arenaWindow = null;
+
+function isArenaUrl(raw) {
+  try {
+    const u = new URL(String(raw));
+    return u.protocol === 'https:' && (u.hostname === 'arena.ai' || u.hostname.endsWith('.arena.ai'));
+  } catch {
+    return false;
+  }
+}
+
+ipcMain.handle('jarvis:open-arena', async (_e, rawUrl) => {
+  const target = rawUrl && isArenaUrl(rawUrl) ? String(rawUrl) : 'https://arena.ai/';
+  if (arenaWindow && !arenaWindow.isDestroyed()) {
+    arenaWindow.show();
+    arenaWindow.focus();
+    if (!isArenaUrl(arenaWindow.webContents.getURL())) await arenaWindow.loadURL(target).catch(() => {});
+    return { ok: true, reused: true };
+  }
+  const arenaSession = session.fromPartition(ARENA_PARTITION);
+  arenaSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
+  arenaWindow = new BrowserWindow({
+    width: 1180,
+    height: 820,
+    title: 'arena.ai — session manuelle',
+    backgroundColor: '#0b0b0f',
+    autoHideMenuBar: true,
+    webPreferences: {
+      partition: ARENA_PARTITION,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+    },
+  });
+  arenaWindow.on('closed', () => { arenaWindow = null; });
+  arenaWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  // Stay on https pages (login providers included); anything else leaves for the system browser.
+  arenaWindow.webContents.on('will-navigate', (event, url) => {
+    if (!/^https:\/\//i.test(url)) {
+      event.preventDefault();
+    }
+  });
+  try {
+    await arenaWindow.loadURL(target);
+    return { ok: true, reused: false };
+  } catch (error) {
+    return { ok: false, message: error.message || String(error) };
+  }
+});
+
 ipcMain.handle('jarvis:notify', (_e, title, body) => {
   try {
     if (Notification.isSupported()) {

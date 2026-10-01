@@ -10,7 +10,7 @@
     "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "vite build",
     "build:exe": "node scripts/build-win-exe.mjs",
-    "test": "node --test tests/jarvis.test.js",
+    "test": "node --test tests/jarvis.test.js tests/llm.test.js",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "electron:dev": "ELECTRON_START_URL=http://localhost:5173 electron .",
     "electron:start": "npm run build && electron .",

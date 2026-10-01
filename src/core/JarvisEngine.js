@@ -1118,6 +1118,17 @@ export class JarvisEngine {
     const driveMatch = /(?:cherche|recherche|trouve)\s+(.+?)\s+(?:dans|sur)\s+(?:mon\s+)?(?:google\s+)?drive/i.exec(text.trim().replace(/[.!?]+$/, ''));
     if (driveMatch) return await this.tools.execute('google_workspace', { service: 'drive', action: 'search', query: driveMatch[1].trim() });
 
+    // 6f. Studio IA (arena.ai en ouverture manuelle, Studio de code, comparateur)
+    if (/\barena(?:\.ai)?\b/.test(q) && /(ouvre|ouvrir|lance|va sur|affiche)/.test(q)) {
+      return await this.tools.execute('ai_studio', { action: 'open_arena' });
+    }
+    if (/studio (?:de )?(?:code|ia)|assistant (?:de )?code/.test(q) && /(ouvre|ouvrir|lance|affiche)/.test(q)) {
+      return await this.tools.execute('ai_studio', { action: 'open_code' });
+    }
+    if (/compar(?:e|er|ateur)/.test(q) && /(mod[èe]les?|\bia\b|\bllm\b)/.test(q)) {
+      return await this.tools.execute('ai_studio', { action: 'open_compare' });
+    }
+
     // 6e. Avatar character creator
     if (/(cr[ée]ateur de personnage|personnalis(?:e|er) (?:mon |l['’])?(?:avatar|visage)|cr[ée]e(?:r)? mon (?:visage|avatar)|modifie(?:r)? (?:mon |le )?visage)/.test(q)) {
       return await this.tools.execute('avatar_creator', { action: 'open' });

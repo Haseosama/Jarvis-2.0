@@ -191,6 +191,23 @@ export const hostBridge = {
     return false;
   },
 
+  // arena.ai is opened for MANUAL use only (separate window in the desktop app, new tab in a browser).
+  async openArena(url = 'https://arena.ai/') {
+    try {
+      if (hasElectron() && typeof window.jarvisHost.openArena === 'function') {
+        const res = await window.jarvisHost.openArena(url);
+        return { ok: Boolean(res?.ok), message: res?.message || '' };
+      }
+      if (typeof window !== 'undefined' && typeof window.open === 'function') {
+        window.open('https://arena.ai/', '_blank', 'noopener,noreferrer');
+        return { ok: true, message: '' };
+      }
+    } catch (error) {
+      return { ok: false, message: error.message || String(error) };
+    }
+    return { ok: false, message: 'Ouverture impossible dans cet environnement.' };
+  },
+
   async readClipboard() {
     try {
       if (hasElectron() && typeof window.jarvisHost.clipboardRead === 'function') {
