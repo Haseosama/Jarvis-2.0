@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   BUILT_IN_FACES,
   HAIR_SHADES,
@@ -10,6 +10,7 @@ import {
   recolourHair,
   removeHairPaint,
 } from './HeadMesh.js';
+import { customizeClassicFace, faceCustomKey, isDefaultFaceCustom, normalizeFaceCustom } from './FaceCustomizer.js';
 import { HoloAvatar } from './Visemes.js';
 import {
   AvatarRenderer,
@@ -17,7 +18,6 @@ import {
   drawGlowReactor,
 } from './AvatarRenderer.js';
 
-const HaseoAvatar = lazy(() => import('./HaseoAvatar.jsx'));
 const meshCache = new Map();
 const hairCache = new Map();
 
@@ -82,6 +82,7 @@ export default function AvatarView({
   polygonLevel = 'high',
   hairStyleId = 'auto',
   hairShadeId = 'natural',
+  customization = null, // Classic face sliders (overrides config.avatarCustom, used by the creator preview)
   avatarMode = '3d',
   watching = false,
   closeUp = false,
@@ -109,6 +110,8 @@ export default function AvatarView({
     hairShadeId && hairShadeId !== 'natural'
       ? hairShadeId
       : config?.avatarHairColour?.[faceSpec.label] || '';
+  const faceCustom = faceSpec.id === 'classic' ? normalizeFaceCustom(customization || config?.avatarCustom) : null;
+  const faceCustomId = faceCustom && !isDefaultFaceCustom(faceCustom) ? faceCustomKey(faceCustom) : '';
   const showFace = avatarMode !== 'reactor' && config?.avatarFace !== false;
   const skinMode = resolveSkinCode(skin, config);
   const lipTone = typeof lips === 'number' ? lips : config?.avatarLips ?? 0;
@@ -124,27 +127,23 @@ export default function AvatarView({
   useEffect(() => {
     let cancelled = false;
     async function prepare() {
-      if (faceSpec.id === 'haseo') {
-        engineRef.current.renderer = null;
-        engineRef.current.avatar = null;
-        setReady(true);
-        return;
-      }
       try {
         const baseMesh = await loadHeadMesh(faceSpec.asset);
         const shade = HAIR_SHADES.find((s) => s.id === effectiveShadeId);
         const targetColours = shade ? shade.colours : faceSpec.hairColours;
-        let finalMesh = faceSpec.id === 'classic'
-          ? HeadMesh.refineClassicFace(baseMesh)
+        // Classic: refined proportions, then the user's character-creator sliders. Hair is fitted on that shape.
+        const shapedMesh = faceSpec.id === 'classic'
+          ? customizeClassicFace(HeadMesh.refineClassicFace(baseMesh), faceCustom)
           : baseMesh;
+        let finalMesh = shapedMesh;
 
         if (effectiveHairId) {
           const style = await loadHairStyle(effectiveHairId);
           if (style) {
-            finalMesh = style.fitOn(baseMesh, targetColours);
+            finalMesh = style.fitOn(shapedMesh, targetColours);
           }
         } else if (!isBald && shade) {
-          finalMesh = recolourHair(baseMesh, faceSpec.hairColours, targetColours);
+          finalMesh = recolourHair(shapedMesh, faceSpec.hairColours, targetColours);
         }
 
         // Apply selected polygon level (eco / low / medium / high / ultra)
@@ -164,7 +163,7 @@ export default function AvatarView({
     return () => {
       cancelled = true;
     };
-  }, [faceSpec, effectiveHairId, effectiveShadeId, effectivePolyLevel, isBald]);
+  }, [faceSpec, effectiveHairId, effectiveShadeId, effectivePolyLevel, isBald, faceCustomId]);
 
   const propsRef = useRef({});
   propsRef.current = {
@@ -297,32 +296,14 @@ export default function AvatarView({
         justifyContent: 'center',
       }}
     >
-      {faceSpec.id === 'haseo' && showFace ? (
-        <Suspense fallback={<div className="haseo-avatar-status">Chargement du visage Haseo…</div>}>
-          <HaseoAvatar
-            state={state}
-            outputLevel={outputLevel}
-            audioLevel={audioLevel}
-            viseme={viseme}
-            timeline={timeline}
-            skinMode={skinMode}
-            showCircuits={circuitsEnabled}
-            primaryHex={primaryHex}
-            accentHex={accentHex}
-            closeUp={closeUp}
-            onPolygonCountChange={onPolygonCountChange}
-          />
-        </Suspense>
-      ) : (
-        <canvas
-          ref={canvasRef}
-          style={{
-            width: '100%',
-            height: '100%',
-            display: 'block',
-          }}
-        />
-      )}
+      <canvas
+        ref={canvasRef}
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'block',
+        }}
+      />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 // Port of ConfigStore.kt, LiveModels.kt, and ModelLadder.kt from Jarvis-Android
 
+import { normalizeFaceCustom } from '../avatar/FaceCustomizer.js';
 import { hostBridge } from './hostBridge.js';
 
 export const DEFAULT_LIVE_MODEL = 'models/gemini-2.5-flash-native-audio-preview-12-2025';
@@ -110,7 +111,7 @@ export function normalizeFaceId(rawId) {
   const s = String(rawId || 'classic').trim().toLowerCase().replace(/^char:/, '');
   if (s === 'female01') return 'lea';
   if (s === 'male02') return 'marc';
-  if (['classic', 'lea', 'marc', 'haseo'].includes(s)) return s;
+  if (['classic', 'lea', 'marc'].includes(s)) return s;
   return 'classic';
 }
 
@@ -121,6 +122,17 @@ export function normalizeSkinMode(rawSkin) {
 }
 
 const STORAGE_KEY = 'jarvis2_config_v1';
+
+export function normalizeCustomSlots(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((slot) => slot && typeof slot === 'object')
+    .slice(0, 8)
+    .map((slot, index) => ({
+      name: String(slot.name || `Look ${index + 1}`).replace(/[\u0000-\u001f]/g, '').trim().slice(0, 30) || `Look ${index + 1}`,
+      values: normalizeFaceCustom(slot.values),
+    }));
+}
 
 const DEFAULT_CONFIG = {
   apiKeys: ['', '', ''],
@@ -137,13 +149,15 @@ const DEFAULT_CONFIG = {
   speechRate: 1.05,
   // Avatar
   avatarMode: '3d', // '3d' | 'reactor'
-  avatarFaceId: 'classic', // 'classic' | 'lea' | 'marc' | 'haseo'
+  avatarFaceId: 'classic', // 'classic' | 'lea' | 'marc'
   avatarSkin: 7, // 7 = Hologramme bleu, 5 = Hologramme or, 6 = Hologramme + fibres, 0 = Réseau lumineux, 1..4 = Peau
   avatarCircuits: true, // true = afficher les circuits électriques, false = sans circuits
   avatarPolygonLevel: 'high', // 'eco' | 'low' | 'medium' | 'high' | 'ultra'
   avatarLips: 0, // 0 = Naturelles, 1 = Rose, 2 = Rouge, 3 = Prune, 4 = Corail
   avatarHair: 'auto', // 'auto' | 'none' | style id
   avatarHairShade: 'natural',
+  avatarCustom: {}, // Classic face proportions (character creator sliders, -1..1)
+  avatarCustomSlots: [], // saved looks [{ name, values }]
   // User & Location
   userName: '',
   userCity: 'Bordeaux',
@@ -179,6 +193,8 @@ class ConfigStore {
           avatarMode: parsed.avatarMode === 'reactor' ? 'reactor' : '3d',
           avatarFaceId: normalizeFaceId(parsed.avatarFaceId),
           avatarSkin: normalizeSkinMode(parsed.avatarSkin),
+          avatarCustom: normalizeFaceCustom(parsed.avatarCustom),
+          avatarCustomSlots: normalizeCustomSlots(parsed.avatarCustomSlots),
         };
       }
     } catch {
@@ -200,6 +216,8 @@ class ConfigStore {
           avatarSkin: normalizeSkinMode(
             diskConfig.avatarSkin !== undefined ? diskConfig.avatarSkin : this.state.avatarSkin
           ),
+          avatarCustom: normalizeFaceCustom(diskConfig.avatarCustom || this.state.avatarCustom),
+          avatarCustomSlots: normalizeCustomSlots(diskConfig.avatarCustomSlots || this.state.avatarCustomSlots),
         };
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
@@ -232,6 +250,8 @@ class ConfigStore {
     if (nextPatch.avatarSkin !== undefined) {
       nextPatch.avatarSkin = normalizeSkinMode(nextPatch.avatarSkin);
     }
+    if (nextPatch.avatarCustom !== undefined) nextPatch.avatarCustom = normalizeFaceCustom(nextPatch.avatarCustom);
+    if (nextPatch.avatarCustomSlots !== undefined) nextPatch.avatarCustomSlots = normalizeCustomSlots(nextPatch.avatarCustomSlots);
     if (nextPatch.avatarMode !== undefined && nextPatch.avatarMode !== 'reactor') {
       nextPatch.avatarMode = '3d';
     }

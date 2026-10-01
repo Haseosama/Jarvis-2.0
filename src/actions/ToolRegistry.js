@@ -11,6 +11,7 @@ import { getTuyaClient, getTuyaStatus } from '../integrations/tuyaClient.js';
 import { runSmartHome } from '../integrations/smartHome.js';
 import { googleRequest } from '../integrations/googleClient.js';
 import { runGoogleWorkspace } from '../integrations/googleWorkspace.js';
+import { FACE_PRESETS, presetValues, randomFaceCustom } from '../avatar/FaceCustomizer.js';
 import { runSkillForgeTool } from '../skills/skillForge.js';
 import { runAutoHealTool } from '../skills/autoHeal.js';
 import { sanitizeTraceValue } from '../ui/executionTrace.js';
@@ -1469,6 +1470,42 @@ export class ToolRegistry {
         required: ['service', 'action'],
       },
       run: async (args) => runGoogleWorkspace(args, { request: googleRequest }),
+    });
+
+    // 43. Avatar character creator (Classic face proportions)
+    this.register({
+      name: 'avatar_creator',
+      description: 'Créateur de personnage du visage Classique (taille du visage, mâchoire, yeux, nez, bouche…). action=open ouvre le créateur; action=preset (preset: ' + FACE_PRESETS.map((p) => p.id).join(', ') + ') applique un préréglage; action=random applique un visage aléatoire; action=reset revient au visage d’origine.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          action: { type: 'STRING', description: 'open, preset, random ou reset' },
+          preset: { type: 'STRING', description: 'Identifiant du préréglage (action=preset).' },
+        },
+        required: ['action'],
+      },
+      run: async (args) => {
+        const action = String(args.action || 'open').toLowerCase();
+        if (action === 'open') {
+          this.ui.onOpenAvatarCreator?.();
+          return 'Créateur de personnage ouvert : réglez le visage avec les curseurs puis appuyez sur Appliquer.';
+        }
+        if (action === 'reset') {
+          configStore.update({ avatarCustom: {}, avatarFaceId: 'classic', avatarMode: '3d' });
+          return 'Visage Classique d’origine restauré.';
+        }
+        if (action === 'random') {
+          configStore.update({ avatarCustom: randomFaceCustom(Date.now()), avatarFaceId: 'classic', avatarMode: '3d' });
+          return 'Un nouveau visage aléatoire a été appliqué au Classique. Dites « réinitialise mon visage » pour revenir à l’original.';
+        }
+        if (action === 'preset') {
+          const preset = FACE_PRESETS.find((entry) => entry.id === String(args.preset || '').toLowerCase());
+          if (!preset) return `Préréglage inconnu. Disponibles : ${FACE_PRESETS.map((entry) => entry.id).join(', ')}.`;
+          configStore.update({ avatarCustom: presetValues(preset.id), avatarFaceId: 'classic', avatarMode: '3d' });
+          return `Préréglage « ${preset.label} » appliqué au visage Classique.`;
+        }
+        return 'Action inconnue : open, preset, random ou reset.';
+      },
     });
 
     // 41. Skill Forge + Crucible (generation and sandboxed tests; approval stays in the Skills panel)

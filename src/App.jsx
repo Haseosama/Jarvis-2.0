@@ -11,6 +11,7 @@ import PCControlPanel from './ui/PCControlPanel.jsx';
 import PluginsPanel from './ui/PluginsPanel.jsx';
 import CircuitPanel from './ui/CircuitPanel.jsx';
 import SkillPanel from './ui/SkillPanel.jsx';
+import AvatarCreator from './ui/AvatarCreator.jsx';
 import SettingsModal from './ui/SettingsModal.jsx';
 import { configStore } from './core/ConfigStore.js';
 import { ToolRegistry } from './actions/ToolRegistry.js';
@@ -56,6 +57,7 @@ const QUICK_COMMANDS = [
 export default function App() {
   const [cfg, setCfg] = useState(configStore.get());
   const [activeView, setActiveView] = useState('avatar'); // 'avatar' | 'space' | 'globe' | 'circuit' | 'skills' | 'media' | 'productivity' | 'pc' | 'plugins'
+  const [creatorOpen, setCreatorOpen] = useState(false);
   const [spaceConfig, setSpaceConfig] = useState({
     mode: 'map',
     observer: { latDeg: 44.8378, lonDeg: -0.5792, label: 'Bordeaux' },
@@ -206,6 +208,7 @@ export default function App() {
         }));
         setActiveView(sc?.mode === 'globe' ? 'globe' : 'space');
       },
+      onOpenAvatarCreator: () => setCreatorOpen(true),
       onOpenCircuit: (state) => {
         setCircuitState(state);
         setActiveView('circuit');
@@ -438,7 +441,6 @@ export default function App() {
                     { id: 'classic', label: 'Classique 3D' },
                     { id: 'lea', label: 'Léa 3D' },
                     { id: 'marc', label: 'Marc 3D' },
-                    { id: 'haseo', label: 'Haseo' },
                   ].map((f) => (
                     <button
                       key={f.id}
@@ -453,6 +455,13 @@ export default function App() {
                     onClick={() => configStore.update({ avatarMode: 'reactor' })}
                   >
                     ⚛️ Réacteur
+                  </button>
+                  <button
+                    className="space-pill"
+                    onClick={() => setCreatorOpen(true)}
+                    title="Créateur de personnage : taille du visage, yeux, nez, bouche…"
+                  >
+                    🎨 Créer mon visage
                   </button>
                 </div>
 
@@ -532,6 +541,7 @@ export default function App() {
                   polygonLevel={cfg.avatarPolygonLevel || 'high'}
                   hairStyleId={cfg.avatarHair}
                   hairShadeId={cfg.avatarHairShade}
+                  customization={cfg.avatarCustom}
                   avatarMode={cfg.avatarMode}
                   onPolygonCountChange={setPolygonCount}
                 />
@@ -668,6 +678,7 @@ export default function App() {
                   polygonLevel={cfg.avatarPolygonLevel || 'high'}
                   hairStyleId={cfg.avatarHair}
                   hairShadeId={cfg.avatarHairShade}
+                  customization={cfg.avatarCustom}
                   avatarMode={cfg.avatarMode}
                   closeUp={true}
                 />
@@ -818,9 +829,12 @@ export default function App() {
 
       {toast && <div className="hud-toast">{toast}</div>}
 
+      {creatorOpen && <AvatarCreator cfg={cfg} onClose={() => setCreatorOpen(false)} />}
+
       {showSettings && (
         <SettingsModal
           onClose={() => setShowSettings(false)}
+          onOpenCreator={() => { setShowSettings(false); setCreatorOpen(true); }}
           onTestVoice={(sample, voiceOverride) => engineRef.current?.speakTextWithLipSync(sample, voiceOverride)}
         />
       )}

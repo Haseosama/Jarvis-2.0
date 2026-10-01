@@ -1118,6 +1118,13 @@ export class JarvisEngine {
     const driveMatch = /(?:cherche|recherche|trouve)\s+(.+?)\s+(?:dans|sur)\s+(?:mon\s+)?(?:google\s+)?drive/i.exec(text.trim().replace(/[.!?]+$/, ''));
     if (driveMatch) return await this.tools.execute('google_workspace', { service: 'drive', action: 'search', query: driveMatch[1].trim() });
 
+    // 6e. Avatar character creator
+    if (/(cr[ée]ateur de personnage|personnalis(?:e|er) (?:mon |l['’])?(?:avatar|visage)|cr[ée]e(?:r)? mon (?:visage|avatar)|modifie(?:r)? (?:mon |le )?visage)/.test(q)) {
+      return await this.tools.execute('avatar_creator', { action: 'open' });
+    }
+    if (/(r[ée]initialise|remets?|restaure)\s+(?:mon |le )?(?:visage|avatar)/.test(q)) return await this.tools.execute('avatar_creator', { action: 'reset' });
+    if (/visage al[ée]atoire|avatar al[ée]atoire/.test(q)) return await this.tools.execute('avatar_creator', { action: 'random' });
+
     // 6d. 3D globe (distinct from the flat map and the night-sky views)
     if (/\bglobe\b/.test(q) && /(montre|affiche|ouvre|lance|voir)/.test(q) && !/(carte plate|2d)/.test(q)) {
       const place = /(?:sur|vers|de|autour de)\s+(?:la\s+|le\s+|l['’])?([\p{L}][\p{L}' -]{1,40}?)\s*$/iu.exec(text.trim().replace(/[.!?]+$/, ''));

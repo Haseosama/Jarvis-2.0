@@ -48,7 +48,7 @@
 - La recherche de restaurants, pharmacies, santé, hôtels, carburant, banques, supermarchés, parkings et lieux touristiques utilise Overpass, avec repli Nominatim; rayon borné à 1–25 km, résultats dédoublonnés et ordonnés par distance.
 - L’outil `geospatial` est disponible en appel direct et via les intentions vocales françaises d’itinéraire et de lieux à proximité. L’utilisateur voit la ligne routière, les repères cliquables, les coordonnées et les sources OpenStreetMap dans la carte; aucune deuxième carte n’a été ajoutée.
 - Chaque recherche transmet le lieu demandé au service cartographique public; les résultats restent des données externes non fiables. La suite géospatiale peut ajouter un globe 3D séparé, mais ne remplace pas les vues existantes.
-- Validation locale : `npm test` (42 tests) et `npm run build` passent; le build conserve l’avertissement existant sur le chunk Haseo supérieur à 500 kB.
+- Validation locale : `npm test` (42 tests) et `npm run build` passent; le build conserve l’avertissement existant sur la taille du chunk (supérieur à 500 kB).
 
 ## Tranche matériel (assembleur de circuits)
 
@@ -110,6 +110,14 @@
 - Ouverture : bouton de navigation, `sky_view` avec `view=globe`, `geospatial` avec `view=globe`, commandes « montre le globe (sur Tokyo) ».
 - Vérification : 4 tests (projection, anneaux réels de `land.bin`/`borders.bin` valides, visibilité/sélection, outils/intentions); build OK.
 - Non vérifié : rendu WebGL réel (aucun navigateur disponible ici), performances sur machines modestes.
+
+## Créateur de personnage (remplace l'avatar Haseo)
+
+- Demande utilisateur : retirer Haseo et proposer, sur le visage Classique, une création de personnage façon jeu vidéo. Le modèle FBX, ses yeux, sa texture procédurale et leurs tests/assets ont été supprimés; un `avatarFaceId` « haseo » déjà enregistré retombe sur Classique.
+- `src/avatar/FaceCustomizer.js` : 20 curseurs [-1, 1] (Visage, Yeux, Nez, Bouche) convertis en un champ de déplacement lisse appliqué à tous les sommets (peau, globes oculaires, intérieur de bouche, cheveux intégrés). Les pivots d'animation `eyeCentre`/`lipCentre` suivent; les globes oculaires restent rigides dans les paupières; la zone entre les yeux ne se déchire pas quand les yeux se rapprochent. Couleurs/peinture inchangées. Les coiffures s'ajustent sur le visage modifié (ce qui corrige aussi l'ancien usage du maillage non affiné lorsqu'une coiffure ou une teinte était choisie).
+- `src/ui/AvatarCreator.jsx` : aperçu en direct (anti-rebond, qualité Standard), onglets, curseur par paramètre avec ↺ et double-clic, 6 préréglages, aléatoire, 8 emplacements « Mes looks », Appliquer/Annuler (Échap). Accès : « 🎨 Créer mon visage », Réglages, outil `avatar_creator` (open/preset/random/reset) et commandes vocales. Stockage : `avatarCustom` et `avatarCustomSlots` dans `ConfigStore` (valeurs normalisées).
+- Vérification : rendu logiciel du maillage (face/profil) pour chaque curseur à ±1 (deux défauts corrigés : déchirure du pont du nez, pli du front par la longueur du nez); 7 tests (bornes, direction de chaque trait, rigidité des yeux, absence de triangles retournés sur visages réalistes, coiffure + niveaux de polygones + lip-sync, outil et voix).
+- Limite : les 20 curseurs au minimum simultanément retournent environ 1,4 % des triangles de peau (cas extrême, non réaliste). Non vérifié : rendu réel dans l'interface (aucun navigateur ici), sensation d'usage des curseurs.
 
 ## Conditions transversales
 

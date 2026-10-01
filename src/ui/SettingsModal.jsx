@@ -17,7 +17,7 @@ import {
 import { GOOGLE_REDIRECT_URI, clearGoogleCredentials, connectGoogle, disconnectGoogle, getGoogleStatus } from '../integrations/googleClient.js';
 import { TUYA_REGIONS, clearTuyaSettings, getTuyaClient, getTuyaStatus, saveTuyaSettings } from '../integrations/tuyaClient.js';
 
-export default function SettingsModal({ onClose, onTestVoice }) {
+export default function SettingsModal({ onClose, onTestVoice, onOpenCreator }) {
   const [cfg, setCfg] = useState(configStore.get());
   const [hairStyles, setHairStyles] = useState([]);
   const [tab, setTab] = useState('avatar'); // 'avatar' | 'ai' | 'pc'
@@ -217,7 +217,7 @@ export default function SettingsModal({ onClose, onTestVoice }) {
 
               {cfg.avatarMode === '3d' && (
                 <>
-                  <h4>Visage 3D (Classique, Léa, Marc, Haseo)</h4>
+                  <h4>Visage 3D (Classique, Léa, Marc)</h4>
                   <div className="settings-chip-row">
                     {BUILT_IN_FACES.map((f) => (
                       <button
@@ -230,10 +230,16 @@ export default function SettingsModal({ onClose, onTestVoice }) {
                           })
                         }
                       >
-                        🌐 {f.label}{f.gender === 'custom' ? '' : ` (${f.gender === 'male' ? 'H' : 'F'})`}
+                        🌐 {f.label}{` (${f.gender === 'male' ? 'H' : 'F'})`}
                       </button>
                     ))}
                   </div>
+
+                  {onOpenCreator && (
+                    <div className="settings-chip-row">
+                      <button className="space-pill" onClick={onOpenCreator}>🎨 Créateur de personnage (visage, yeux, nez, bouche…)</button>
+                    </div>
+                  )}
 
                   <h4>Peau & Hologramme (comme sur la version téléphone)</h4>
                   <div className="settings-chip-row">

@@ -1,14 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import * as THREE from 'three';
-import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
-import {
-  buildHaseoSkinPixels,
-  deriveHaseoEyeLayout,
-  LEA_IRIS_APERTURE_RATIO,
-} from '../src/avatar/HaseoSkinTexture.js';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import { FACE_PARAMS, customizeClassicFace, isDefaultFaceCustom, normalizeFaceCustom, presetValues, randomFaceCustom } from '../src/avatar/FaceCustomizer.js';
 import { approachLon, graticuleSegments, isFacingCamera, latLonToXYZ, normalizeLon, pickNearest, ringsToSegments, routePositions, visualRadius, xyzToLatLon } from '../src/space/globeGeometry.js';
 import { mercX, mercY } from '../src/space/SpaceEngine.js';
 import { approveSkill, approvePatch, forgeSkill, loadSkills, rollbackSkill, runSkillForgeTool, scanSkillCode } from '../src/skills/skillForge.js';
@@ -929,136 +923,6 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     assert.ok(Array.isArray(win.windows));
   });
 
-  it('registers Haseo as an independent FBX face while keeping the existing faces', async () => {
-    assert.deepEqual(
-      BUILT_IN_FACES.map((f) => f.id),
-      ['classic', 'lea', 'marc', 'haseo']
-    );
-    const haseo = BUILT_IN_FACES.find((face) => face.id === 'haseo');
-    assert.equal(haseo.label, 'Haseo');
-    assert.equal(haseo.asset, './assets/avatar/haseo.fbx');
-    assert.equal(normalizeFaceId('char:Haseo'), 'haseo');
-    const fbx = fs.readFileSync(path.join(ASSETS_DIR, 'avatar/haseo.fbx'));
-    assert.ok(fbx.subarray(0, 18).toString('ascii').startsWith('Kaydara FBX Binary'));
-    assert.ok(fbx.byteLength > 2_000_000, 'the complete FBX asset is bundled locally');
-  });
-
-  it('parses Haseo FBX geometry and facial morph targets without requesting the missing texture', () => {
-    let textureRequests = 0;
-    const noTextureLoader = {
-      path: undefined,
-      setPath(value) { this.path = value; return this; },
-      load() { textureRequests += 1; return new THREE.Texture(); },
-    };
-    const manager = new THREE.LoadingManager();
-    manager.addHandler(/\.png$/i, noTextureLoader);
-    const model = new FBXLoader(manager).parse(readArrayBuffer('avatar/haseo.fbx'), '');
-    const meshes = [];
-    model.traverse((object) => { if (object.isMesh) meshes.push(object); });
-
-    assert.equal(meshes.length, 1);
-    assert.ok(meshes[0].geometry.attributes.position.count > 50_000);
-    assert.ok(meshes[0].morphTargetDictionary.JawOpen !== undefined);
-    assert.ok(meshes[0].morphTargetDictionary.AA !== undefined);
-    assert.ok(meshes[0].morphTargetDictionary.EyeBlink_L !== undefined);
-    assert.equal(textureRequests, 1, 'the missing sidecar is intercepted locally');
-
-    meshes[0].geometry.computeBoundingBox();
-    const neutralBounds = new THREE.Box3().setFromBufferAttribute(meshes[0].geometry.attributes.position);
-    const neutralHeight = neutralBounds.getSize(new THREE.Vector3()).y;
-    const morphHeight = meshes[0].geometry.boundingBox.getSize(new THREE.Vector3()).y;
-    assert.ok(morphHeight > neutralHeight * 2, 'camera framing must use the neutral face bounds, not extreme blendshape bounds');
-
-    const eyeLayout = deriveHaseoEyeLayout(meshes[0].geometry, meshes[0].morphTargetDictionary);
-    assert.equal(eyeLayout.length, 2);
-    const expectedEyeCenters = [[0.0279, 0.0392, 0.06937], [-0.0349, 0.0359, 0.06855]];
-    eyeLayout.forEach((eye, index) => {
-      assert.ok(Math.abs(eye.center[0] - expectedEyeCenters[index][0]) < 0.002);
-      assert.ok(Math.abs(eye.center[1] - expectedEyeCenters[index][1]) < 0.002);
-      assert.ok(Math.abs(eye.center[2] - expectedEyeCenters[index][2]) < 0.0005, 'the iris sits on the front surface instead of floating above it');
-      assert.ok(eye.radius[0] > 0.003 && eye.radius[0] < 0.01);
-      assert.ok(eye.radius[1] > 0.003 && eye.radius[1] < 0.01);
-      assert.ok(eye.scleraRadius[0] > eye.radius[0] * 1.8, 'the sclera frames the iris inside the opening');
-      assert.ok(eye.scleraRadius[1] > eye.radius[1] * 1.5);
-      assert.ok(eye.normal[2] > 0.85, 'the iris faces out from the eye socket');
-    });
-
-    // Léa's painted iris layers share the centre of each eye; Haseo follows that
-    // same concentric placement, using his own eyelid morph to find the 3D centre.
-    const lea = HeadMesh.parse(readArrayBuffer('avatar/head_mesh_lea.bin'));
-    const leaIrisPaint = new Set([0xff05070a, 0xff0e4a36, 0xff3dbe8c, 0xff16553f]);
-    for (let eye = 0; eye < lea.eyeFirst.length; eye++) {
-      let count = 0;
-      let x = 0;
-      let y = 0;
-      for (let vertex = lea.eyeFirst[eye]; vertex < lea.eyeFirst[eye] + lea.eyeCount[eye]; vertex++) {
-        if (!leaIrisPaint.has(lea.paint[vertex] >>> 0)) continue;
-        x += lea.verts[3 * vertex];
-        y += lea.verts[3 * vertex + 1];
-        count++;
-      }
-      assert.ok(count > 0);
-      assert.ok(Math.abs(x / count - lea.eyeCentre[3 * eye]) < 0.001);
-      assert.ok(Math.abs(y / count - lea.eyeCentre[3 * eye + 1]) < 0.001);
-    }
-    assert.equal(LEA_IRIS_APERTURE_RATIO, 0.2);
-  });
-
-  it('loads the supplied Oscar Creativo eye FBX and its local eye textures', () => {
-    let textureRequests = 0;
-    const noTextureLoader = {
-      path: undefined,
-      setPath(value) { this.path = value; return this; },
-      load() { textureRequests += 1; return new THREE.Texture(); },
-    };
-    const manager = new THREE.LoadingManager();
-    manager.addHandler(/\.(?:png|jpe?g)$/i, noTextureLoader);
-    const eyeModel = new FBXLoader(manager).parse(readArrayBuffer('avatar/haseo-eye/eye.fbx'), '');
-    const meshes = [];
-    eyeModel.traverse((object) => { if (object.isMesh) meshes.push(object); });
-    const iris = meshes.find((mesh) => /iris/i.test(mesh.name));
-    const cornea = meshes.find((mesh) => /cornea/i.test(mesh.name));
-    assert.ok(iris && cornea, 'the original eye FBX supplies separate iris and cornea geometry');
-    assert.ok(iris.geometry.attributes.position.count > 50_000);
-    assert.ok(iris.geometry.attributes.uv && iris.geometry.attributes.normal);
-
-    const targetUV = [0.5, 0.5];
-    const uv = iris.geometry.attributes.uv;
-    const position = iris.geometry.attributes.position;
-    let nearest = 0;
-    let nearestDistance = Infinity;
-    for (let i = 0; i < uv.count; i++) {
-      const distance = (uv.getX(i) - targetUV[0]) ** 2 + (uv.getY(i) - targetUV[1]) ** 2;
-      if (distance < nearestDistance) {
-        nearest = i;
-        nearestDistance = distance;
-      }
-    }
-    assert.ok(position.getX(nearest) > 100, 'the iris texture centre is on the forward-facing surface of the eye sphere');
-    for (const name of ['CORNEA_Base_Color.jpg', 'CORNEA_Normal_DirectX.jpg', 'CORNEA_Roughness.jpg', 'IRIS_Normal_DirectX.jpg']) {
-      const texture = fs.readFileSync(path.join(ASSETS_DIR, 'avatar/haseo-eye', name));
-      assert.ok(texture.length > 100_000, `${name} is bundled locally`);
-      assert.equal(texture[0], 0xff, `${name} has a JPEG signature`);
-    }
-    assert.equal(textureRequests, 0, 'the FBX geometry has no remote texture dependency');
-  });
-
-  it('builds human-like blue Haseo skin with electric circuits', () => {
-    const size = 512;
-    const textured = buildHaseoSkinPixels(7, 0xff5ce1e6, true, size);
-    const plain = buildHaseoSkinPixels(7, 0xff5ce1e6, false, size);
-    const sample = (data, u, v) => {
-      const offset = 4 * (Math.floor(v * size) * size + Math.floor(u * size));
-      return Array.from(data.subarray(offset, offset + 3));
-    };
-
-    assert.equal(textured.length, size * size * 4);
-    const skin = sample(plain, 0.7, 0.4);
-    assert.ok(skin[1] > 55 && skin[2] > skin[0], 'the skin keeps a muted, human-like cool complexion');
-    assert.notDeepEqual(sample(plain, 0.7, 0.4), sample(plain, 0.71, 0.41), 'skin has fine natural tonal variation');
-    assert.notDeepEqual(sample(textured, 0.32, 0.652), sample(plain, 0.32, 0.652), 'electric circuit traces disappear when circuits are disabled');
-  });
-
   it('subdivides Classic avatar to 84,000+ polygons and generates PCB electrical circuits', async () => {
     assert.equal(normalizeFaceId('female01'), 'lea');
     assert.equal(normalizeFaceId('male02'), 'marc');
@@ -1806,6 +1670,153 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
       await engine._runLocalIntent('affiche le globe sur Tokyo');
       assert.deepEqual(calls[0], { name: 'sky_view', args: { view: 'globe' } });
       assert.deepEqual(calls[1], { name: 'sky_view', args: { view: 'globe', city: 'Tokyo' } });
+    });
+  });
+  describe('Classic character creator', () => {
+    const classic = () => HeadMesh.refineClassicFace(HeadMesh.parse(readArrayBuffer('avatar/head_mesh.bin')));
+    const eyeVertices = (mesh) => {
+      const out = [];
+      for (let e = 0; e < mesh.eyeFirst.length; e++) for (let i = mesh.eyeFirst[e]; i < mesh.eyeFirst[e] + mesh.eyeCount[e]; i++) out.push([e, i]);
+      return out;
+    };
+
+    it('normalizes slider values, presets and random faces', () => {
+      assert.equal(FACE_PARAMS.length, 20);
+      const values = normalizeFaceCustom({ noseWidth: 3, eyeSize: -9, mouthWidth: 'x', unknown: 1, cheeks: 0.456 });
+      assert.equal(values.noseWidth, 1);
+      assert.equal(values.eyeSize, -1);
+      assert.equal(values.mouthWidth, 0);
+      assert.equal(values.cheeks, 0.46);
+      assert.equal('unknown' in values, false);
+      assert.equal(isDefaultFaceCustom({}), true);
+      assert.equal(isDefaultFaceCustom(presetValues('angular')), false);
+      assert.deepEqual(randomFaceCustom(5), randomFaceCustom(5));
+      assert.notDeepEqual(randomFaceCustom(5), randomFaceCustom(6));
+      assert.ok(Object.values(randomFaceCustom(12)).every((value) => Math.abs(value) <= 0.65));
+      assert.equal(configStore.update({ avatarCustom: { faceWidth: 9 }, avatarCustomSlots: [{ name: 'A\u0000B', values: { eyeSize: 2 } }] }).avatarCustom.faceWidth, 1);
+      assert.equal(configStore.get().avatarCustomSlots[0].name, 'AB');
+      assert.equal(configStore.get().avatarCustomSlots[0].values.eyeSize, 1);
+      configStore.update({ avatarCustom: {}, avatarCustomSlots: [] });
+    });
+
+    it('returns the same mesh for the default face and never mutates the source mesh', () => {
+      const base = classic();
+      assert.equal(customizeClassicFace(base, {}), base);
+      const before = Float32Array.from(base.verts);
+      const eyesBefore = Float32Array.from(base.eyeCentre);
+      const custom = customizeClassicFace(base, { faceWidth: 1, noseProjection: 1, eyeSpacing: 1 });
+      assert.notEqual(custom, base);
+      assert.deepEqual(Array.from(base.verts), Array.from(before));
+      assert.deepEqual(Array.from(base.eyeCentre), Array.from(eyesBefore));
+      assert.equal(custom.vertexCount, base.vertexCount);
+      assert.equal(custom.faceCount, base.faceCount);
+      assert.equal(custom.paint, base.paint, 'colours and paint are shared untouched');
+    });
+
+    it('moves each facial feature in the expected direction', () => {
+      const base = classic();
+      const headWidth = (mesh) => {
+        let lo = Infinity; let hi = -Infinity;
+        for (let i = 0; i < mesh.nHead; i++) { const y = mesh.verts[3 * i + 1]; if (Math.abs(y) < 0.1) { lo = Math.min(lo, mesh.verts[3 * i]); hi = Math.max(hi, mesh.verts[3 * i]); } }
+        return hi - lo;
+      };
+      const noseTipZ = (mesh) => { let z = -9; for (let i = 0; i < mesh.nHead; i++) if (Math.abs(mesh.verts[3 * i] + 0.035) < 0.05 && Math.abs(mesh.verts[3 * i + 1] + 0.2) < 0.06) z = Math.max(z, mesh.verts[3 * i + 2]); return z; };
+      const chinY = (mesh) => { let y = 9; for (let i = 0; i < mesh.nHead; i++) if (Math.abs(mesh.verts[3 * i] + 0.035) < 0.1 && mesh.verts[3 * i + 2] > 0.35) y = Math.min(y, mesh.verts[3 * i + 1]); return y; };
+      assert.ok(headWidth(customizeClassicFace(base, { faceWidth: 1 })) > headWidth(base) + 0.1);
+      assert.ok(headWidth(customizeClassicFace(base, { faceWidth: -1 })) < headWidth(base) - 0.1);
+      assert.ok(noseTipZ(customizeClassicFace(base, { noseProjection: 1 })) > noseTipZ(base) + 0.05);
+      assert.ok(chinY(customizeClassicFace(base, { chinLength: 1 })) < chinY(base) - 0.05);
+      const wide = customizeClassicFace(base, { eyeSpacing: 1 });
+      assert.ok(wide.eyeCentre[3] - wide.eyeCentre[0] > base.eyeCentre[3] - base.eyeCentre[0] + 0.07, 'eyes move apart');
+      const high = customizeClassicFace(base, { mouthHeight: 1 });
+      assert.ok(high.lipCentre[1] > base.lipCentre[1] + 0.03, 'mouth pivot follows the lips');
+    });
+
+    it('keeps eyeballs rigid inside their eyelids and scales them with eye size', () => {
+      const base = classic();
+      const centreDistance = (mesh, e, i) => Math.hypot(mesh.verts[3 * i] - mesh.eyeCentre[3 * e], mesh.verts[3 * i + 1] - mesh.eyeCentre[3 * e + 1], mesh.verts[3 * i + 2] - mesh.eyeCentre[3 * e + 2]);
+      const moved = customizeClassicFace(base, { eyeSpacing: -1, eyeHeight: 1 });
+      for (const [e, i] of eyeVertices(base)) assert.ok(Math.abs(centreDistance(moved, e, i) - centreDistance(base, e, i)) < 1e-4, 'translation only');
+      const big = customizeClassicFace(base, { eyeSize: 1 });
+      const [e0, i0] = eyeVertices(base)[10];
+      assert.ok(Math.abs(centreDistance(big, e0, i0) / centreDistance(base, e0, i0) - 1.3) < 0.02, 'uniform eyeball scale');
+    });
+
+    it('stays finite and does not fold the skin at slider extremes', () => {
+      const base = classic();
+      const faceNormals = (mesh) => {
+        const out = [];
+        for (let f = 0; f < mesh.faceCount; f++) {
+          const a = mesh.faces[3 * f]; const b = mesh.faces[3 * f + 1]; const c = mesh.faces[3 * f + 2];
+          if (mesh.faceGroup[f] > 1.5 || a >= mesh.nHead || b >= mesh.nHead || c >= mesh.nHead) { out.push(null); continue; }
+          const v = mesh.verts;
+          const ux = v[3 * b] - v[3 * a]; const uy = v[3 * b + 1] - v[3 * a + 1]; const uz = v[3 * b + 2] - v[3 * a + 2];
+          const wx = v[3 * c] - v[3 * a]; const wy = v[3 * c + 1] - v[3 * a + 1]; const wz = v[3 * c + 2] - v[3 * a + 2];
+          const n = [uy * wz - uz * wy, uz * wx - ux * wz, ux * wy - uy * wx];
+          const l = Math.hypot(...n) || 1;
+          out.push(n.map((value) => value / l));
+        }
+        return out;
+      };
+      const original = faceNormals(base);
+      const settings = [
+        Object.fromEntries(FACE_PARAMS.map((param) => [param.id, 1])),
+        Object.fromEntries(FACE_PARAMS.map((param) => [param.id, -1])),
+        Object.fromEntries(FACE_PARAMS.map((param, index) => [param.id, index % 2 ? 1 : -1])),
+        randomFaceCustom(1), randomFaceCustom(2), randomFaceCustom(3),
+      ];
+      for (const [index, setting] of settings.entries()) {
+        const custom = customizeClassicFace(base, setting);
+        assert.ok(custom.verts.every(Number.isFinite) && custom.normals.every(Number.isFinite));
+        const after = faceNormals(custom);
+        let flipped = 0; let counted = 0;
+        for (let f = 0; f < original.length; f++) {
+          if (!original[f]) continue;
+          counted++;
+          if (original[f][0] * after[f][0] + original[f][1] * after[f][1] + original[f][2] * after[f][2] < 0) flipped++;
+        }
+        // Realistic faces never fold; even every slider pushed to an extreme at once stays under 2 %.
+        const limit = index >= 3 ? 0.0005 : 0.02;
+        assert.ok(flipped / counted <= limit, `${flipped}/${counted} skin triangles flipped`);
+      }
+    });
+
+    it('fits hairstyles and polygon levels on a customized face', () => {
+      const base = classic();
+      const custom = customizeClassicFace(base, presetValues('angular'));
+      const style = HairStyle.parse(readArrayBuffer(`avatar/hair/${fs.readdirSync(path.join(ASSETS_DIR, 'avatar/hair')).find((name) => name.endsWith('.bin'))}`));
+      const fitted = style.fitOn(custom, base.hairColours || { body: 0x483121, root: 0x20150e, tip: 0x8e6c48, grey: 0, greyRgb: 0x8e8b86 });
+      assert.ok(fitted.faceCount > custom.faceCount * 0.5);
+      assert.ok(fitted.verts.every(Number.isFinite));
+      const high = HeadMesh.applyPolygonLevel(custom, 'high');
+      assert.ok(high.faceCount > 80000);
+      assert.ok(high.verts.every(Number.isFinite));
+      assert.equal(high.eyeCentre[0], custom.eyeCentre[0]);
+      // The lip-sync animation keeps working on the reshaped face (mouth opens around the moved lip pivot).
+      const avatar = new HoloAvatar(custom);
+      avatar.step(0.02, 1, true, 'IDLE', [{ level: 1, open: 1, wide: 0.1 }], 0.02);
+      avatar.pose();
+      const averageY = (chain) => chain.reduce((sum, i) => sum + avatar.pv[3 * i + 1], 0) / chain.length;
+      assert.ok(averageY(custom.mouthUpper) - averageY(custom.mouthLower) > 0.005);
+    });
+
+    it('opens the creator and applies presets from the tool and French voice requests', async () => {
+      let opened = 0;
+      const tools = new ToolRegistry({ onOpenAvatarCreator: () => { opened++; } });
+      assert.match(await tools.execute('avatar_creator', { action: 'open' }), /Créateur de personnage ouvert/);
+      assert.equal(opened, 1);
+      assert.match(await tools.execute('avatar_creator', { action: 'preset', preset: 'angular' }), /Anguleux/);
+      assert.equal(configStore.get().avatarCustom.jawWidth, 0.7);
+      assert.match(await tools.execute('avatar_creator', { action: 'preset', preset: 'nope' }), /inconnu/);
+      await tools.execute('avatar_creator', { action: 'reset' });
+      assert.equal(isDefaultFaceCustom(configStore.get().avatarCustom), true);
+      const calls = [];
+      const engine = Object.create(JarvisEngine.prototype);
+      engine.tools = { execute: async (name, args) => { calls.push({ name, args }); return 'ok'; } };
+      await engine._runLocalIntent('ouvre le créateur de personnage');
+      await engine._runLocalIntent('réinitialise mon visage');
+      assert.deepEqual(calls.map((call) => call.args.action), ['open', 'reset']);
+      assert.equal(normalizeFaceId('haseo'), 'classic', 'the removed Haseo face falls back to Classic');
     });
   });
 });

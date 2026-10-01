@@ -224,39 +224,6 @@ html, body, #root {
   min-height: 0;
 }
 
-.haseo-avatar-renderer {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-
-.haseo-avatar-canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.haseo-avatar-status {
-  position: absolute;
-  inset: 50% auto auto 50%;
-  transform: translate(-50%, -50%);
-  color: var(--cyan-soft);
-  background: rgba(5, 14, 28, 0.78);
-  border: 1px solid var(--border-cyan);
-  border-radius: 9px;
-  padding: 8px 12px;
-  font-size: 12px;
-  pointer-events: none;
-  white-space: nowrap;
-}
-
-.haseo-avatar-status.is-error {
-  color: #ffb1b1;
-  border-color: rgba(255, 120, 120, 0.55);
-}
-
 .avatar-hud-footer {
   position: absolute;
   bottom: 16px;
@@ -1465,3 +1432,27 @@ html, body, #root {
 .globe-status { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--text-muted); font-size: 13px; pointer-events: none; text-align: center; padding: 0 20px; }
 .globe-card { position: absolute; right: 14px; bottom: 14px; min-width: 220px; max-width: 320px; padding: 12px 14px; border: 1px solid var(--border-cyan); border-radius: 12px; background: rgba(4, 12, 25, 0.9); color: #e8f6ff; font-size: 12px; line-height: 1.5; }
 .globe-card .space-close-btn { float: right; }
+
+.creator-overlay { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: center; justify-content: center; background: rgba(2, 6, 14, 0.82); backdrop-filter: blur(4px); padding: 20px; }
+.creator-panel { display: flex; flex-direction: column; width: min(1100px, 100%); height: min(760px, 100%); border: 1px solid var(--border-cyan); border-radius: 16px; background: var(--bg-panel); overflow: hidden; }
+.creator-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.1fr); gap: 14px; padding: 14px; }
+.creator-preview { position: relative; display: flex; min-height: 320px; min-height: 0; border: 1px solid var(--border-cyan); border-radius: 12px; background: radial-gradient(ellipse at 50% 35%, #0a1d36 0%, #030812 80%); overflow: hidden; }
+.creator-preview-note { position: absolute; left: 0; right: 0; bottom: 8px; text-align: center; font-size: 11px; color: var(--text-muted); pointer-events: none; }
+.creator-controls { min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 4px; }
+.creator-presets, .creator-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.creator-slider { padding: 6px 0; border-bottom: 1px solid rgba(0, 229, 255, 0.08); }
+.creator-slider-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #e8f6ff; }
+.creator-slider-head label { flex: 1; }
+.creator-value { min-width: 38px; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--amber); }
+.creator-reset { background: none; border: 1px solid var(--border-cyan); color: #bfefff; border-radius: 6px; cursor: pointer; padding: 0 6px; }
+.creator-reset:disabled { opacity: 0.3; cursor: default; }
+.creator-slider input[type='range'] { width: 100%; accent-color: #22d3ee; }
+.creator-slider-hints { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); }
+.creator-slots { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--border-cyan); border-radius: 10px; font-size: 12px; color: #e8f6ff; }
+.creator-slot-form { display: flex; gap: 8px; }
+.creator-slot-form input { flex: 1; min-width: 0; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border-cyan); background: #050c18; color: #e8f6ff; }
+.creator-slot { display: flex; align-items: center; gap: 6px; }
+.creator-slot span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.creator-footer { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border-cyan); }
+.creator-spacer { flex: 1; }
+@media (max-width: 760px) { .creator-body { grid-template-columns: 1fr; overflow: auto; } .creator-preview { min-height: 280px; } }
