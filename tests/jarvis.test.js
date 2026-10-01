@@ -1673,6 +1673,36 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     });
   });
   describe('Classic character creator', () => {
+    it('clips the Classic eyeballs to the eyelid opening so corners are filled', () => {
+      const mesh = HeadMesh.refineClassicFace(HeadMesh.parse(readArrayBuffer('avatar/head_mesh.bin')));
+      const render = (classicEyes) => {
+        const renderer = new AvatarRenderer(mesh);
+        renderer.classicEyes = classicEyes;
+        renderer.holo = true;
+        renderer.skin = 5;
+        const avatar = new HoloAvatar(mesh);
+        for (let i = 0; i < 5; i++) avatar.step(0.033, 0, false, 'IDLE', null);
+        let clips = 0;
+        const grad = { addColorStop() {} };
+        const ctx = new Proxy({}, {
+          get: (_t, key) => {
+            if (key === 'clip') return () => { clips++; };
+            if (key === 'createRadialGradient' || key === 'createLinearGradient') return () => grad;
+            return () => {};
+          },
+          set: () => true,
+        });
+        renderer.draw(ctx, avatar, 450, 450, 340, 0xff00d4ff, 0xff5ce1e6, 0xff060e14);
+        return { clips, renderer };
+      };
+      const plain = render(false);
+      const classic = render(true);
+      assert.equal(classic.clips - plain.clips, 2);
+      const eyes = classic.renderer._lidOpening(0);
+      assert.ok(eyes && eyes.length >= 6);
+      assert.ok(eyes.every(([x, y]) => Number.isFinite(x) && Number.isFinite(y)));
+    });
+
     const classic = () => HeadMesh.refineClassicFace(HeadMesh.parse(readArrayBuffer('avatar/head_mesh.bin')));
     const eyeVertices = (mesh) => {
       const out = [];

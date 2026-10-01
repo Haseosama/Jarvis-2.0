@@ -84,6 +84,7 @@ export class AvatarRenderer {
     this.faceFront = new Uint8Array(this.nF);
     this.faceZ = new Float32Array(this.nF);
     this.order = new Int32Array(this.nF);
+    this.eyeFaces = new Int32Array(Math.max(1, this.nF));
     this.lut = new Int32Array(LUT_N);
     this.lutKey = '';
 
@@ -369,6 +370,11 @@ export class AvatarRenderer {
     const f = mesh.faces;
     const fade = mesh.fade;
     this.faceFront.fill(0);
+    // Near front view the eyeballs are drawn in their own pass, clipped to the lid opening,
+    // instead of being depth-sorted with the faceted skin (which left ragged white teeth).
+    const eyePass = this.classicEyes && this.faceEyePass(avatar);
+    const eyeMask = this.classicEyeMask;
+    let eyeCount = 0;
 
     for (let t = 0; t < this.nF; t++) {
       const a = f[3 * t], b = f[3 * t + 1], c = f[3 * t + 2];
@@ -428,6 +434,10 @@ export class AvatarRenderer {
       const g = mesh.faceGroup[t];
       const zBias = g > 1.5 ? 0.05 : g > 0.5 ? 0 : -1000;
       this.faceZ[t] = (v[3 * a + 2] + v[3 * b + 2] + v[3 * c + 2]) / 3 + zBias;
+      if (eyePass && eyeMask[a] && eyeMask[b] && eyeMask[c]) {
+        this.eyeFaces[eyeCount++] = t;
+        continue;
+      }
       this.order[count++] = t;
     }
 
@@ -437,25 +447,10 @@ export class AvatarRenderer {
 
     // 6. Draw 3D surface triangles
     const expand = Math.min(0.55, strokePx * 0.5);
-    for (let k = 0; k < count; k++) {
-      const t = activeOrder[k];
-      const a = f[3 * t], b = f[3 * t + 1], d = f[3 * t + 2];
-      const x0 = this.xs[a], y0 = this.ys[a];
-      const x1 = this.xs[b], y1 = this.ys[b];
-      const x2 = this.xs[d], y2 = this.ys[d];
-      const tcx = (x0 + x1 + x2) / 3, tcy = (y0 + y1 + y2) / 3;
+    for (let k = 0; k < count; k++) this.fillFace(ctx, activeOrder[k], expand);
 
-      ctx.fillStyle = intToCss(this.faceColor[t], 1);
-      ctx.beginPath();
-      const dx0 = x0 - tcx, dy0 = y0 - tcy, g0 = expand / Math.max(Math.abs(dx0) + Math.abs(dy0), expand);
-      const dx1 = x1 - tcx, dy1 = y1 - tcy, g1 = expand / Math.max(Math.abs(dx1) + Math.abs(dy1), expand);
-      const dx2 = x2 - tcx, dy2 = y2 - tcy, g2 = expand / Math.max(Math.abs(dx2) + Math.abs(dy2), expand);
-      ctx.moveTo(x0 + dx0 * g0, y0 + dy0 * g0);
-      ctx.lineTo(x1 + dx1 * g1, y1 + dy1 * g1);
-      ctx.lineTo(x2 + dx2 * g2, y2 + dy2 * g2);
-      ctx.closePath();
-      ctx.fill();
-    }
+    // 6b. Eyeballs, clipped to the actual eyelid opening
+    if (eyePass && eyeCount > 0) this.drawEyes(ctx, eyeCount, expand, nrm, amp, primary, bg);
 
     // 7. Structural Polygon Edges & Energy Scanner Sweep (on Web and Hologram modes)
     if (this.skin === 0 || this.holo) {
@@ -503,6 +498,93 @@ export class AvatarRenderer {
   }
 
   // ── Structural Wireframe & Scanner Sweep (AvatarRenderer.kt drawWire) ───────
+
+  faceEyePass(avatar) {
+    return Math.abs(avatar.yaw || 0) < 0.4 && Math.abs(avatar.pitch || 0) < 0.45;
+  }
+
+  fillFace(ctx, t, expand) {
+    const f = this.mesh.faces;
+    const a = f[3 * t], b = f[3 * t + 1], d = f[3 * t + 2];
+    const x0 = this.xs[a], y0 = this.ys[a];
+    const x1 = this.xs[b], y1 = this.ys[b];
+    const x2 = this.xs[d], y2 = this.ys[d];
+    const tcx = (x0 + x1 + x2) / 3, tcy = (y0 + y1 + y2) / 3;
+
+    ctx.fillStyle = intToCss(this.faceColor[t], 1);
+    ctx.beginPath();
+    const dx0 = x0 - tcx, dy0 = y0 - tcy, g0 = expand / Math.max(Math.abs(dx0) + Math.abs(dy0), expand);
+    const dx1 = x1 - tcx, dy1 = y1 - tcy, g1 = expand / Math.max(Math.abs(dx1) + Math.abs(dy1), expand);
+    const dx2 = x2 - tcx, dy2 = y2 - tcy, g2 = expand / Math.max(Math.abs(dx2) + Math.abs(dy2), expand);
+    ctx.moveTo(x0 + dx0 * g0, y0 + dy0 * g0);
+    ctx.lineTo(x1 + dx1 * g1, y1 + dy1 * g1);
+    ctx.lineTo(x2 + dx2 * g2, y2 + dy2 * g2);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Closed outline of one eye's lid opening (upper lid inner->outer, lower lid back), in screen space.
+  _lidOpening(e) {
+    const pair = this.lidCurves[e];
+    if (!pair) return null;
+    const up = this._lidPoints(pair[1]);
+    const low = this._lidPoints(pair[0]);
+    if (up.ux.length < 2 || low.ux.length < 2) return null;
+    const pts = [];
+    for (let i = 0; i < up.ux.length; i++) pts.push([up.ux[i], up.uy[i]]);
+    for (let i = low.ux.length - 1; i >= 0; i--) pts.push([low.ux[i], low.uy[i]]);
+    // Both lids meet at the corners: snap the free ends of the lower lid to the upper lid.
+    const n = up.ux.length, m = low.ux.length;
+    pts[n] = [up.ux[n - 1] * 0.5 + low.ux[m - 1] * 0.5, up.uy[n - 1] * 0.5 + low.uy[m - 1] * 0.5];
+    pts[pts.length - 1] = [up.ux[0] * 0.5 + low.ux[0] * 0.5, up.uy[0] * 0.5 + low.uy[0] * 0.5];
+    pts[0] = pts[pts.length - 1];
+    pts[n - 1] = pts[n];
+    return pts;
+  }
+
+  drawEyes(ctx, eyeCount, expand, nrm, amp, primary, bg) {
+    const mesh = this.mesh;
+    const eyes = mesh.eyeFirst.length;
+    for (let e = 0; e < eyes; e++) {
+      const outline = this._lidOpening(e);
+      if (!outline) continue;
+      const first = mesh.eyeFirst[e], last = first + mesh.eyeCount[e];
+      let minX = Infinity, maxX = -Infinity;
+      for (const [x] of outline) { if (x < minX) minX = x; if (x > maxX) maxX = x; }
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(outline[0][0], outline[0][1]);
+      for (let i = 1; i < outline.length; i++) ctx.lineTo(outline[i][0], outline[i][1]);
+      ctx.closePath();
+      ctx.clip();
+
+      // Sclera underlay: fills the corners the spherical globe never reaches.
+      let vi = first;
+      for (let i = first; i < last; i++) {
+        if ((mesh.paint[i] & 0x00ffffff) === 0xe3ded5) { vi = i; break; }
+      }
+      const sclera = this.vertexColour(vi, nrm, amp, 0xffd9d3ca, primary, bg);
+      const dark = mixInt(sclera, 0xff1a2330, 0.55);
+      const grad = ctx.createLinearGradient(minX, 0, maxX, 0);
+      grad.addColorStop(0, intToCss(dark, 1));
+      grad.addColorStop(0.2, intToCss(sclera, 1));
+      grad.addColorStop(0.8, intToCss(sclera, 1));
+      grad.addColorStop(1, intToCss(dark, 1));
+      ctx.fillStyle = grad;
+      ctx.fillRect(minX - 2, -1e4, maxX - minX + 4, 2e4);
+
+      const list = [];
+      for (let k = 0; k < eyeCount; k++) {
+        const t = this.eyeFaces[k];
+        if (mesh.faces[3 * t] >= first && mesh.faces[3 * t] < last) list.push(t);
+      }
+      const z = this.faceZ;
+      list.sort((a, b) => z[a] - z[b]);
+      for (const t of list) this.fillFace(ctx, t, expand);
+      ctx.restore();
+    }
+  }
 
   drawWire(ctx, v, amp, primary, bg, strokePx) {
     const st = this.structure;
