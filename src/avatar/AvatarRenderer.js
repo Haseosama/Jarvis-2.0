@@ -272,7 +272,15 @@ export class AvatarRenderer {
     }
 
     if (pnt !== 0) {
-      const base = this.skin > 0 ? pnt : mixInt(pnt, primaryColor, 0.22);
+      let base = this.skin > 0 ? pnt : mixInt(pnt, primaryColor, 0.22);
+      if (this.classicEyes && this.classicEyeMask?.[vi]) {
+        // Brighter, cleaner whites of the eyes (iris and pupil colours are left as they are).
+        const sr = (pnt >> 16) & 0xff, sg = (pnt >> 8) & 0xff, sb = pnt & 0xff;
+        if (Math.min(sr, sg, sb) > 0xa8 && Math.max(sr, sg, sb) - Math.min(sr, sg, sb) < 0x20) {
+          base = mixInt(pnt, 0xfff6f4ef, 0.55);
+          return lit(base, 0.8 + 0.3 * vlam);
+        }
+      }
       return lit(base, 0.62 + 0.42 * vlam);
     }
 

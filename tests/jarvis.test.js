@@ -96,7 +96,7 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     const jawCorner = select((i, x, y, z) =>
       y > -0.78 && y < -0.50 && Math.abs(x - centerX) > 0.22 && Math.abs(x - centerX) < 0.55 && z > 0.2 && mesh.jaw[i] > 0.1 && mesh.lipMask[i] <= 0.05);
     const cheek = select((i, x, y, z) =>
-      y > -0.15 && y < 0.22 && Math.abs(x - centerX) > 0.25 && Math.abs(x - centerX) < 0.45 && z > 0.2 && mesh.lipMask[i] <= 0.05);
+      y > -0.35 && y < -0.15 && Math.abs(x - centerX) > 0.25 && Math.abs(x - centerX) < 0.45 && z > 0.2 && mesh.lipMask[i] <= 0.05);
     const nose = select((i, x, y, z) =>
       y > -0.38 && y < -0.15 && Math.abs(x - centerX) < 0.12 && z > 0.3);
     const brow = select((i, x, y, z) =>
@@ -120,7 +120,32 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     assert.deepEqual(refined.paint, originalPaint, 'vertex paint and therefore all existing colors stay unchanged');
     assert.notEqual(refined.normals, mesh.normals, 'the deformed surface gets its own recalculated normals');
     assert.ok(Math.abs(Math.hypot(refined.normals[3 * chinFront[0]], refined.normals[3 * chinFront[0] + 1], refined.normals[3 * chinFront[0] + 2]) - 1) < 1e-4, 'deformed facial normals remain normalized');
-    assert.deepEqual(Array.from(refined.verts.slice(3 * mesh.nHead)), Array.from(mesh.verts.slice(3 * mesh.nHead)), 'hair vertices are not altered');
+    const eyeEnd = Math.max(...Array.from(mesh.eyeFirst, (first, e) => first + mesh.eyeCount[e]));
+    assert.deepEqual(Array.from(refined.verts.slice(3 * eyeEnd)), Array.from(mesh.verts.slice(3 * eyeEnd)), 'hair vertices are not altered');
+    // The eyes are opened: wider and taller lid opening, with globes scaled to fill it.
+    const openingSize = (m) => {
+      const out = [];
+      for (let e = 0; e < 2; e++) {
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        for (let k = 0; k < m.eyelidRim.length; k += 3) {
+          const vi = m.eyelidRim[k];
+          const x = m.verts[3 * vi];
+          const nearest = Math.abs(m.eyeCentre[0] - x) < Math.abs(m.eyeCentre[3] - x) ? 0 : 1;
+          if (nearest !== e) continue;
+          x0 = Math.min(x0, x); x1 = Math.max(x1, x);
+          y0 = Math.min(y0, m.verts[3 * vi + 1]); y1 = Math.max(y1, m.verts[3 * vi + 1]);
+        }
+        out.push([x1 - x0, y1 - y0]);
+      }
+      return out;
+    };
+    const before = openingSize(mesh), after = openingSize(refined);
+    for (let e = 0; e < 2; e++) {
+      assert.ok(after[e][0] > before[e][0] * 1.08, 'the eye opening is wider');
+      assert.ok(after[e][1] > before[e][1] * 1.3, 'the eye opening is taller');
+    }
+    assert.equal(refined.lid.length, mesh.lid.length, 'blink weights are kept');
+    assert.ok(Math.max(...refined.lid) > Math.max(...mesh.lid), 'blink still closes the larger opening');
     for (let i = 0; i < mesh.vertexCount; i++) {
       if (mesh.lipMask[i] > 0.05) {
         assert.equal(refined.verts[3 * i], mesh.verts[3 * i], 'lip landmarks remain unchanged');

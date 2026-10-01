@@ -82,6 +82,10 @@ export const BUILT_IN_FACES = [
   },
 ];
 
+const EYE_OPEN_WIDTH = 0.15;
+const EYE_OPEN_UP = 0.6;
+const EYE_OPEN_DOWN = 0.3;
+const EYE_GLOBE_SCALE = 1.16;
 const LANDMARK_NAMES = ['eye_l', 'eye_r', 'brow_l', 'brow_r', 'lips_out', 'lips_in'];
 
 export class HeadMesh {
@@ -128,10 +132,75 @@ export class HeadMesh {
       verts[3 * i + 2] = z - 0.026 * cheek + 0.052 * browRidge + 0.045 * chinFront - 0.052 * underChin;
     }
 
+    // Open the eyes: wider, taller lid opening (rounder, more open gaze) with larger globes to fill it.
+    const lid = HeadMesh.openClassicEyes(mesh, verts, headVertices);
+
     // Refit smooth head normals to the deformed surface; vertex paint/material colors are untouched.
     const normals = HeadMesh.refitHeadNormals(mesh, verts, headVertices);
 
-    return new HeadMesh({ ...mesh, verts, normals });
+    return new HeadMesh({ ...mesh, verts, normals, lid });
+  }
+
+  /**
+   * Enlarges the eyelid opening of the Classic face in place (`verts` is already a copy) and scales the eyeballs
+   * so they still fill it. The displacement is a smooth radial field around each opening, so nothing tears.
+   * Returns the lid-weight array, scaled so a blink still closes the larger opening.
+   */
+  static openClassicEyes(mesh, verts, headVertices) {
+    const centres = mesh.eyeCentre;
+    const rim = mesh.eyelidRim;
+    const lid = new Float32Array(mesh.lid);
+    if (!centres || centres.length < 6 || !rim || rim.length === 0) return lid;
+    const eyes = centres.length / 3;
+    const boxes = [];
+    for (let e = 0; e < eyes; e++) boxes.push({ x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity });
+    for (let k = 0; k < rim.length; k += 3) {
+      for (const vi of [rim[k], rim[k + 1]]) {
+        const x = mesh.verts[3 * vi];
+        let best = 0;
+        for (let e = 1; e < eyes; e++) {
+          if (Math.abs(centres[3 * e] - x) < Math.abs(centres[3 * best] - x)) best = e;
+        }
+        const box = boxes[best];
+        const y = mesh.verts[3 * vi + 1];
+        if (x < box.x0) box.x0 = x;
+        if (x > box.x1) box.x1 = x;
+        if (y < box.y0) box.y0 = y;
+        if (y > box.y1) box.y1 = y;
+      }
+    }
+    const open = boxes.map((b) => ({
+      x: 0.5 * (b.x0 + b.x1),
+      y: 0.5 * (b.y0 + b.y1),
+      hw: Math.max(0.5 * (b.x1 - b.x0), 1e-3),
+    }));
+
+    for (let i = 0; i < headVertices; i++) {
+      const x = mesh.verts[3 * i], y = mesh.verts[3 * i + 1], z = mesh.verts[3 * i + 2];
+      if (z < 0.1) continue;
+      let best = 0;
+      for (let e = 1; e < eyes; e++) if (Math.abs(open[e].x - x) < Math.abs(open[best].x - x)) best = e;
+      const o = open[best];
+      const dx = x - o.x, dy = y - o.y;
+      const rho = Math.hypot(dx / (o.hw * 2.0), dy / (o.hw * 1.45));
+      const w = 1 - smooth(0.42, 1.0, rho);
+      if (w <= 0) continue;
+      const up = dy > 0 ? EYE_OPEN_UP : EYE_OPEN_DOWN;
+      verts[3 * i] = o.x + dx * (1 + EYE_OPEN_WIDTH * w);
+      verts[3 * i + 1] = o.y + dy * (1 + up * w);
+      if (lid[i] !== 0) lid[i] *= 1 + 0.9 * w;
+    }
+
+    for (let e = 0; e < mesh.eyeFirst.length; e++) {
+      const cx = centres[3 * e], cy = centres[3 * e + 1], cz = centres[3 * e + 2];
+      const end = Math.min(mesh.vertexCount, mesh.eyeFirst[e] + mesh.eyeCount[e]);
+      for (let i = mesh.eyeFirst[e]; i < end; i++) {
+        verts[3 * i] = cx + (mesh.verts[3 * i] - cx) * EYE_GLOBE_SCALE;
+        verts[3 * i + 1] = cy + (mesh.verts[3 * i + 1] - cy) * EYE_GLOBE_SCALE;
+        verts[3 * i + 2] = cz + (mesh.verts[3 * i + 2] - cz) * EYE_GLOBE_SCALE;
+      }
+    }
+    return lid;
   }
 
   /** Recomputes smooth normals of the head skin after its vertices were moved (hair, eyes and mouth keep theirs). */
