@@ -4,7 +4,7 @@ import { customizeClassicFace } from '../avatar/FaceCustomizer.js';
 import { loadHeadMesh } from '../avatar/meshLoader.js';
 import {
   addDelta, boxSelect, buildScene, buildTopology, clearOffsets, displayVerts, growSelection, makeCamera, mirrorWeights,
-  normalizeSculpt, pickTriangle, pickVertex, screenDeltaToWorld, selectEyelids, shrinkSelection, smoothOffsets, softWeights,
+  normalizeSculpt, pickTriangle, pickVertex, screenDeltaToWorld, selectEyelids, shrinkSelection, smoothOffsets, softWeights, symmetrizeOffsets, estimateSymmetryPlane,
   trianglePoints,
 } from '../avatar/MeshSculpt.js';
 import { drawSculptScene } from '../avatar/SculptView.js';
@@ -53,6 +53,8 @@ export default function PolygonEditor({ custom, sculpt, onApply, onClose }) {
   const [step, setStep] = useState(0.004);
   const [message, setMessage] = useState('');
   const [dirty, setDirty] = useState(false);
+  const [symOnly, setSymOnly] = useState(false);
+  const [symBusy, setSymBusy] = useState(false);
 
   const optsRef = useRef({});
   optsRef.current = { tool, pickMode, radius, mirror, viewMode, showPoints, selection, step };
@@ -108,7 +110,8 @@ export default function PolygonEditor({ custom, sculpt, onApply, onClose }) {
         const xs = [];
         for (let e = 0; e < (base.eyeCentre?.length || 0) / 3; e++) xs.push({ x: base.eyeCentre[3 * e], y: base.eyeCentre[3 * e + 1], z: base.eyeCentre[3 * e + 2] });
         xs.sort((a, b) => a.x - b.x);
-        const cx = xs.length >= 2 ? 0.5 * (xs[0].x + xs[xs.length - 1].x) : 0;
+        const eyeMid = xs.length >= 2 ? 0.5 * (xs[0].x + xs[xs.length - 1].x) : 0;
+        const cx = estimateSymmetryPlane(base, topo, eyeMid);
         if (cancelled) return;
         dataRef.current = { base, topo, cx, eyes: xs };
         syncDisplay(offsetsRef.current);
@@ -210,6 +213,24 @@ export default function PolygonEditor({ custom, sculpt, onApply, onClose }) {
     const data = dataRef.current;
     if (!data || !selection.size) return;
     commit(clearOffsets(offsetsRef.current, data.topo, selection), 'Points remis à leur forme d’origine.');
+  };
+
+  // Copie un côté du visage sur l'autre (le côté source n'est jamais modifié).
+  const symmetrize = (from) => {
+    const data = dataRef.current;
+    if (!data || symBusy) return;
+    if (symOnly && !selection.size) return setMessage('Cochez « limiter à la sélection » seulement après avoir sélectionné des points.');
+    setSymBusy(true);
+    setMessage('Calcul de la symétrie…');
+    setTimeout(() => {
+      try {
+        const res = symmetrizeOffsets(data.base, data.topo, offsetsRef.current, { from, cx: data.cx, only: symOnly ? selection : null });
+        commit(res.offsets, `Côté ${from === 'left' ? 'gauche copié sur le droit' : 'droit copié sur le gauche'} : ${res.moved} points déplacés${res.skipped ? `, ${res.skipped} sans équivalent` : ''} (Ctrl+Z pour annuler).`);
+      } catch (error) {
+        setMessage(`⚠️ ${error.message || error}`);
+      }
+      setSymBusy(false);
+    }, 20);
   };
 
   const resetAll = () => {
@@ -471,6 +492,16 @@ export default function PolygonEditor({ custom, sculpt, onApply, onClose }) {
                 <button className="space-pill" onClick={smoothSelection}>🧽 Lisser</button>
                 <button className="space-pill" onClick={resetSelection}>↺ Points d’origine</button>
               </div>
+            </section>
+
+            <section>
+              <h4>Symétrie du visage</h4>
+              <div className="poly-row">
+                <button className="space-pill" disabled={!data || symBusy} onClick={() => symmetrize('left')}>⇆ Copier gauche → droite</button>
+                <button className="space-pill" disabled={!data || symBusy} onClick={() => symmetrize('right')}>⇆ Copier droite → gauche</button>
+              </div>
+              <label className="space-sub"><input type="checkbox" checked={symOnly} onChange={(e) => setSymOnly(e.target.checked)} /> Limiter à la sélection (ex. seulement les paupières)</label>
+              <div className="space-sub">Le côté copié reste intact ; l’autre côté prend sa forme (œil, nez, oreille, bouche…). Gauche/droite : côtés à l’écran.</div>
             </section>
 
             <section>

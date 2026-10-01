@@ -522,3 +522,187 @@ export function selectEyelids(mesh, topo, side = 'left', rings = 2) {
   for (let i = 0; i < rings; i++) selection = growSelection(topo, selection);
   return selection;
 }
+
+// ── Symétrie ────────────────────────────────────────────────────────────────
+
+/** Plan de symétrie x = cx le mieux ajusté au maillage (médiane des distances miroir → plus proche sommet). */
+export function estimateSymmetryPlane(mesh, topo, guess = 0) {
+  const v = mesh.verts;
+  const headLimit = Math.min(mesh.nHead || topo.limit, topo.limit);
+  const reps = topo.reps.filter((r) => r < headLimit);
+  const cell = 0.03;
+  const grid = new Map();
+  for (const r of reps) {
+    const k = `${Math.floor(v[3 * r] / cell)},${Math.floor(v[3 * r + 1] / cell)},${Math.floor(v[3 * r + 2] / cell)}`;
+    if (!grid.has(k)) grid.set(k, []);
+    grid.get(k).push(r);
+  }
+  const nearest = (x, y, z) => {
+    let best = Infinity;
+    const ix = Math.floor(x / cell); const iy = Math.floor(y / cell); const iz = Math.floor(z / cell);
+    for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) for (let c = -2; c <= 2; c++) {
+      const list = grid.get(`${ix + a},${iy + b},${iz + c}`);
+      if (!list) continue;
+      for (const r of list) {
+        const d = Math.hypot(v[3 * r] - x, v[3 * r + 1] - y, v[3 * r + 2] - z);
+        if (d < best) best = d;
+      }
+    }
+    return best;
+  };
+  const sample = reps.filter((_, i) => i % 12 === 0);
+  const score = (cx) => {
+    const ds = sample.map((r) => nearest(2 * cx - v[3 * r], v[3 * r + 1], v[3 * r + 2])).sort((a, b) => a - b);
+    return ds[ds.length >> 1];
+  };
+  let best = guess; let bestScore = score(guess);
+  for (const [span, step] of [[0.08, 0.01], [0.012, 0.002]]) {
+    const centre = best;
+    for (let cx = centre - span; cx <= centre + span + 1e-9; cx += step) {
+      const s = score(cx);
+      if (s < bestScore) { bestScore = s; best = cx; }
+    }
+  }
+  return best;
+}
+
+function closestOnTriangle(p, a, b, c) {
+  // Ericson, « Real-Time Collision Detection » : point le plus proche d'un triangle.
+  const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const ap = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
+  const dot = (u, w) => u[0] * w[0] + u[1] * w[1] + u[2] * w[2];
+  const d1 = dot(ab, ap); const d2 = dot(ac, ap);
+  if (d1 <= 0 && d2 <= 0) return a;
+  const bp = [p[0] - b[0], p[1] - b[1], p[2] - b[2]];
+  const d3 = dot(ab, bp); const d4 = dot(ac, bp);
+  if (d3 >= 0 && d4 <= d3) return b;
+  const vc = d1 * d4 - d3 * d2;
+  if (vc <= 0 && d1 >= 0 && d3 <= 0) { const t = d1 / (d1 - d3); return [a[0] + t * ab[0], a[1] + t * ab[1], a[2] + t * ab[2]]; }
+  const cp = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
+  const d5 = dot(ab, cp); const d6 = dot(ac, cp);
+  if (d6 >= 0 && d5 <= d6) return c;
+  const vb = d5 * d2 - d1 * d6;
+  if (vb <= 0 && d2 >= 0 && d6 <= 0) { const t = d2 / (d2 - d6); return [a[0] + t * ac[0], a[1] + t * ac[1], a[2] + t * ac[2]]; }
+  const va = d3 * d6 - d5 * d4;
+  if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) {
+    const t = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+    return [b[0] + t * (c[0] - b[0]), b[1] + t * (c[1] - b[1]), b[2] + t * (c[2] - b[2])];
+  }
+  const denom = 1 / (va + vb + vc);
+  const s = vb * denom; const t = vc * denom;
+  return [a[0] + ab[0] * s + ac[0] * t, a[1] + ab[1] * s + ac[1] * t, a[2] + ab[2] * s + ac[2] * t];
+}
+
+export const SYMMETRY_MAX_DISTANCE = 0.06;
+
+/**
+ * Rend le maillage symétrique en copiant un côté sur l'autre : chaque point du côté cible vient se poser sur le
+ * miroir de la SURFACE du côté source (le plus proche, de même orientation), avec un fondu près du plan central.
+ * Le côté source n'est jamais modifié. from = 'left' (à l'écran, x < cx) ou 'right'. `only` limite aux points donnés.
+ * Renvoie { offsets, moved, skipped, cx }.
+ */
+export function symmetrizeOffsets(mesh, topo, offsets, { from = 'left', cx = null, only = null } = {}) {
+  const limit = topo.limit;
+  const plane = cx ?? estimateSymmetryPlane(mesh, topo, mesh.eyeCentre?.length >= 6 ? 0.5 * (mesh.eyeCentre[0] + mesh.eyeCentre[3]) : 0);
+  const side = from === 'left' ? -1 : 1; // signe de (x - cx) du côté source
+  const cur = displayVerts(mesh.verts, offsets, limit);
+  const n = mesh.normals;
+
+  // Triangles du côté source (+ une marge) rangés dans une grille, avec leur normale orientée.
+  const cell = 0.05;
+  const grid = new Map();
+  const srcTris = [];
+  const tris = topo.tris;
+  for (let t = 0; t < tris.length / 3; t++) {
+    const a = tris[3 * t]; const b = tris[3 * t + 1]; const c = tris[3 * t + 2];
+    const gx = (cur[3 * a] + cur[3 * b] + cur[3 * c]) / 3;
+    if (side * (gx - plane) < -0.012) continue;
+    const abx = cur[3 * b] - cur[3 * a]; const aby = cur[3 * b + 1] - cur[3 * a + 1]; const abz = cur[3 * b + 2] - cur[3 * a + 2];
+    const acx = cur[3 * c] - cur[3 * a]; const acy = cur[3 * c + 1] - cur[3 * a + 1]; const acz = cur[3 * c + 2] - cur[3 * a + 2];
+    let nx = aby * acz - abz * acy; let ny = abz * acx - abx * acz; let nz = abx * acy - aby * acx;
+    const len = Math.hypot(nx, ny, nz);
+    if (len < 1e-12) continue;
+    nx /= len; ny /= len; nz /= len;
+    if (nx * (n[3 * a] + n[3 * b] + n[3 * c]) + ny * (n[3 * a + 1] + n[3 * b + 1] + n[3 * c + 1]) + nz * (n[3 * a + 2] + n[3 * b + 2] + n[3 * c + 2]) < 0) { nx = -nx; ny = -ny; nz = -nz; }
+    const id = srcTris.length;
+    srcTris.push({ a, b, c, n: [nx, ny, nz] });
+    const lo = [0, 1, 2].map((k) => Math.min(cur[3 * a + k], cur[3 * b + k], cur[3 * c + k]));
+    const hi = [0, 1, 2].map((k) => Math.max(cur[3 * a + k], cur[3 * b + k], cur[3 * c + k]));
+    for (let x = Math.floor(lo[0] / cell); x <= Math.floor(hi[0] / cell); x++) {
+      for (let y = Math.floor(lo[1] / cell); y <= Math.floor(hi[1] / cell); y++) {
+        for (let z = Math.floor(lo[2] / cell); z <= Math.floor(hi[2] / cell); z++) {
+          const key = `${x},${y},${z}`;
+          if (!grid.has(key)) grid.set(key, []);
+          grid.get(key).push(id);
+        }
+      }
+    }
+  }
+
+  const next = { ...offsets };
+  let moved = 0; let skipped = 0;
+  // Globes oculaires : copiés par translation rigide (même taille des deux côtés), pas par accrochage à la surface.
+  const globeRanges = [];
+  for (let e = 0; e < (mesh.eyeFirst?.length || 0); e++) {
+    globeRanges.push({ e, first: mesh.eyeFirst[e], end: Math.min(limit, mesh.eyeFirst[e] + mesh.eyeCount[e]) });
+  }
+  const isGlobe = (i) => globeRanges.some((g) => i >= g.first && i < g.end);
+  const smooth01 = (t) => { const k = Math.max(0, Math.min(1, t)); return k * k * (3 - 2 * k); };
+  for (const r of topo.reps) {
+    if (isGlobe(r)) continue;
+    const dx = cur[3 * r] - plane;
+    if (side * dx >= 0) continue; // côté source : inchangé
+    if (only && !only.has(r)) continue;
+    const w = smooth01((Math.abs(dx) - 0.004) / 0.04);
+    if (w <= 0) continue;
+    const q = [2 * plane - cur[3 * r], cur[3 * r + 1], cur[3 * r + 2]];
+    const want = [-n[3 * r], n[3 * r + 1], n[3 * r + 2]]; // normale d'origine, en miroir
+    const ix = Math.floor(q[0] / cell); const iy = Math.floor(q[1] / cell); const iz = Math.floor(q[2] / cell);
+    let best = null; let bestD = SYMMETRY_MAX_DISTANCE;
+    const seen = new Set();
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+      const list = grid.get(`${ix + a},${iy + b},${iz + c}`);
+      if (!list) continue;
+      for (const id of list) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const tri = srcTris[id];
+        if (tri.n[0] * want[0] + tri.n[1] * want[1] + tri.n[2] * want[2] < 0.1) continue;
+        const cp = closestOnTriangle(q, [cur[3 * tri.a], cur[3 * tri.a + 1], cur[3 * tri.a + 2]], [cur[3 * tri.b], cur[3 * tri.b + 1], cur[3 * tri.b + 2]], [cur[3 * tri.c], cur[3 * tri.c + 1], cur[3 * tri.c + 2]]);
+        const d = Math.hypot(cp[0] - q[0], cp[1] - q[1], cp[2] - q[2]);
+        if (d < bestD) { bestD = d; best = cp; }
+      }
+    }
+    if (!best) { skipped++; continue; }
+    const target = [2 * plane - best[0], best[1], best[2]];
+    const pos = [cur[3 * r], cur[3 * r + 1], cur[3 * r + 2]];
+    const fin = [pos[0] + (target[0] - pos[0]) * w, pos[1] + (target[1] - pos[1]) * w, pos[2] + (target[2] - pos[2]) * w];
+    for (const i of topo.members.get(r) || []) {
+      const off = [fin[0] - mesh.verts[3 * i], fin[1] - mesh.verts[3 * i + 1], fin[2] - mesh.verts[3 * i + 2]];
+      if (Math.hypot(off[0], off[1], off[2]) < 1e-5) delete next[i]; else next[i] = off;
+    }
+    moved++;
+  }
+  const centreOf = (g) => {
+    let dx = 0; let dy = 0; let dz = 0;
+    for (let i = g.first; i < g.end; i++) { dx += cur[3 * i] - mesh.verts[3 * i]; dy += cur[3 * i + 1] - mesh.verts[3 * i + 1]; dz += cur[3 * i + 2] - mesh.verts[3 * i + 2]; }
+    const k = Math.max(1, g.end - g.first);
+    return [mesh.eyeCentre[3 * g.e] + dx / k, mesh.eyeCentre[3 * g.e + 1] + dy / k, mesh.eyeCentre[3 * g.e + 2] + dz / k];
+  };
+  const centres = globeRanges.map((g) => ({ g, c: centreOf(g) }));
+  for (const target of centres) {
+    if (side * (target.c[0] - plane) >= 0) continue;
+    if (only && !(() => { for (let i = target.g.first; i < target.g.end; i++) if (only.has(topo.rep[i])) return true; return false; })()) continue;
+    const source = centres.find((o) => side * (o.c[0] - plane) > 0);
+    if (!source) continue;
+    const move = [2 * plane - source.c[0] - target.c[0], source.c[1] - target.c[1], source.c[2] - target.c[2]];
+    for (let i = target.g.first; i < target.g.end; i++) {
+      const o = next[i] || [0, 0, 0];
+      const off = [o[0] + move[0], o[1] + move[1], o[2] + move[2]];
+      if (Math.hypot(off[0], off[1], off[2]) < 1e-5) delete next[i]; else next[i] = off;
+    }
+    moved += target.g.end - target.g.first;
+  }
+  return { offsets: next, moved, skipped, cx: plane };
+}

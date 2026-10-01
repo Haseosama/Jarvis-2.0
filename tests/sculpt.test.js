@@ -7,7 +7,7 @@ import { customizeClassicFace } from '../src/avatar/FaceCustomizer.js';
 import {
   addDelta, applySculpt, boxSelect, buildScene, buildTopology, clearOffsets, displayVerts, growSelection, isEmptySculpt, makeCamera,
   mirrorWeights, normalizeSculpt, pickTriangle, pickVertex, projectPoint, screenDeltaToWorld, sculptKey, sculptableVertexCount,
-  selectEyelids, shrinkSelection, smoothOffsets, softWeights, trianglePoints, visibleReps,
+  selectEyelids, shrinkSelection, smoothOffsets, softWeights, trianglePoints, visibleReps, estimateSymmetryPlane, symmetrizeOffsets,
 } from '../src/avatar/MeshSculpt.js';
 import { drawSculptScene } from '../src/avatar/SculptView.js';
 import { configStore } from '../src/core/ConfigStore.js';
@@ -155,5 +155,60 @@ describe('Éditeur de polygones : sélection et outils', () => {
     const view = fs.readFileSync(new URL('../src/avatar/AvatarView.jsx', import.meta.url), 'utf8');
     assert.match(view, /applySculpt\(customizeClassicFace/);
     assert.match(view, /sculptId\]\)/);
+  });
+});
+
+describe('Éditeur de polygones : symétrie', () => {
+  const cx = estimateSymmetryPlane(base, topo, -0.035);
+  const eyeMid = 0.5 * (base.eyeCentre[0] + base.eyeCentre[3]);
+
+  it('finds the mid-plane of the face', () => {
+    assert.ok(Math.abs(cx - eyeMid) < 0.02, `plane ${cx} vs eye midpoint ${eyeMid}`);
+  });
+
+  it('copies the left side onto the right and leaves the source side untouched', () => {
+    const left = symmetrizeOffsets(base, topo, {}, { from: 'left', cx });
+    assert.ok(left.moved > 3000 && left.skipped < left.moved * 0.05);
+    for (const key of Object.keys(left.offsets)) {
+      const i = Number(key);
+      assert.ok(base.verts[3 * i] + left.offsets[key][0] >= cx - 0.02 || base.verts[3 * i] > cx - 0.05, 'only the right side (and the blend band) moves');
+      assert.ok(base.verts[3 * i] >= cx - 0.05, `left vertex ${i} must not move`);
+    }
+    const sym = applySculpt(base, left.offsets);
+    // Both eye globes are now mirror images (same height, same depth, mirrored x).
+    const [lx, ly, lz] = [sym.eyeCentre[0], sym.eyeCentre[1], sym.eyeCentre[2]];
+    assert.ok(Math.abs((2 * cx - lx) - sym.eyeCentre[3]) < 1e-4);
+    assert.ok(Math.abs(ly - sym.eyeCentre[4]) < 1e-4 && Math.abs(lz - sym.eyeCentre[5]) < 1e-4);
+    // Running it again changes almost nothing (the result is stable).
+    const again = symmetrizeOffsets(base, topo, left.offsets, { from: 'left', cx });
+    let drift = 0;
+    for (const key of Object.keys(again.offsets)) {
+      const a = left.offsets[key] || [0, 0, 0];
+      drift = Math.max(drift, Math.hypot(a[0] - again.offsets[key][0], a[1] - again.offsets[key][1], a[2] - again.offsets[key][2]));
+    }
+    assert.ok(drift < 0.01, `drift ${drift}`);
+    assert.ok(sym.verts.every(Number.isFinite));
+  });
+
+  it('can copy the other way and be limited to a selection', () => {
+    const rightToLeft = symmetrizeOffsets(base, topo, {}, { from: 'right', cx });
+    for (const key of Object.keys(rightToLeft.offsets)) assert.ok(base.verts[3 * Number(key)] <= cx + 0.05, 'the right side stays put');
+    const lids = selectEyelids(base, topo, 'right', 2);
+    const only = symmetrizeOffsets(base, topo, {}, { from: 'left', cx, only: lids });
+    assert.ok(only.moved > 0 && only.moved < 800, `${only.moved} points`);
+    const full = symmetrizeOffsets(base, topo, {}, { from: 'left', cx });
+    assert.ok(Object.keys(only.offsets).length < Object.keys(full.offsets).length / 3);
+  });
+
+  it('keeps previous manual edits on the source side and exposes the buttons in the editor', () => {
+    const lids = selectEyelids(base, topo, 'left', 1);
+    const mine = addDelta({}, topo, softWeights(topo, base.verts, lids, 0.02), [0, 0.01, 0]);
+    const res = symmetrizeOffsets(base, topo, mine, { from: 'left', cx });
+    for (const key of Object.keys(mine)) {
+      if (base.verts[3 * Number(key)] < cx - 0.05) assert.deepEqual(res.offsets[key], mine[key]);
+    }
+    const editor = fs.readFileSync(new URL('../src/ui/PolygonEditor.jsx', import.meta.url), 'utf8');
+    assert.match(editor, /Copier gauche → droite/);
+    assert.match(editor, /Copier droite → gauche/);
   });
 });
