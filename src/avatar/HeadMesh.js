@@ -86,6 +86,8 @@ const EYE_OPEN_WIDTH = 0.15;
 const EYE_OPEN_UP = 0.72;
 const EYE_OPEN_DOWN = 0.46;
 const EYE_GLOBE_SCALE = 1.16;
+const EYE_RELAX_PASSES = 36;
+const EYE_RELAX_STRENGTH = 0.85;
 const LANDMARK_NAMES = ['eye_l', 'eye_r', 'brow_l', 'brow_r', 'lips_out', 'lips_in'];
 
 export class HeadMesh {
@@ -207,6 +209,7 @@ export class HeadMesh {
     const cxD = centres[3 * dst], cyD = centres[3 * dst + 1];
     const ox = 0.5 * (D.x0 + D.x1);
     const hw = D.width * 0.5;
+    const zone = [], zoneW = [];
 
     for (let i = 0; i < headVertices; i++) {
       const x = verts[3 * i], y = verts[3 * i + 1], z = verts[3 * i + 2];
@@ -226,6 +229,48 @@ export class HeadMesh {
       verts[3 * i + 1] = y + w * (a * dyU + (1 - a) * dyL);
       const xT = D.inwardPositive ? innerT - uRaw * S.width : innerT + uRaw * S.width;
       verts[3 * i] = x + w * (xT - x);
+      zone.push(i);
+      zoneW.push(w);
+    }
+
+    // Relax the skin around the reshaped eye so no fold or ridge is left where the field changed.
+    if (zone.length === 0) return;
+    const pinned = new Uint8Array(mesh.vertexCount);
+    for (let k = 0; k < rim.length; k += 3) { pinned[rim[k]] = 1; pinned[rim[k + 1]] = 1; }
+    const inZone = new Int32Array(mesh.vertexCount).fill(-1);
+    zone.forEach((vi, k) => { inZone[vi] = k; });
+    const neighbours = zone.map(() => new Set());
+    const faces = mesh.faces;
+    for (let t = 0; t < faces.length; t += 3) {
+      const tri = [faces[t], faces[t + 1], faces[t + 2]];
+      if (tri.some((vi) => vi >= headVertices)) continue;
+      for (const a of tri) {
+        const k = inZone[a];
+        if (k < 0) continue;
+        for (const b of tri) if (b !== a) neighbours[k].add(b);
+      }
+    }
+    for (let pass = 0; pass < EYE_RELAX_PASSES; pass++) {
+      const next = new Float32Array(zone.length * 3);
+      for (let k = 0; k < zone.length; k++) {
+        const vi = zone[k];
+        next[3 * k] = verts[3 * vi];
+        next[3 * k + 1] = verts[3 * vi + 1];
+        next[3 * k + 2] = verts[3 * vi + 2];
+        const nb = neighbours[k];
+        if (pinned[vi] || nb.size === 0 || mesh.lipMask?.[vi] > 0.05) continue;
+        let ax = 0, ay = 0, az = 0;
+        for (const b of nb) { ax += verts[3 * b]; ay += verts[3 * b + 1]; az += verts[3 * b + 2]; }
+        const f = EYE_RELAX_STRENGTH * zoneW[k];
+        next[3 * k] += (ax / nb.size - verts[3 * vi]) * f;
+        next[3 * k + 1] += (ay / nb.size - verts[3 * vi + 1]) * f;
+        next[3 * k + 2] += (az / nb.size - verts[3 * vi + 2]) * f;
+      }
+      for (let k = 0; k < zone.length; k++) {
+        verts[3 * zone[k]] = next[3 * k];
+        verts[3 * zone[k] + 1] = next[3 * k + 1];
+        verts[3 * zone[k] + 2] = next[3 * k + 2];
+      }
     }
   }
 

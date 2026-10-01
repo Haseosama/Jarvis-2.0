@@ -73,6 +73,16 @@ export class AvatarRenderer {
     this.mesh = mesh;
     this.nV = mesh.vertexCount;
     this.nF = mesh.faceCount;
+    this.rimMask = new Uint8Array(this.nV);
+    // Skin around each eye (front of the face only): its facets may turn sideways inside the eye-corner pits.
+    const eyeCentres = mesh.eyeCentre || [];
+    for (let e = 0; e < eyeCentres.length / 3; e++) {
+      for (let i = 0; i < Math.min(this.nV, mesh.nHead || this.nV); i++) {
+        const dx = mesh.verts[3 * i] - eyeCentres[3 * e];
+        const dy = mesh.verts[3 * i + 1] - eyeCentres[3 * e + 1];
+        if (mesh.verts[3 * i + 2] > 0.15 && dx * dx + dy * dy < 0.26 * 0.26) this.rimMask[i] = 1;
+      }
+    }
     this.classicEyeMask = new Uint8Array(this.nV);
     for (let e = 0; e < (mesh.eyeFirst?.length || 0); e++) {
       const start = mesh.eyeFirst[e];
@@ -399,7 +409,9 @@ export class AvatarRenderer {
       const rz = nrm[3 * a + 2] + nrm[3 * b + 2] + nrm[3 * c + 2];
       if (nx * rx + ny * ry + nz * rz < 0) { nx = -nx; ny = -ny; nz = -nz; }
       if (nz < 0 && mesh.faceGroup[t] > 2.25) { nx = -nx; ny = -ny; nz = -nz; }
-      if (nz > 0.015) this.faceFront[t] = 1;
+      // Skin facets in the pit at the eye corners turn sideways; keep them so no hole shows the background.
+      const rimFace = eyePass && (this.rimMask[a] & this.rimMask[b] & this.rimMask[c]) !== 0;
+      if (nz > 0.015 || (rimFace && nz > -0.95)) this.faceFront[t] = 1;
       else continue;
 
       const area = Math.abs((this.xs[b] - this.xs[a]) * (this.ys[c] - this.ys[a]) - (this.xs[c] - this.xs[a]) * (this.ys[b] - this.ys[a]));
@@ -550,6 +562,14 @@ export class AvatarRenderer {
     pts[pts.length - 1] = [up.ux[0] * 0.5 + low.ux[0] * 0.5, up.uy[0] * 0.5 + low.uy[0] * 0.5];
     pts[0] = pts[pts.length - 1];
     pts[n - 1] = pts[n];
+    // Slightly overscan the opening so the corners reach the real lid rim (no gap showing the background).
+    let mx = 0, my = 0;
+    for (const [x, y] of pts) { mx += x; my += y; }
+    mx /= pts.length; my /= pts.length;
+    for (const q of pts) {
+      q[0] = mx + (q[0] - mx) * 1.07;
+      q[1] = my + (q[1] - my) * 1.05;
+    }
     return pts;
   }
 
@@ -595,6 +615,38 @@ export class AvatarRenderer {
     ctx.restore();
   }
 
+  // Soft skin-coloured shadow in the pits at both eye corners, so no gap shows the background there.
+  _fillCornerPits(ctx, outline, wpx, skinOrder) {
+    if (!skinOrder || outline.length < 4) return;
+    let lo = outline[0], hi = outline[0];
+    for (const q of outline) { if (q[0] < lo[0]) lo = q; if (q[0] > hi[0]) hi = q; }
+    const f = this.mesh.faces;
+    const radius = 0.11 * wpx;
+    for (const corner of [lo, hi]) {
+      let sr = 0, sg = 0, sb = 0, cnt = 0;
+      for (let k = 0; k < skinOrder.length; k++) {
+        const t = skinOrder[k];
+        const a = f[3 * t], b = f[3 * t + 1], c = f[3 * t + 2];
+        const cx = (this.xs[a] + this.xs[b] + this.xs[c]) / 3;
+        const cy = (this.ys[a] + this.ys[b] + this.ys[c]) / 3;
+        if (Math.hypot(cx - corner[0], cy - corner[1]) > radius * 1.8) continue;
+        const col = this.faceColor[t];
+        sr += (col >> 16) & 0xff; sg += (col >> 8) & 0xff; sb += col & 0xff; cnt++;
+      }
+      if (cnt < 3) continue;
+      const shade = 0.82;
+      const base = argb(255, ((sr / cnt) * shade) | 0, ((sg / cnt) * shade) | 0, ((sb / cnt) * shade) | 0);
+      const grad = ctx.createRadialGradient(corner[0], corner[1], 0, corner[0], corner[1], radius);
+      grad.addColorStop(0, intToCss(base, 1));
+      grad.addColorStop(0.55, intToCss(base, 0.85));
+      grad.addColorStop(1, intToCss(base, 0));
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(corner[0], corner[1], radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   drawEyes(ctx, eyeCount, expand, nrm, amp, primary, bg, strokePx, skinOrder) {
     const mesh = this.mesh;
     const eyes = mesh.eyeFirst.length;
@@ -606,6 +658,7 @@ export class AvatarRenderer {
       for (const [x] of outline) { if (x < minX) minX = x; if (x > maxX) maxX = x; }
 
       this._smoothLowerLid(ctx, e, minX, maxX, skinOrder);
+      this._fillCornerPits(ctx, outline, maxX - minX, skinOrder);
 
       ctx.save();
       ctx.beginPath();
