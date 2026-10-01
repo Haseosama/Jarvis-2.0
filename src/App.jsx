@@ -556,6 +556,7 @@ export default function App() {
                   hairStyleId={cfg.avatarHair}
                   hairShadeId={cfg.avatarHairShade}
                   customization={cfg.avatarCustom}
+                  sculpt={cfg.avatarSculpt}
                   avatarMode={cfg.avatarMode}
                   onPolygonCountChange={setPolygonCount}
                 />
@@ -695,6 +696,7 @@ export default function App() {
                   hairStyleId={cfg.avatarHair}
                   hairShadeId={cfg.avatarHairShade}
                   customization={cfg.avatarCustom}
+                  sculpt={cfg.avatarSculpt}
                   avatarMode={cfg.avatarMode}
                   closeUp={true}
                 />

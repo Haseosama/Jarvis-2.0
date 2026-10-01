@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import AvatarView from '../avatar/AvatarView.jsx';
+import PolygonEditor from './PolygonEditor.jsx';
+import { isEmptySculpt, normalizeSculpt } from '../avatar/MeshSculpt.js';
 import { configStore, normalizeCustomSlots } from '../core/ConfigStore.js';
 import {
   DEFAULT_FACE_CUSTOM,
@@ -20,6 +22,8 @@ export default function AvatarCreator({ cfg, onClose }) {
   const [draft, setDraft] = useState(() => normalizeFaceCustom(cfg.avatarCustom));
   const [preview, setPreview] = useState(draft);
   const [group, setGroup] = useState('face');
+  const [sculpt, setSculpt] = useState(() => normalizeSculpt(cfg.avatarSculpt));
+  const [polyOpen, setPolyOpen] = useState(false);
   const [slotName, setSlotName] = useState('');
   const slots = useMemo(() => normalizeCustomSlots(cfg.avatarCustomSlots), [cfg.avatarCustomSlots]);
 
@@ -37,7 +41,7 @@ export default function AvatarCreator({ cfg, onClose }) {
 
   const setValue = (id, value) => setDraft((current) => normalizeFaceCustom({ ...current, [id]: value }));
   const apply = () => {
-    configStore.update({ avatarCustom: draft, avatarFaceId: 'classic', avatarMode: '3d' });
+    configStore.update({ avatarCustom: draft, avatarSculpt: sculpt, avatarFaceId: 'classic', avatarMode: '3d' });
     onClose?.();
   };
   const saveSlot = () => {
@@ -56,7 +60,7 @@ export default function AvatarCreator({ cfg, onClose }) {
         <div className="space-header">
           <div>
             <strong>🎨 Créateur de personnage — Classique</strong>
-            <div className="space-sub">Façonnez le visage comme dans un jeu vidéo. Les couleurs, la peau et les circuits ne changent pas.</div>
+            <div className="space-sub">Façonnez le visage comme dans un jeu vidéo. Les couleurs, la peau et les circuits ne changent pas. L’éditeur de polygones permet des retouches point par point.</div>
           </div>
           <button className="space-close-btn" onClick={onClose} title="Annuler (Échap)">✕</button>
         </div>
@@ -67,6 +71,7 @@ export default function AvatarCreator({ cfg, onClose }) {
               state="IDLE"
               faceId="classic"
               customization={preview}
+              sculpt={sculpt}
               skin={cfg.avatarSkin}
               lips={cfg.avatarLips}
               showCircuits={cfg.avatarCircuits !== false}
@@ -84,6 +89,9 @@ export default function AvatarCreator({ cfg, onClose }) {
                 <button key={preset.id} className="space-pill" onClick={() => setDraft(presetValues(preset.id))}>{preset.label}</button>
               ))}
               <button className="space-pill" onClick={() => setDraft(randomFaceCustom(Date.now()))}>🎲 Aléatoire</button>
+              <button className="space-pill active" onClick={() => setPolyOpen(true)} title="Modifier chaque point et chaque polygone du visage à la main">
+                🧱 Éditeur de polygones{isEmptySculpt(sculpt) ? '' : ` (${Object.keys(sculpt).length} retouches)`}
+              </button>
             </div>
 
             <div className="creator-tabs">
@@ -136,12 +144,20 @@ export default function AvatarCreator({ cfg, onClose }) {
         </div>
 
         <div className="creator-footer">
-          <button className="space-pill" onClick={() => setDraft({ ...DEFAULT_FACE_CUSTOM })} disabled={isDefaultFaceCustom(draft)}>↺ Tout réinitialiser</button>
+          <button className="space-pill" onClick={() => { setDraft({ ...DEFAULT_FACE_CUSTOM }); setSculpt({}); }} disabled={isDefaultFaceCustom(draft) && isEmptySculpt(sculpt)}>↺ Tout réinitialiser</button>
           <span className="creator-spacer" />
           <button className="space-pill" onClick={onClose}>Annuler</button>
           <button className="space-pill active" onClick={apply}>✅ Appliquer</button>
         </div>
       </div>
+      {polyOpen && (
+        <PolygonEditor
+          custom={draft}
+          sculpt={sculpt}
+          onClose={() => setPolyOpen(false)}
+          onApply={(next) => { setSculpt(next); setPolyOpen(false); }}
+        />
+      )}
     </div>
   );
 }

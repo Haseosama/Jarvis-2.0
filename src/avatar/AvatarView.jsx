@@ -12,24 +12,15 @@ import {
 } from './HeadMesh.js';
 import { customizeClassicFace, faceCustomKey, isDefaultFaceCustom, normalizeFaceCustom } from './FaceCustomizer.js';
 import { HoloAvatar } from './Visemes.js';
+import { loadHeadMesh } from './meshLoader.js';
+import { applySculpt, normalizeSculpt, sculptKey } from './MeshSculpt.js';
 import {
   AvatarRenderer,
   DEEP_BLUE,
   drawGlowReactor,
 } from './AvatarRenderer.js';
 
-const meshCache = new Map();
 const hairCache = new Map();
-
-async function loadHeadMesh(url) {
-  if (meshCache.has(url)) return meshCache.get(url);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch mesh: ${url}`);
-  const buf = await res.arrayBuffer();
-  const parsed = HeadMesh.parse(buf);
-  meshCache.set(url, parsed);
-  return parsed;
-}
 
 async function loadHairStyle(id) {
   if (!id || id === 'auto' || id === 'none') return null;
@@ -82,6 +73,7 @@ export default function AvatarView({
   polygonLevel = 'high',
   hairStyleId = 'auto',
   hairShadeId = 'natural',
+  sculpt = null, // manual polygon edits (overrides config.avatarSculpt, used by the creator preview)
   customization = null, // Classic face sliders (overrides config.avatarCustom, used by the creator preview)
   avatarMode = '3d',
   watching = false,
@@ -112,6 +104,8 @@ export default function AvatarView({
       : config?.avatarHairColour?.[faceSpec.label] || '';
   const faceCustom = faceSpec.id === 'classic' ? normalizeFaceCustom(customization || config?.avatarCustom) : null;
   const faceCustomId = faceCustom && !isDefaultFaceCustom(faceCustom) ? faceCustomKey(faceCustom) : '';
+  const sculptData = faceSpec.id === 'classic' ? normalizeSculpt(sculpt || config?.avatarSculpt) : {};
+  const sculptId = sculptKey(sculptData);
   const showFace = avatarMode !== 'reactor' && config?.avatarFace !== false;
   const skinMode = resolveSkinCode(skin, config);
   const lipTone = typeof lips === 'number' ? lips : config?.avatarLips ?? 0;
@@ -133,7 +127,7 @@ export default function AvatarView({
         const targetColours = shade ? shade.colours : faceSpec.hairColours;
         // Classic: refined proportions, then the user's character-creator sliders. Hair is fitted on that shape.
         const shapedMesh = faceSpec.id === 'classic'
-          ? customizeClassicFace(HeadMesh.refineClassicFace(baseMesh), faceCustom)
+          ? applySculpt(customizeClassicFace(HeadMesh.refineClassicFace(baseMesh), faceCustom), sculptData)
           : baseMesh;
         let finalMesh = shapedMesh;
 
@@ -163,7 +157,7 @@ export default function AvatarView({
     return () => {
       cancelled = true;
     };
-  }, [faceSpec, effectiveHairId, effectiveShadeId, effectivePolyLevel, isBald, faceCustomId]);
+  }, [faceSpec, effectiveHairId, effectiveShadeId, effectivePolyLevel, isBald, faceCustomId, sculptId]);
 
   const propsRef = useRef({});
   propsRef.current = {

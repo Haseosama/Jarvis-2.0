@@ -1,6 +1,7 @@
 // Port of ConfigStore.kt, LiveModels.kt, and ModelLadder.kt from Jarvis-Android
 
 import { normalizeFaceCustom } from '../avatar/FaceCustomizer.js';
+import { normalizeSculpt } from '../avatar/MeshSculpt.js';
 import { hostBridge } from './hostBridge.js';
 
 export const DEFAULT_LIVE_MODEL = 'models/gemini-2.5-flash-native-audio-preview-12-2025';
@@ -158,6 +159,7 @@ const DEFAULT_CONFIG = {
   avatarHairShade: 'natural',
   avatarCustom: {}, // Classic face proportions (character creator sliders, -1..1)
   avatarCustomSlots: [], // saved looks [{ name, values }]
+  avatarSculpt: {}, // manual polygon edits on the Classic face { vertexIndex: [dx, dy, dz] }
   // User & Location
   userName: '',
   userCity: 'Bordeaux',
@@ -195,6 +197,7 @@ class ConfigStore {
           avatarSkin: normalizeSkinMode(parsed.avatarSkin),
           avatarCustom: normalizeFaceCustom(parsed.avatarCustom),
           avatarCustomSlots: normalizeCustomSlots(parsed.avatarCustomSlots),
+          avatarSculpt: normalizeSculpt(parsed.avatarSculpt),
         };
       }
     } catch {
@@ -218,6 +221,7 @@ class ConfigStore {
           ),
           avatarCustom: normalizeFaceCustom(diskConfig.avatarCustom || this.state.avatarCustom),
           avatarCustomSlots: normalizeCustomSlots(diskConfig.avatarCustomSlots || this.state.avatarCustomSlots),
+          avatarSculpt: normalizeSculpt(diskConfig.avatarSculpt || this.state.avatarSculpt),
         };
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
@@ -252,6 +256,7 @@ class ConfigStore {
     }
     if (nextPatch.avatarCustom !== undefined) nextPatch.avatarCustom = normalizeFaceCustom(nextPatch.avatarCustom);
     if (nextPatch.avatarCustomSlots !== undefined) nextPatch.avatarCustomSlots = normalizeCustomSlots(nextPatch.avatarCustomSlots);
+    if (nextPatch.avatarSculpt !== undefined) nextPatch.avatarSculpt = normalizeSculpt(nextPatch.avatarSculpt);
     if (nextPatch.avatarMode !== undefined && nextPatch.avatarMode !== 'reactor') {
       nextPatch.avatarMode = '3d';
     }
