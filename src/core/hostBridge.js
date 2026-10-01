@@ -141,6 +141,39 @@ export const hostBridge = {
     }
   },
 
+  async spotifyAuthorize(payload) {
+    try {
+      if (!hasElectron() || typeof window.jarvisHost.spotifyAuthorize !== 'function') {
+        return { ok: false, error: 'L’authentification Spotify OAuth exige l’application Jarvis PC installée.' };
+      }
+      return await window.jarvisHost.spotifyAuthorize(payload || {});
+    } catch (error) {
+      return { ok: false, error: error.message || String(error) };
+    }
+  },
+
+  async runSkillSandbox(payload) {
+    try {
+      if (!hasElectron() || typeof window.jarvisHost.skillRun !== 'function') {
+        return { ok: false, error: 'Le bac à sable des compétences exige l’application Jarvis PC installée.' };
+      }
+      return await window.jarvisHost.skillRun(payload || {});
+    } catch (error) {
+      return { ok: false, error: error.message || String(error) };
+    }
+  },
+
+  async googleAuthorize(payload) {
+    try {
+      if (!hasElectron() || typeof window.jarvisHost.googleAuthorize !== 'function') {
+        return { ok: false, error: 'L’authentification Google OAuth exige l’application Jarvis PC installée.' };
+      }
+      return await window.jarvisHost.googleAuthorize(payload || {});
+    } catch (error) {
+      return { ok: false, error: error.message || String(error) };
+    }
+  },
+
   async notify(title, body) {
     try {
       if (hasElectron() && typeof window.jarvisHost.notify === 'function') {

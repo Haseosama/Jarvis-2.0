@@ -9,6 +9,7 @@ import { dataStore } from './DataStore.js';
 import { hostBridge } from './hostBridge.js';
 import { pluginEngine } from './PluginEngine.js';
 import { textToVisemes, VISEMES, pcmVisemes, VisemeStream } from '../avatar/Visemes.js';
+import { analyzeAudioSpectrum, AUDIO_SPECTRUM_BAND_COUNT } from '../audio/AudioSpectrum.js';
 
 const LIVE_WS_ENDPOINT =
   'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
@@ -353,6 +354,7 @@ export class JarvisEngine {
       const pcm16 = new Int16Array(bytes.buffer);
       const float32 = new Float32Array(pcm16.length);
       for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768.0;
+      this.cb.onAudioSpectrum?.(analyzeAudioSpectrum(float32, 24000));
 
       const rawFrames = pcmVisemes(float32, 24000);
       const stream = new VisemeStream();
@@ -415,6 +417,7 @@ export class JarvisEngine {
     }
     this.cb.onViseme?.({ jaw: 0, open: 0, width: 0, wide: 0, level: 0 });
     this.cb.onAudioLevel?.(0);
+    this.cb.onAudioSpectrum?.(Array(AUDIO_SPECTRUM_BAND_COUNT).fill(0));
     if (this.state === 'SPEAKING') {
       this._setState(this.micActive ? 'LISTENING' : 'IDLE', this.micActive ? 'À l’écoute...' : 'Prêt');
     }
@@ -506,7 +509,6 @@ export class JarvisEngine {
         for (const fc of fnCalls) {
           this._setState('THINKING', `Exécution : ${fc.name}...`);
           const toolResult = await this.tools.execute(fc.name, fc.args || {});
-          this.cb.onToolExecuted?.(fc.name, fc.args, toolResult);
           responseParts.push({
             functionResponse: {
               name: fc.name,
@@ -766,7 +768,6 @@ export class JarvisEngine {
           const functionResponses = [];
           for (const fc of fnCalls) {
             const result = await this.tools.execute(fc.name, fc.args || {});
-            this.cb.onToolExecuted?.(fc.name, fc.args, result);
             functionResponses.push({
               id: fc.id,
               name: fc.name,
@@ -879,6 +880,7 @@ export class JarvisEngine {
         const rms = Math.sqrt(sumSq / Math.max(1, outLen));
         if (this.state === 'LISTENING') {
           this.cb.onAudioLevel?.(Math.min(1, rms * 6));
+          this.cb.onAudioSpectrum?.(analyzeAudioSpectrum(input, inRate));
         }
 
         const bytes = new Uint8Array(pcm16.buffer);
@@ -933,6 +935,7 @@ export class JarvisEngine {
 
       const float32 = new Float32Array(pcm16.length);
       for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768.0;
+      this.cb.onAudioSpectrum?.(analyzeAudioSpectrum(float32, 24000));
 
       // Compute 50 FPS (20ms) F1/F2 formant visemes and blend with phoneme stream
       const rawFrames = pcmVisemes(float32, 24000);
@@ -1067,7 +1070,30 @@ export class JarvisEngine {
       });
     }
 
-    // 3. Space / ISS / Sky / World Map
+    // 3. Routes and nearby points of interest (OpenStreetMap/OSRM)
+    if (/(itin[ée]raire|trajet|route)/.test(q)) {
+      let routeMatch = /\bentre\s+(.+?)\s+(?:et|puis)\s+(.+?)(?:[?.]|$)/i.exec(text)
+        || /\b(?:de|depuis)\s+(.+?)\s+(?:à|vers|jusqu['’]à)\s+(.+?)(?:[?.]|$)/i.exec(text);
+      if (routeMatch) return this.tools.execute('geospatial', { action: 'route', origin: routeMatch[1].trim(), destination: routeMatch[2].trim() });
+      const destinationMatch = /\b(?:vers|jusqu['’]à)\s+(.+?)(?:[?.]|$)/i.exec(text);
+      if (destinationMatch) return this.tools.execute('geospatial', { action: 'route', destination: destinationMatch[1].trim() });
+    }
+    if (/(restaurant|pharmacie|h[ôo]pital|clinique|m[ée]decin|dentiste|v[ée]t[ée]rinaire|h[ôo]tel|station.?service|essence|supermarch[ée]|banque|commissariat|mus[ée]e|parking|caf[ée]|boulangerie|\bbar\b|poste|[ée]cole|universit[ée]|lieux d'int[ée]r[êe]t)/.test(q)
+      && /(pr[èe]s|autour|proche|proximit[ée]|\b[àa]\s)/.test(q)) {
+      const locationMatch = /(?:pr[èe]s de|autour de|proche de|proximit[ée] de|dans|\b[àa])\s+(.+?)(?:[?.]|$)/i.exec(text);
+      const candidate = locationMatch?.[1]?.trim();
+      const location = candidate && !/^(chez moi|moi|ici|ma position)$/i.test(candidate) ? candidate : configStore.get().userCity || 'Bordeaux';
+      return this.tools.execute('geospatial', { action: 'poi_search', query: text, location });
+    }
+
+    // 4. Hardware wiring and circuit schematics
+    if (/(circuit|c[âa]blage|branch|connecter|relier|assembl|montage)/.test(q)
+      && /(arduino|esp32|esp8266|raspberry|capteur|dht|servo|hc-?sr04|ultrason|r[ée]sistance|\bled\b|[ée]cran oled)/.test(q)) {
+      const onScreen = /(sur mon [ée]cran|[àa] l['’][ée]cran|que tu vois)/.test(q);
+      return this.tools.execute('circuit_assembler', { action: onScreen ? 'analyze_screen' : 'assemble_components', query: text });
+    }
+
+    // 5. Space / ISS / Sky / World Map
     if (/\b(iss|station spatiale|tiangong|hubble|satellite)\b/.test(q)) {
       return await this.tools.execute('satellites', { name: q.includes('tiangong') ? 'Tiangong' : q.includes('hubble') ? 'Hubble' : 'ISS' });
     }
@@ -1081,7 +1107,63 @@ export class JarvisEngine {
       return await this.tools.execute('planes_overhead', {});
     }
 
-    // 4. Radio / Podcasts / Video / YouTube
+    // 6b. Google Workspace (explicit "Google"/"Gmail"/"Drive" wording only; the local agenda keeps its own tool)
+    if (/gmail|e-?mails?|\bmails?\b/.test(q) && /(non lus?|nouveaux?|bo[iî]te de r[ée]ception|derniers?)/.test(q)) {
+      return await this.tools.execute('google_workspace', { service: 'gmail', action: /non lus?|nouveaux?/.test(q) ? 'unread' : 'list' });
+    }
+    if (/google (agenda|calendar|calendrier)|agenda google/.test(q)) {
+      const date = /demain/.test(q) ? 'demain' : 'aujourd’hui';
+      return await this.tools.execute('google_workspace', { service: 'calendar', action: 'list', date, days: /semaine/.test(q) ? 7 : 1 });
+    }
+    const driveMatch = /(?:cherche|recherche|trouve)\s+(.+?)\s+(?:dans|sur)\s+(?:mon\s+)?(?:google\s+)?drive/i.exec(text.trim().replace(/[.!?]+$/, ''));
+    if (driveMatch) return await this.tools.execute('google_workspace', { service: 'drive', action: 'search', query: driveMatch[1].trim() });
+
+    // 6d. 3D globe (distinct from the flat map and the night-sky views)
+    if (/\bglobe\b/.test(q) && /(montre|affiche|ouvre|lance|voir)/.test(q) && !/(carte plate|2d)/.test(q)) {
+      const place = /(?:sur|vers|de|autour de)\s+(?:la\s+|le\s+|l['’])?([\p{L}][\p{L}' -]{1,40}?)\s*$/iu.exec(text.trim().replace(/[.!?]+$/, ''));
+      const city = place && !/^(globe|terre|monde)(\s|$)/i.test(place[1]) ? place[1].trim() : '';
+      return await this.tools.execute('sky_view', city ? { view: 'globe', city } : { view: 'globe' });
+    }
+
+    // 6c. Skill Forge / Auto-Heal (creation stays pending until the user approves it in the Skills panel)
+    const cleanText = text.trim().replace(/[.!?]+$/, '');
+    const forgeMatch = /(?:forge|cr[ée]e|g[ée]n[èe]re|fabrique)\s+(?:moi\s+)?une\s+comp[ée]tence\s+(?:qui|pour|de|d['’])\s*(.+)/i.exec(cleanText);
+    if (forgeMatch) return await this.tools.execute('skill_forge', { action: 'forge', goal: forgeMatch[1].trim() });
+    const healMatch = /(?:r[ée]pare|corrige|soigne)\s+(?:la\s+)?comp[ée]tence\s+([\p{L}0-9_ -]+)/iu.exec(cleanText);
+    if (healMatch) return await this.tools.execute('auto_heal', { action: 'heal_skill', name: healMatch[1].trim() });
+    if (/(?:diagnostique|analyse)\s+(?:la\s+|l['’])?(?:derni[èe]re\s+)?(?:erreur|panne|probl[èe]me)|pourquoi\s+(?:[çc]a|cela|l['’]outil|la commande).*(?:[ée]chou|plant|march)/.test(q)) {
+      return await this.tools.execute('auto_heal', { action: 'diagnose' });
+    }
+    if (/(?:liste|affiche|montre|quelles sont)\s+(?:mes\s+|les\s+)?comp[ée]tences/.test(q)) return await this.tools.execute('skill_forge', { action: 'list' });
+
+    // 6. Spotify MCP intents (available to the local engine as well as Gemini)
+    if (/spotify/.test(q)) {
+      if (/(pause|mets en pause|arr[êe]te|stop)/.test(q)) return this.tools.execute('spotify_controller', { action: 'pause' });
+      if (/(reprends|reprendre|relance|continue la lecture)/.test(q)) return this.tools.execute('spotify_controller', { action: 'resume' });
+      if (/(suivant|prochaine piste|next)/.test(q)) return this.tools.execute('spotify_controller', { action: 'next' });
+      if (/(pr[ée]c[ée]dent|previous)/.test(q)) return this.tools.execute('spotify_controller', { action: 'previous' });
+      if (/(volume|son)/.test(q) && /(monte|augmente|baisse|diminue)/.test(q)) {
+        return this.tools.execute('spotify_controller', { action: q.includes('baisse') || q.includes('diminue') ? 'volume_down' : 'volume_up' });
+      }
+      const toPlaylist = /(?:ajoute|mets|rajoute)\s+(?:ce|cette|le|la)\s+(?:titre|morceau|chanson|musique).*?(?:dans|à|a)\s+(?:ma\s+|la\s+)?playlist\s+(.+?)(?:\s+(?:sur|dans)\s+spotify)?$/i.exec(text.trim().replace(/[.!?]+$/, ''));
+      if (toPlaylist) return this.tools.execute('spotify_controller', { action: 'add_current_to_playlist', playlist_name: toPlaylist[1].replace(/\bspotify\b/ig, '').trim() });
+      if (/(cet album|cet album-ci)/.test(q) && /(ajoute|enregistre|sauvegarde|garde)/.test(q)) return this.tools.execute('spotify_controller', { action: 'save_album' });
+      if (/(j'aime|j’aime|like[rz]?)\s+(ce|cette)|(ajoute|mets|garde).*(titre|morceau|chanson).*(favoris|lik[ée]s?|aim[ée]s?)/.test(q)) return this.tools.execute('spotify_controller', { action: 'like_current' });
+      if (/(mes\s+)?(albums?)\s+(enregistr[ée]s?|sauvegard[ée]s?)|biblioth[èe]que/.test(q) && /(mes|liste|affiche|montre)/.test(q)) return this.tools.execute('spotify_controller', { action: 'get_saved_albums' });
+      if (/(top|plus [ée]cout[ée]s?|classement)/.test(q) && /(artistes?)/.test(q)) return this.tools.execute('spotify_controller', { action: 'get_top_artists' });
+      if (/(top|plus [ée]cout[ée]s?|classement)/.test(q) && /(titres?|morceaux?|chansons?)/.test(q)) return this.tools.execute('spotify_controller', { action: 'get_top_tracks' });
+      if (/(playlist|listes)/.test(q) && /(mes|liste|affiche|montre)/.test(q)) return this.tools.execute('spotify_controller', { action: 'get_playlists' });
+      if (/(en cours|quelle chanson|quel morceau|now playing)/.test(q)) return this.tools.execute('spotify_controller', { action: 'get_now_playing' });
+      if (/(appareil|devices)/.test(q)) return this.tools.execute('spotify_controller', { action: 'get_devices' });
+      const query = text
+        .replace(/\bspotify\b/ig, '')
+        .replace(/^(mets|joue|lance|[ée]coute|cherche|recherche)\s+/i, '')
+        .replace(/\b(sur|dans)\s*$/i, '')
+        .trim();
+      return this.tools.execute('spotify_controller', { action: /cherche|recherche/i.test(text) ? 'search' : 'search_play', query: query || text.replace(/\bspotify\b/ig, '').trim() });
+    }
+
+    // 7. Radio / Podcasts / Video / YouTube
     if (/(arr[êe]te la radio|stop radio)/.test(q)) {
       return await this.tools.execute('radio', { action: 'stop' });
     }
@@ -1101,7 +1183,17 @@ export class JarvisEngine {
       return await this.tools.execute('play_video', { action: 'play', query: topic });
     }
 
-    // 5. PC System Monitor / Settings / Open App / Control
+    // 7b. Smart home (Home Assistant / Tuya)
+    if (/(appareils?|objets?)\s+connect[ée]s?|domotique|maison connect[ée]e/.test(q) && /(liste|quels?|montre|affiche|voir)/.test(q)) {
+      return await this.tools.execute('smart_home', { action: 'list' });
+    }
+    const homeMatch = /(?:^|\s)(allume[rz]?|[ée]teins|[ée]teindre|[ée]teint)\s+(.+?)\s*$/i.exec(text.trim().replace(/[.!?]+$/, ''));
+    if (homeMatch && /(lumi[èe]re|lampe|ampoule|prise|ventilateur|chauffage|clim)/i.test(homeMatch[2])) {
+      const turnOn = /^allume/i.test(homeMatch[1]);
+      return await this.tools.execute('smart_home', { action: turnOn ? 'turn_on' : 'turn_off', device: homeMatch[2].trim() });
+    }
+
+    // 8. PC System Monitor / Settings / Open App / Control
     if (/(cpu|ram|m[ée]moire vive|[ée]tat du pc|processeur|syst[èe]me)/.test(q)) {
       return await this.tools.execute('system_monitor', {});
     }
@@ -1165,9 +1257,11 @@ export class JarvisEngine {
       return await this.tools.execute('read_screen', {});
     }
 
-    // 6. Document Generation (PDF, Word, Excel)
-    if (/(cr[ée]e un document|cr[ée]e un pdf|g[ée]n[èe]re un pdf|document word|fichier excel)/.test(q)) {
-      const type = q.includes('excel') || q.includes('xlsx') ? 'xlsx' : q.includes('word') || q.includes('docx') ? 'docx' : 'pdf';
+    // 9. Document Generation (PDF, Word, Excel, PowerPoint)
+    if (/(cr[ée]e[rz]? (?:un|une) (?:document|pdf|pr[ée]sentation|powerpoint|diaporama)|g[ée]n[èe]re (?:un|une) (?:pdf|pr[ée]sentation|powerpoint|diaporama)|document word|fichier excel|fais[- ]moi (?:un|une) (?:powerpoint|pr[ée]sentation|diaporama))/.test(q)) {
+      const type = /excel|xlsx/.test(q) ? 'xlsx'
+        : /powerpoint|pptx|pr[ée]sentation|diaporama/.test(q) ? 'pptx'
+        : /word|docx/.test(q) ? 'docx' : 'pdf';
       return await this.tools.execute('create_document', {
         type,
         title: 'Rapport Jarvis 2.0',
@@ -1175,7 +1269,7 @@ export class JarvisEngine {
       });
     }
 
-    // 7. Tasks / Timers / Expenses / Habits / Memory
+    // 10. Tasks / Timers / Expenses / Habits / Memory
     if (/(liste de courses|ajoute .* courses|t[âa]ches)/.test(q)) {
       const addMatch = /ajoute\s+(.+?)\s+(?:à|a|dans)\s+la\s+liste/i.exec(text);
       if (addMatch) {
@@ -1219,7 +1313,7 @@ export class JarvisEngine {
       return await this.tools.execute('remember_fact', { key: 'note', value: m[1] });
     }
 
-    // 8. Check if any of the 82 bundled JSON plugins matches the query
+    // 11. Check if any of the 82 bundled JSON plugins matches the query
     await pluginEngine.loadCatalog();
     const matchedPlugin = pluginEngine.findPlugin(q);
     if (matchedPlugin) {
@@ -1228,7 +1322,7 @@ export class JarvisEngine {
       );
     }
 
-    // 9. Fallback: Run web_search so the user always gets a helpful factual answer!
+    // 12. Fallback: Run web_search so the user always gets a helpful factual answer!
     const searchRes = await this.tools.execute('web_search', { query: text });
     return `${searchRes}\n\n💡 (Astuce : ajoutez une clé API Gemini gratuite dans Réglages > Modèles & Voix pour activer la conversation Gemini Live 24 kHz en continu.)`;
   }

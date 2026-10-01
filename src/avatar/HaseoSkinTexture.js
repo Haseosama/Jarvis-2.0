@@ -5,8 +5,8 @@ import * as THREE from 'three';
 export const LEA_IRIS_APERTURE_RATIO = 0.2;
 
 const FALLBACK_EYES = [
-  { name: 'EyeBlink_L', center: [0.0279, 0.0392, 0.0684], normal: [0.08, 0.12, 0.99], radius: [0.0069, 0.0053] },
-  { name: 'EyeBlink_R', center: [-0.0349, 0.0359, 0.0676], normal: [-0.08, 0.12, 0.99], radius: [0.0068, 0.0051] },
+  { name: 'EyeBlink_L', center: [0.0279, 0.0392, 0.06937], normal: [-0.05, 0.31, 0.94], radius: [0.0069, 0.0053], scleraRadius: [0.0145, 0.009] },
+  { name: 'EyeBlink_R', center: [-0.0349, 0.0359, 0.06855], normal: [-0.01, 0.25, 0.96], radius: [0.0068, 0.0051], scleraRadius: [0.0142, 0.0087] },
 ];
 
 const PALETTES = {
@@ -82,11 +82,57 @@ function hashPixel(x, y) {
   return (hash >>> 0) / 4294967295;
 }
 
+function findFrontSurfaceAtXY(geometry, targetX, targetY) {
+  const position = geometry.attributes.position;
+  const normals = geometry.attributes.normal;
+  const index = geometry.index;
+  const vertexAt = (corner) => index ? index.getX(corner) : corner;
+  const cornerCount = index ? index.count : position.count;
+  let best = null;
+
+  for (let corner = 0; corner + 2 < cornerCount; corner += 3) {
+    const a = vertexAt(corner);
+    const b = vertexAt(corner + 1);
+    const c = vertexAt(corner + 2);
+    const ax = position.getX(a), ay = position.getY(a);
+    const bx = position.getX(b), by = position.getY(b);
+    const cx = position.getX(c), cy = position.getY(c);
+    const denominator = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+    if (Math.abs(denominator) < 1e-12) continue;
+
+    const wa = ((by - cy) * (targetX - cx) + (cx - bx) * (targetY - cy)) / denominator;
+    const wb = ((cy - ay) * (targetX - cx) + (ax - cx) * (targetY - cy)) / denominator;
+    const wc = 1 - wa - wb;
+    if (wa < -1e-5 || wb < -1e-5 || wc < -1e-5) continue;
+
+    const z = wa * position.getZ(a) + wb * position.getZ(b) + wc * position.getZ(c);
+    let normal = [0, 0, 1];
+    if (normals) {
+      normal = [0, 1, 2].map((axis) => (
+        wa * normals.getComponent(a, axis) +
+        wb * normals.getComponent(b, axis) +
+        wc * normals.getComponent(c, axis)
+      ));
+      const length = Math.hypot(...normal) || 1;
+      normal = normal.map((component) => component / length);
+      if (normal[2] < 0) continue;
+    }
+    if (!best || z > best.z) best = { z, normal };
+  }
+  return best;
+}
+
 export function deriveHaseoEyeLayout(geometry, morphTargetDictionary = {}) {
   const position = geometry?.attributes?.position;
   const normals = geometry?.attributes?.normal;
   const positionMorphs = geometry?.morphAttributes?.position;
-  if (!position || !positionMorphs) return FALLBACK_EYES.map((eye) => ({ ...eye, center: [...eye.center], normal: [...eye.normal], radius: [...eye.radius] }));
+  if (!position || !positionMorphs) return FALLBACK_EYES.map((eye) => ({
+    ...eye,
+    center: [...eye.center],
+    normal: [...eye.normal],
+    radius: [...eye.radius],
+    scleraRadius: [...eye.scleraRadius],
+  }));
 
   return ['EyeBlink_L', 'EyeBlink_R'].map((name, eyeIndex) => {
     const morphIndex = morphTargetDictionary[name];
@@ -144,60 +190,24 @@ export function deriveHaseoEyeLayout(geometry, morphTargetDictionary = {}) {
     if (!weightSum) return FALLBACK_EYES[eyeIndex];
 
     const normalLength = Math.hypot(normalX, normalY, normalZ) || 1;
+    const fallbackNormal = normals
+      ? [normalX / normalLength, normalY / normalLength, normalZ / normalLength]
+      : [0, 0, 1];
+    const surfacePoint = findFrontSurfaceAtXY(geometry, centerX, centerY);
     return {
       name,
-      center: [centerX, centerY, zSum / weightSum],
-      normal: normals
-        ? [normalX / normalLength, normalY / normalLength, normalZ / normalLength]
-        : [0, 0, 1],
+      center: [centerX, centerY, surfacePoint?.z ?? zSum / weightSum],
+      normal: surfacePoint?.normal ?? fallbackNormal,
       radius: [
         Math.max(0.003, spanX * LEA_IRIS_APERTURE_RATIO),
         Math.max(0.003, spanY * LEA_IRIS_APERTURE_RATIO),
       ],
+      scleraRadius: [
+        Math.max(0.005, spanX * 0.42),
+        Math.max(0.004, spanY * 0.34),
+      ],
     };
   });
-}
-
-export function buildHaseoIrisPixels(size = 128) {
-  const data = new Uint8Array(size * size * 4);
-  const cx = (size - 1) * 0.5;
-  const cy = (size - 1) * 0.5;
-  const radius = size * 0.47;
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const dx = (x - cx) / radius;
-      const dy = (y - cy) / radius;
-      const r = Math.hypot(dx, dy);
-      if (r > 1) continue;
-      const angle = Math.atan2(dy, dx);
-      const ray = 0.5 + 0.5 * Math.sin(angle * 24 + r * 30);
-      let color;
-      if (r > 0.88) color = [5, 20, 35];
-      else if (r > 0.32) {
-        const light = clamp01((0.88 - r) / 0.56 + ray * 0.14);
-        color = [28 + 35 * light, 92 + 93 * light, 139 + 86 * light];
-      } else color = [3, 11, 21];
-      const offset = 4 * (y * size + x);
-      data[offset] = color[0];
-      data[offset + 1] = color[1];
-      data[offset + 2] = color[2];
-      data[offset + 3] = 255;
-    }
-  }
-  // A compact sclera reflection in the upper-left; the black pupil remains centred.
-  stamp(data, size, cx - radius * 0.22, cy - radius * 0.24, size * 0.035, [240, 250, 255], 0.95);
-  return data;
-}
-
-export function createHaseoIrisTexture(size = 128) {
-  const texture = new THREE.DataTexture(buildHaseoIrisPixels(size), size, size, THREE.RGBAFormat, THREE.UnsignedByteType);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.flipY = false;
-  texture.magFilter = THREE.LinearFilter;
-  texture.minFilter = THREE.LinearMipmapLinearFilter;
-  texture.generateMipmaps = true;
-  texture.needsUpdate = true;
-  return texture;
 }
 
 export function buildHaseoSkinPixels(skinMode = 7, accentHex = 0xff5ce1e6, showCircuits = true, size = 1024) {

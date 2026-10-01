@@ -4,16 +4,21 @@ import packageJson from '../package.json';
 import AvatarView from './avatar/AvatarView.jsx';
 import { POLYGON_LEVELS } from './avatar/HeadMesh.js';
 import SpaceView from './space/SpaceView.jsx';
+import GlobeView from './space/GlobeView.jsx';
 import MediaPlayerPanel from './video/MediaPlayerPanel.jsx';
 import ProductivityPanel from './ui/ProductivityPanel.jsx';
 import PCControlPanel from './ui/PCControlPanel.jsx';
 import PluginsPanel from './ui/PluginsPanel.jsx';
+import CircuitPanel from './ui/CircuitPanel.jsx';
+import SkillPanel from './ui/SkillPanel.jsx';
 import SettingsModal from './ui/SettingsModal.jsx';
 import { configStore } from './core/ConfigStore.js';
 import { ToolRegistry } from './actions/ToolRegistry.js';
 import { JarvisEngine } from './core/JarvisEngine.js';
 import { hostBridge } from './core/hostBridge.js';
 import { clampMiniAvatarPosition } from './ui/miniAvatarPosition.js';
+import { formatTraceValue } from './ui/executionTrace.js';
+import { AUDIO_SPECTRUM_BAND_COUNT } from './audio/AudioSpectrum.js';
 
 const MINI_AVATAR_POSITION_KEY = 'jarvis.miniAvatarPosition';
 
@@ -29,6 +34,14 @@ function readMiniAvatarPosition() {
   }
 }
 
+function upsertExecutionTrace(entries, entry) {
+  const index = entries.findIndex((item) => item.id === entry.id);
+  if (index < 0) return [...entries, entry].slice(-12);
+  const next = [...entries];
+  next[index] = { ...next[index], ...entry, startedAt: entry.startedAt ?? next[index].startedAt };
+  return next;
+}
+
 const QUICK_COMMANDS = [
   { label: '📋 Briefing du jour', cmd: 'Fais-moi le briefing du jour' },
   { label: '🌦️ Météo', cmd: 'Quelle est la météo à Bordeaux ?' },
@@ -42,11 +55,15 @@ const QUICK_COMMANDS = [
 
 export default function App() {
   const [cfg, setCfg] = useState(configStore.get());
-  const [activeView, setActiveView] = useState('avatar'); // 'avatar' | 'space' | 'media' | 'productivity' | 'pc' | 'plugins'
+  const [activeView, setActiveView] = useState('avatar'); // 'avatar' | 'space' | 'globe' | 'circuit' | 'skills' | 'media' | 'productivity' | 'pc' | 'plugins'
   const [spaceConfig, setSpaceConfig] = useState({
     mode: 'map',
     observer: { latDeg: 44.8378, lonDeg: -0.5792, label: 'Bordeaux' },
+    route: null,
+    markers: [],
+    focus: null,
   });
+  const [circuitState, setCircuitState] = useState(null);
   const [mediaState, setMediaState] = useState(null);
   const [miniAvatarPosition, setMiniAvatarPosition] = useState(readMiniAvatarPosition);
   const [miniAvatarDragging, setMiniAvatarDragging] = useState(false);
@@ -56,6 +73,8 @@ export default function App() {
   const [statusText, setStatusText] = useState('Prêt — Appuyez sur Ctrl+Espace ou écrivez une commande');
   const [viseme, setViseme] = useState({ jaw: 0, width: 0, round: 0, close: 0, teeth: 0 });
   const [audioLevel, setAudioLevel] = useState(0);
+  const [audioSpectrum, setAudioSpectrum] = useState(() => Array(AUDIO_SPECTRUM_BAND_COUNT).fill(0));
+  const [executionTrace, setExecutionTrace] = useState([]);
   const [polygonCount, setPolygonCount] = useState(84555);
   const [messages, setMessages] = useState([
     {
@@ -178,8 +197,18 @@ export default function App() {
 
     const tools = new ToolRegistry({
       onOpenSpace: (sc) => {
-        setSpaceConfig((prev) => ({ ...prev, ...sc }));
-        setActiveView('space');
+        setSpaceConfig((prev) => ({
+          ...prev,
+          ...sc,
+          route: sc?.route ?? null,
+          markers: sc?.markers ?? [],
+          focus: sc?.focus ?? null,
+        }));
+        setActiveView(sc?.mode === 'globe' ? 'globe' : 'space');
+      },
+      onOpenCircuit: (state) => {
+        setCircuitState(state);
+        setActiveView('circuit');
       },
       onOpenMedia: (ms) => {
         if (typeof ms === 'function') {
@@ -196,6 +225,44 @@ export default function App() {
         engineRef.current?.stopLiveSession();
       },
       onNotify: showToast,
+      onToolStarted: (name, args, meta = {}) => {
+        const traceId = meta.traceId || `tool-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        setExecutionTrace((prev) => upsertExecutionTrace(prev, {
+          id: traceId,
+          name,
+          status: 'running',
+          parameters: formatTraceValue(args),
+          result: '',
+          startedAt: meta.startedAt || Date.now(),
+          durationMs: null,
+        }));
+      },
+      onToolExecuted: (name, args, result, meta = {}) => {
+        const traceId = meta.traceId || `tool-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        setExecutionTrace((prev) => upsertExecutionTrace(prev, {
+          id: traceId,
+          name,
+          status: 'completed',
+          parameters: formatTraceValue(args),
+          result: formatTraceValue(result),
+          finishedAt: Date.now(),
+          durationMs: Number.isFinite(meta.durationMs) ? meta.durationMs : null,
+        }));
+        showToast(`⚙️ Outil exécuté : ${name}`);
+      },
+      onToolFailed: (name, args, error, meta = {}) => {
+        const traceId = meta.traceId || `tool-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        setExecutionTrace((prev) => upsertExecutionTrace(prev, {
+          id: traceId,
+          name,
+          status: 'failed',
+          parameters: formatTraceValue(args),
+          result: formatTraceValue({ error: error?.message || String(error) }),
+          finishedAt: Date.now(),
+          durationMs: Number.isFinite(meta.durationMs) ? meta.durationMs : null,
+        }));
+        showToast(`⚠️ Échec de l’outil : ${name}`);
+      },
     });
     toolsRef.current = tools;
 
@@ -219,9 +286,7 @@ export default function App() {
       },
       onViseme: (v) => setViseme(v),
       onAudioLevel: (lvl) => setAudioLevel(lvl),
-      onToolExecuted: (name) => {
-        showToast(`⚙️ Outil exécuté : ${name}`);
-      },
+      onAudioSpectrum: (spectrum) => setAudioSpectrum(spectrum),
     });
     engineRef.current = engine;
 
@@ -304,6 +369,24 @@ export default function App() {
             onClick={() => setActiveView('space')}
           >
             🌍 Espace & Ciel
+          </button>
+          <button
+            className={`hud-nav-btn ${activeView === 'globe' ? 'active' : ''}`}
+            onClick={() => setActiveView('globe')}
+          >
+            🌐 Globe 3D
+          </button>
+          <button
+            className={`hud-nav-btn ${activeView === 'circuit' ? 'active' : ''}`}
+            onClick={() => setActiveView('circuit')}
+          >
+            ⚡ Circuits
+          </button>
+          <button
+            className={`hud-nav-btn ${activeView === 'skills' ? 'active' : ''}`}
+            onClick={() => setActiveView('skills')}
+          >
+            🧪 Compétences
           </button>
           <button
             className={`hud-nav-btn ${activeView === 'media' ? 'active' : ''}`}
@@ -472,10 +555,34 @@ export default function App() {
             <SpaceView
               mode={spaceConfig.mode}
               observer={spaceConfig.observer}
+              route={spaceConfig.route}
+              markers={spaceConfig.markers}
+              focus={spaceConfig.focus}
               onObserverChange={(observer) => setSpaceConfig((prev) => ({ ...prev, observer }))}
               onClose={() => setActiveView('avatar')}
             />
           )}
+
+          {activeView === 'globe' && (
+            <GlobeView
+              observer={spaceConfig.observer}
+              route={spaceConfig.route}
+              markers={spaceConfig.markers}
+              focus={spaceConfig.focus}
+              onClose={() => setActiveView('avatar')}
+              onOpenMap={() => setActiveView('space')}
+            />
+          )}
+
+          {activeView === 'circuit' && (
+            <CircuitPanel
+              circuit={circuitState?.circuit}
+              sourceLabel={circuitState?.sourceLabel}
+              onClose={() => setActiveView('avatar')}
+            />
+          )}
+
+          {activeView === 'skills' && <SkillPanel onClose={() => setActiveView('avatar')} />}
 
           {activeView === 'media' && (
             <MediaPlayerPanel
@@ -605,6 +712,50 @@ export default function App() {
             ))}
           </div>
 
+          {executionTrace.length > 0 && (
+            <details className="execution-trace-panel">
+              <summary>
+                <span>🧩 Trace des actions</span>
+                <span className="execution-trace-count">
+                  {executionTrace.filter((entry) => entry.status === 'running').length > 0
+                    ? `${executionTrace.filter((entry) => entry.status === 'running').length} en cours · `
+                    : ''}
+                  {executionTrace.length}
+                </span>
+              </summary>
+              <div className="execution-trace-list">
+                {[...executionTrace].reverse().map((entry) => (
+                  <details key={entry.id} className={`execution-trace-entry status-${entry.status}`}>
+                    <summary>
+                      <span className="execution-trace-status" aria-hidden="true">
+                        {entry.status === 'running' ? '◌' : entry.status === 'failed' ? '!' : '✓'}
+                      </span>
+                      <strong>{entry.name}</strong>
+                      <span className="execution-trace-label">
+                        {entry.status === 'running' ? 'En cours' : entry.status === 'failed' ? 'Échec' : 'Terminé'}
+                      </span>
+                      {entry.durationMs !== null && entry.durationMs !== undefined && (
+                        <small>{entry.durationMs} ms</small>
+                      )}
+                    </summary>
+                    <div className="execution-trace-inspect">
+                      <div>
+                        <b>Paramètres</b>
+                        <pre>{entry.parameters}</pre>
+                      </div>
+                      {entry.result && (
+                        <div>
+                          <b>Résultat</b>
+                          <pre>{entry.result}</pre>
+                        </div>
+                      )}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </details>
+          )}
+
           {/* Chat Transcript */}
           <div className="chat-messages">
             {messages.map((m) => (
@@ -643,6 +794,15 @@ export default function App() {
             >
               {aiState === 'LISTENING' ? '⏹' : aiState === 'SPEAKING' ? '🔊' : '🎙️'}
             </button>
+            <div
+              className={`audio-spectrum spectrum-${String(aiState).toLowerCase()}`}
+              role="img"
+              aria-label="Spectre fréquentiel audio en direct"
+            >
+              {audioSpectrum.map((level, index) => (
+                <span key={index} style={{ '--spectrum-level': Math.max(0, Math.min(1, level)) }} />
+              ))}
+            </div>
             <input
               type="text"
               value={inputText}

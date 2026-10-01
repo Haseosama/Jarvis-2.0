@@ -7,11 +7,36 @@ import {
   REST_MODELS,
 } from '../core/ConfigStore.js';
 import { BUILT_IN_FACES, HAIR_SHADES, POLYGON_LEVELS } from '../avatar/HeadMesh.js';
+import { hostBridge } from '../core/hostBridge.js';
+import {
+  connectSpotify,
+  disconnectSpotify,
+  getSpotifyStatus,
+  SPOTIFY_REDIRECT_URI,
+} from '../integrations/spotifyClient.js';
+import { GOOGLE_REDIRECT_URI, clearGoogleCredentials, connectGoogle, disconnectGoogle, getGoogleStatus } from '../integrations/googleClient.js';
+import { TUYA_REGIONS, clearTuyaSettings, getTuyaClient, getTuyaStatus, saveTuyaSettings } from '../integrations/tuyaClient.js';
 
 export default function SettingsModal({ onClose, onTestVoice }) {
   const [cfg, setCfg] = useState(configStore.get());
   const [hairStyles, setHairStyles] = useState([]);
   const [tab, setTab] = useState('avatar'); // 'avatar' | 'ai' | 'pc'
+  const [spotifyClientId, setSpotifyClientId] = useState('');
+  const [spotifyConnected, setSpotifyConnected] = useState(false);
+  const [spotifyBusy, setSpotifyBusy] = useState(false);
+  const [spotifyMessage, setSpotifyMessage] = useState('');
+  const [tuyaAccessId, setTuyaAccessId] = useState('');
+  const [tuyaSecret, setTuyaSecret] = useState('');
+  const [tuyaRegion, setTuyaRegion] = useState('eu');
+  const [tuyaHasSecret, setTuyaHasSecret] = useState(false);
+  const [tuyaBusy, setTuyaBusy] = useState(false);
+  const [tuyaMessage, setTuyaMessage] = useState('');
+  const [googleClientId, setGoogleClientId] = useState('');
+  const [googleSecret, setGoogleSecret] = useState('');
+  const [googleHasSecret, setGoogleHasSecret] = useState(false);
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [googleMessage, setGoogleMessage] = useState('');
 
   useEffect(() => {
     const unsub = configStore.subscribe(setCfg);
@@ -19,10 +44,122 @@ export default function SettingsModal({ onClose, onTestVoice }) {
       .then((r) => r.json())
       .then(setHairStyles)
       .catch(() => {});
+    getSpotifyStatus().then((status) => {
+      setSpotifyClientId(status.clientId);
+      setSpotifyConnected(status.connected);
+    }).catch(() => {});
+    getGoogleStatus().then((status) => {
+      setGoogleClientId(status.clientId);
+      setGoogleHasSecret(status.hasSecret);
+      setGoogleConnected(status.connected);
+    }).catch(() => {});
+    getTuyaStatus().then((status) => {
+      setTuyaAccessId(status.accessId);
+      setTuyaRegion(status.region);
+      setTuyaHasSecret(status.hasSecret);
+    }).catch(() => {});
     return unsub;
   }, []);
 
   const update = (patch) => configStore.update(patch);
+
+  const handleSpotifyConnect = async () => {
+    setSpotifyBusy(true);
+    setSpotifyMessage('Ouverture de la page de connexion Spotify…');
+    try {
+      await connectSpotify(spotifyClientId);
+      setSpotifyConnected(true);
+      setSpotifyMessage('Spotify est connecté à Jarvis.');
+    } catch (error) {
+      setSpotifyMessage(error.message || 'Connexion Spotify impossible.');
+    } finally {
+      setSpotifyBusy(false);
+    }
+  };
+
+  const handleSpotifyDisconnect = async () => {
+    setSpotifyBusy(true);
+    try {
+      await disconnectSpotify();
+      setSpotifyConnected(false);
+      setSpotifyMessage('Jetons Spotify supprimés de ce PC.');
+    } catch (error) {
+      setSpotifyMessage(error.message || 'Déconnexion Spotify impossible.');
+    } finally {
+      setSpotifyBusy(false);
+    }
+  };
+
+  const handleTuyaSave = async (testAfter) => {
+    setTuyaBusy(true);
+    setTuyaMessage('');
+    try {
+      await saveTuyaSettings({ accessId: tuyaAccessId, secret: tuyaSecret, region: tuyaRegion });
+      if (tuyaSecret.trim()) {
+        setTuyaSecret('');
+        setTuyaHasSecret(true);
+      }
+      if (!testAfter) {
+        setTuyaMessage('Réglages Tuya enregistrés (le secret est chiffré dans l’application PC).');
+      } else {
+        const devices = await (await getTuyaClient()).listDevices();
+        setTuyaMessage(`Connexion Tuya réussie : ${devices.length} appareil(s) lié(s) au projet.`);
+      }
+    } catch (error) {
+      setTuyaMessage(error.message || 'Connexion Tuya impossible.');
+    } finally {
+      setTuyaBusy(false);
+    }
+  };
+
+  const handleGoogleConnect = async () => {
+    setGoogleBusy(true);
+    setGoogleMessage('Ouverture de la page de connexion Google…');
+    try {
+      await connectGoogle({ clientId: googleClientId, clientSecret: googleSecret });
+      setGoogleSecret('');
+      setGoogleHasSecret(true);
+      setGoogleConnected(true);
+      setGoogleMessage('Google Workspace est connecté à Jarvis.');
+    } catch (error) {
+      setGoogleMessage(error.message || 'Connexion Google impossible.');
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
+
+  const handleGoogleDisconnect = async (forget) => {
+    setGoogleBusy(true);
+    try {
+      if (forget) {
+        await clearGoogleCredentials();
+        setGoogleClientId('');
+        setGoogleHasSecret(false);
+      } else {
+        await disconnectGoogle();
+      }
+      setGoogleSecret('');
+      setGoogleConnected(false);
+      setGoogleMessage(forget ? 'Accès révoqué et identifiants Google supprimés de ce PC.' : 'Accès Google révoqué et jetons supprimés de ce PC.');
+    } catch (error) {
+      setGoogleMessage(error.message || 'Déconnexion Google impossible.');
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
+
+  const handleTuyaClear = async () => {
+    setTuyaBusy(true);
+    try {
+      await clearTuyaSettings();
+      setTuyaAccessId('');
+      setTuyaSecret('');
+      setTuyaHasSecret(false);
+      setTuyaMessage('Identifiants Tuya supprimés de ce PC.');
+    } finally {
+      setTuyaBusy(false);
+    }
+  };
 
   const handleApiKeyChange = (slotIdx, val) => {
     const next = [...(cfg.apiKeys || ['', '', ''])];
@@ -293,6 +430,49 @@ export default function SettingsModal({ onClose, onTestVoice }) {
 
           {tab === 'pc' && (
             <div className="settings-section">
+              <h4>Spotify MCP — recherche, lecture et playlists</h4>
+              <p className="settings-hint">
+                Créez une application dans le tableau de bord développeur Spotify, ajoutez l’URI de retour ci-dessous, puis collez son Client ID. Jarvis utilise OAuth PKCE (aucun Client Secret) et chiffre les jetons localement dans l’application PC.
+              </p>
+              <div className="settings-field">
+                <label>Spotify Client ID</label>
+                <input
+                  type="text"
+                  autoComplete="off"
+                  value={spotifyClientId}
+                  onChange={(event) => {
+                    setSpotifyClientId(event.target.value);
+                    setSpotifyConnected(false);
+                  }}
+                  placeholder="Client ID du tableau de bord Spotify"
+                />
+              </div>
+              <div className="settings-inline-row">
+                <button
+                  className="media-play-btn"
+                  onClick={handleSpotifyConnect}
+                  disabled={spotifyBusy || !hostBridge.isElectron || !spotifyClientId.trim()}
+                  title={!hostBridge.isElectron ? 'Utilisez Jarvis PC installé pour connecter Spotify.' : ''}
+                >
+                  {spotifyBusy ? 'Connexion…' : spotifyConnected ? '🔄 Reconnecter Spotify' : '🔗 Connecter Spotify'}
+                </button>
+                {spotifyConnected && (
+                  <button className="space-pill" onClick={handleSpotifyDisconnect} disabled={spotifyBusy}>
+                    Déconnecter
+                  </button>
+                )}
+                <button
+                  className="space-pill"
+                  onClick={() => hostBridge.openExternal('https://developer.spotify.com/dashboard')}
+                >
+                  Tableau de bord Spotify ↗
+                </button>
+              </div>
+              <p className="settings-hint">
+                URI de retour à enregistrer exactement : <code>{SPOTIFY_REDIRECT_URI}</code>
+                <br />Spotify doit être ouvert sur un appareil Connect; certaines commandes de lecture et de volume exigent Premium.
+              </p>
+              {spotifyMessage && <p className="settings-hint" role="status">{spotifyMessage}</p>}
               <div className="settings-grid-fields">
                 <div className="settings-field">
                   <label>Ville par défaut (Météo, Qualité de l’air, Ciel)</label>
@@ -352,6 +532,107 @@ export default function SettingsModal({ onClose, onTestVoice }) {
                   />
                 </div>
               </div>
+
+              <h4>Google Workspace — Gmail, Agenda, Drive</h4>
+              <p className="settings-hint">
+                Dans Google Cloud Console, activez les API Gmail, Calendar et Drive, puis créez un identifiant OAuth de type « Application de bureau » et collez son Client ID et son Client Secret. Jarvis demande : lecture Gmail, création de brouillons/envoi (toujours avec votre confirmation), événements d’agenda, lecture Drive et fichiers créés par Jarvis. Tant que votre projet est en mode « Test », Google expire la connexion au bout de 7 jours.
+              </p>
+              <div className="settings-grid-fields">
+                <div className="settings-field">
+                  <label>Google Client ID</label>
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    value={googleClientId}
+                    onChange={(e) => { setGoogleClientId(e.target.value); setGoogleConnected(false); }}
+                    placeholder="123456789-xxxx.apps.googleusercontent.com"
+                  />
+                </div>
+                <div className="settings-field">
+                  <label>Google Client Secret</label>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={googleSecret}
+                    onChange={(e) => setGoogleSecret(e.target.value)}
+                    placeholder={googleHasSecret ? '•••••••• (enregistré — laisser vide pour conserver)' : 'GOCSPX-…'}
+                  />
+                </div>
+              </div>
+              <div className="settings-chip-row">
+                <button
+                  className="space-pill"
+                  onClick={handleGoogleConnect}
+                  disabled={googleBusy || !hostBridge.isElectron || !googleClientId.trim() || (!googleSecret.trim() && !googleHasSecret)}
+                  title={!hostBridge.isElectron ? 'Utilisez Jarvis PC installé pour connecter Google.' : ''}
+                >
+                  {googleBusy ? 'Connexion…' : googleConnected ? '🔄 Reconnecter Google' : '🔗 Connecter Google'}
+                </button>
+                {googleConnected && (
+                  <button className="space-pill" onClick={() => handleGoogleDisconnect(false)} disabled={googleBusy}>Révoquer l’accès</button>
+                )}
+                {(googleHasSecret || googleClientId) && (
+                  <button className="space-pill" onClick={() => handleGoogleDisconnect(true)} disabled={googleBusy}>Tout supprimer</button>
+                )}
+                <button className="space-pill" onClick={() => hostBridge.openExternal('https://console.cloud.google.com/apis/credentials')}>
+                  Console Google Cloud ↗
+                </button>
+              </div>
+              <p className="settings-hint">URI de retour (automatique pour une application de bureau) : <code>{GOOGLE_REDIRECT_URI}</code></p>
+              {googleMessage && <p className="settings-hint" role="status">{googleMessage}</p>}
+
+              <h4>Tuya / Smart Life — maison connectée (cloud)</h4>
+              <p className="settings-hint">
+                Créez un projet « Smart Home » sur la plateforme Tuya IoT, liez votre compte Smart Life (Devices &gt; Link App Account), puis collez l’Access ID et l’Access Secret. Choisissez le centre de données de votre compte (Europe : « Europe centrale »). Le secret est chiffré localement et n’est jamais enregistré dans la configuration.
+              </p>
+              <div className="settings-grid-fields">
+                <div className="settings-field">
+                  <label>Tuya Access ID</label>
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    value={tuyaAccessId}
+                    onChange={(e) => setTuyaAccessId(e.target.value)}
+                    placeholder="Access ID / Client ID"
+                  />
+                </div>
+                <div className="settings-field">
+                  <label>Tuya Access Secret</label>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={tuyaSecret}
+                    onChange={(e) => setTuyaSecret(e.target.value)}
+                    placeholder={tuyaHasSecret ? '•••••••• (enregistré — laisser vide pour conserver)' : 'Access Secret / Client Secret'}
+                  />
+                </div>
+              </div>
+              <div className="settings-field">
+                <label>Centre de données Tuya</label>
+                <select value={tuyaRegion} onChange={(e) => setTuyaRegion(e.target.value)}>
+                  {Object.entries(TUYA_REGIONS).map(([key, region]) => (
+                    <option key={key} value={key}>{region.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="settings-chip-row">
+                <button className="space-pill" onClick={() => handleTuyaSave(false)} disabled={tuyaBusy || !tuyaAccessId.trim()}>
+                  💾 Enregistrer
+                </button>
+                <button
+                  className="space-pill"
+                  onClick={() => handleTuyaSave(true)}
+                  disabled={tuyaBusy || !tuyaAccessId.trim() || (!tuyaSecret.trim() && !tuyaHasSecret)}
+                >
+                  {tuyaBusy ? 'Test…' : '🔌 Enregistrer et tester'}
+                </button>
+                {(tuyaHasSecret || tuyaAccessId) && (
+                  <button className="space-pill" onClick={handleTuyaClear} disabled={tuyaBusy}>
+                    Supprimer
+                  </button>
+                )}
+              </div>
+              {tuyaMessage && <p className="settings-hint" role="status">{tuyaMessage}</p>}
 
               <div className="settings-field">
                 <label>Instructions personnalisées pour Jarvis</label>

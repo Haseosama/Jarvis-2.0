@@ -92,8 +92,10 @@ jobs:
           - Voûte céleste : position géographique actuelle demandée à l’ouverture et centrage local de la carte, avec commande pour actualiser la position.
           - Avatar 3D : surfaces et mèches capillaires supprimées (y compris fibres optiques et peau 3D); points bleus isolés retirés des hologrammes bleu/or/fibres; iris du Classique naturalisé avec la palette de Léa et ligne des yeux recentrée.
           - Classique affiné après retour visuel : nez d’origine conservé, joues moins rondes, angle de mâchoire plus net et menton mieux défini; couleurs inchangées.
-          - Haseo : pupilles dessinées en 3D à l’intérieur des ouvertures, positionnées depuis les centres géométriques des yeux et l’alignement de Léa; peau bleue plus naturelle, texturée de façon procédurale, avec circuits électriques lumineux intégrés. Le Classique reste disponible.
+          - Haseo : intégration du modèle d’yeux FBX fourni par l’utilisateur (iris, cornée et textures), aligné dans les ouvertures et synchronisé au clignement; peau bleue plus naturelle, texturée de façon procédurale, avec circuits électriques lumineux intégrés. Le Classique reste disponible.
           - Miniature PiP déplaçable dans toute la fenêtre, avec position mémorisée.
+          - Intégration Brahma-Ai-Evo : Spotify (bibliothèque, albums, playlists, tops), Google Workspace (Gmail, Agenda, Drive via OAuth), domotique Tuya Cloud + Home Assistant, géospatial (itinéraires OSRM, lieux proches), assembleur de circuits, documents Office/PDF (PDF, DOCX, XLSX, PPTX, CSV), globe 3D temps réel.
+          - Skill Forge / Crucible : compétences générées par Gemini, testées dans un bac à sable isolé et activées uniquement après approbation dans l’onglet Compétences. Auto-Heal : diagnostic des erreurs d’outils et correctifs de compétences à approuver.
 
           Adaptation complète sur PC (Windows x64) de **Jarvis-Android v0.9.53**, fonctionnant de manière 100% autonome sans serveur backend externe.
 

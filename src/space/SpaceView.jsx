@@ -31,6 +31,8 @@ export default function SpaceView({
   mode = 'map', // 'map' | 'sky'
   observer = { latDeg: 48.8566, lonDeg: 2.3522, label: 'Paris' },
   markers = [],
+  route = null,
+  focus = null,
   onClose,
   onObserverChange,
 }) {
@@ -122,6 +124,17 @@ export default function SpaceView({
     setActiveTab(openSky ? 'sky' : 'map');
     if (openSky) locateCurrentPosition();
   }, [mode]);
+
+  useEffect(() => {
+    const lat = Number(focus?.lat);
+    const lon = Number(focus?.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return;
+    setCenterLat(lat);
+    setCenterLon(lon);
+    if (Number.isFinite(focus?.zoom)) setZoom(Math.max(1, Math.min(1000, focus.zoom)));
+    setFeedRefreshKey((key) => key + 1);
+    setActiveTab('map');
+  }, [focus]);
 
   useEffect(() => {
     loadMapData().then(setMapData).catch(() => {});
@@ -330,6 +343,7 @@ export default function SpaceView({
         showQuakes,
         quakes,
         markers,
+        route,
         kpIndex,
       });
     } else if (activeTab === 'sky') {
@@ -361,6 +375,7 @@ export default function SpaceView({
     showQuakes,
     quakes,
     markers,
+    route,
     kpIndex,
     solarBodies,
     visibleStars,
@@ -419,6 +434,9 @@ export default function SpaceView({
       setEntityPanel({ type: 'satellite', key: String(target.satellite.norad) });
       setCenterLat(target.position.lat);
       setCenterLon(target.position.lon);
+    } else if (target.type === 'marker') {
+      setSelectedFlight(null);
+      setEntityPanel({ type: 'marker', marker: target.marker });
     }
   };
 
@@ -426,7 +444,7 @@ export default function SpaceView({
     if (activeTab !== 'map') return;
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.2 : 0.84;
-    setZoom((z) => Math.max(1.0, Math.min(12.0, z * factor)));
+    setZoom((z) => Math.max(1.0, Math.min(1000, z * factor)));
   };
 
   const modeledSatPos = getSatelliteState(selectedSat, nowMs);
@@ -551,6 +569,15 @@ export default function SpaceView({
             onClick={handleCanvasClick}
             onWheel={handleWheel}
           />
+          {activeTab === 'map' && route && (
+            <div className="space-route-overlay">
+              <strong>{route.origin?.label} → {route.destination?.label}</strong>
+              <span>{route.mode === 'driving' ? '🚗 OSRM / OpenStreetMap' : 'Distance à vol d’oiseau · route indisponible'} · {route.distanceKm?.toLocaleString('fr-FR')} km{route.durationMinutes != null ? ` · ${Math.floor(route.durationMinutes / 60)} h ${route.durationMinutes % 60} min estimées` : ''}</span>
+            </div>
+          )}
+          {activeTab === 'map' && entityPanel?.type === 'marker' && (
+            <MapMarkerInfoCard marker={entityPanel.marker} onClose={() => setEntityPanel(null)} />
+          )}
           {activeTab === 'map' && entityPanel?.type === 'flight' && selectedFlight && (
             <FlightInfoCard flight={selectedFlight} details={flightDetails} loading={loadingFlightDetails} onClose={() => { setEntityPanel(null); setSelectedFlight(null); }} />
           )}
@@ -577,6 +604,7 @@ export default function SpaceView({
                   ))}
                 </div>
                 <div className="space-toggles">
+                  <button className="space-mini-btn" onClick={() => setZoom(1.65)} title="Revenir à l’échelle du monde">Vue monde</button>
                   <label title="Afficher les satellites actifs issus des éléments orbitaux CelesTrak">
                     <input type="checkbox" checked={showCatalogSatellites} onChange={(e) => setShowCatalogSatellites(e.target.checked)} />
                     🛰️ Catalogue ({loadingSatellites ? '…' : satelliteCatalog.length})
@@ -659,6 +687,33 @@ function livePositionEcef(live) {
 function displayValue(value, suffix = '') {
   if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) return 'Indisponible';
   return `${value}${suffix}`;
+}
+
+function MapMarkerInfoCard({ marker, onClose }) {
+  if (!marker) return null;
+  const lat = Number(marker.lat);
+  const lon = Number(marker.lon);
+  const mapUrl = Number.isFinite(lat) && Number.isFinite(lon)
+    ? `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`
+    : null;
+  return (
+    <div className="space-entity-card" onClick={(event) => event.stopPropagation()}>
+      <div className="space-entity-head">
+        <div>
+          <strong>📍 {marker.name || marker.label || 'Repère'}</strong>
+          <div className="space-sub">{marker.type || (marker.kind === 'poi' ? 'Point d’intérêt OpenStreetMap' : 'Repère de carte')}</div>
+        </div>
+        <button className="space-close-btn" onClick={onClose} aria-label="Fermer">✕</button>
+      </div>
+      <div className="space-info-grid">
+        {marker.distanceKm != null && <div className="space-info-cell"><span>Distance</span><strong>{Number(marker.distanceKm).toLocaleString('fr-FR')} km</strong></div>}
+        {marker.address && <div className="space-info-cell"><span>Adresse</span><strong>{marker.address}</strong></div>}
+        {Number.isFinite(lat) && Number.isFinite(lon) && <div className="space-info-cell"><span>Coordonnées</span><strong>{lat.toFixed(5)}°, {lon.toFixed(5)}°</strong></div>}
+        {marker.source && <div className="space-info-cell"><span>Source</span><strong>{marker.source}</strong></div>}
+      </div>
+      {mapUrl && <div className="space-entity-actions"><button className="space-mini-btn" onClick={() => hostBridge.openExternal(mapUrl)}>Ouvrir OpenStreetMap ↗</button></div>}
+    </div>
+  );
 }
 
 function FlightInfoCard({ flight, details, loading, onClose }) {
@@ -802,6 +857,7 @@ function drawWorldMap(
     showQuakes,
     quakes,
     markers,
+    route = null,
     kpIndex,
   }
 ) {
@@ -956,18 +1012,49 @@ function drawWorldMap(
     }
   }
 
-  // Custom user markers
-  for (const m of markers) {
-    const [mx, my] = project(m.lon, m.lat);
-    ctx.fillStyle = '#38bdf8';
+  // Road route or great-circle fallback supplied by the geospatial navigator.
+  if (Array.isArray(route?.waypoints) && route.waypoints.length > 1) {
+    ctx.save();
     ctx.beginPath();
-    ctx.arc(mx, my, 5, 0, Math.PI * 2);
+    ctx.setLineDash(route.mode === 'driving' ? [] : [7, 5]);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = route.mode === 'driving' ? '#fbbf24' : 'rgba(56, 189, 248, 0.88)';
+    ctx.shadowColor = ctx.strokeStyle;
+    ctx.shadowBlur = 9;
+    let previousX = null;
+    route.waypoints.forEach((point, index) => {
+      const [lat, lon] = point;
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+      const [px, py] = project(lon, lat);
+      if (index === 0 || (previousX !== null && Math.abs(px - previousX) > mapSize * 0.4)) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+      previousX = px;
+    });
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // User and POI markers are selectable and stay separate from live satellites/aircraft.
+  for (const marker of markers) {
+    if (!Number.isFinite(Number(marker.lat)) || !Number.isFinite(Number(marker.lon))) continue;
+    const [mx, my] = project(Number(marker.lon), Number(marker.lat));
+    const color = marker.kind === 'origin' ? '#22c55e'
+      : marker.kind === 'destination' ? '#fb7185'
+      : marker.kind === 'poi' ? '#fb923c'
+      : '#38bdf8';
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#06111e';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(mx, my, marker.kind === 'origin' || marker.kind === 'destination' ? 6.5 : 5, 0, Math.PI * 2);
     ctx.fill();
-    if (m.label) {
+    ctx.stroke();
+    if (marker.label) {
       ctx.fillStyle = '#ffffff';
-      ctx.font = '11px "Inter", sans-serif';
-      ctx.fillText(m.label, mx + 8, my + 4);
+      ctx.font = '10px "Inter", sans-serif';
+      ctx.fillText(String(marker.label).slice(0, 34), mx + 8, my + 4);
     }
+    hitTargets.push({ type: 'marker', marker, x: mx, y: my });
   }
 
   // Observer Marker
@@ -1012,7 +1099,7 @@ function drawWorldMap(
     if (selected) {
       ctx.strokeStyle = `${satellite.color || '#ffd54f'}66`;
       ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.arc(sx, sy, 24 * Math.sqrt(zoom), 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(sx, sy, Math.min(24 * Math.sqrt(zoom), Math.min(w, h) * 0.18), 0, Math.PI * 2); ctx.stroke();
     }
     ctx.fillStyle = satellite.color || '#ffd54f';
     ctx.beginPath(); ctx.arc(sx, sy, selected ? 6.5 : 5, 0, Math.PI * 2); ctx.fill();

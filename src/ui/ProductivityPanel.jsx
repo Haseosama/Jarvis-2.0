@@ -373,6 +373,7 @@ export default function ProductivityPanel({ onClose, onNotify }) {
                   <option value="pdf">PDF (.pdf)</option>
                   <option value="docx">Word (.docx)</option>
                   <option value="xlsx">Excel (.xlsx)</option>
+                  <option value="pptx">PowerPoint (.pptx)</option>
                   <option value="csv">CSV (.csv)</option>
                   <option value="md">Markdown (.md)</option>
                   <option value="txt">Texte (.txt)</option>

@@ -1,6 +1,6 @@
 # JARVIS 2.0 — Édition PC Autonome (Sans Backend)
 
-**Version actuelle : 2.0.18** — la release GitHub est étiquetée à partir de `package.json`. Incrémenter cette version avant toute publication.
+**Version actuelle : 2.0.19** — la release GitHub est étiquetée à partir de `package.json`. Incrémenter cette version avant toute publication.
 
 Adaptation complète sur PC (Windows / Desktop autonome) de **[Jarvis-Android v0.9.53](https://github.com/Haseosama/Jarvis-Android)**, conçue pour fonctionner en tant qu'exécutable `.exe` autonome sans aucun serveur backend externe.
 
@@ -9,7 +9,7 @@ Adaptation complète sur PC (Windows / Desktop autonome) de **[Jarvis-Android v0
 ## ✨ Fonctionnalités principales
 
 ### 1. 🎭 Avatar 3D Temps Réel & Synchronisation Labiale (60 FPS)
-- **Quatre visages 3D** : Classique (`84 555 polygones` par défaut), Léa, Marc et Haseo (FBX dédié, peau bleue plus naturelle, circuits électriques intégrés à la texture, pupilles centrées dans les yeux et synchronisation labiale). Haseo s’ajoute aux visages existants sans remplacer le Classique. Les avatars Cartoon, Adam et Mei ne sont pas inclus.
+- **Quatre visages 3D** : Classique (`84 555 polygones` par défaut), Léa, Marc et Haseo (FBX dédié, peau bleue plus naturelle, circuits électriques intégrés à la texture, modèle d’yeux 3D d’Oscar Creativo et ses textures, ajustés aux ouvertures et au clignement). Haseo s’ajoute aux visages existants sans remplacer le Classique. Les avatars Cartoon, Adam et Mei ne sont pas inclus.
 - **Densité réglable** : sélecteur Éco, Léger, Standard, Haute Définition et Ultra; le compteur de polygones s’actualise sur l’avatar. En mode « Sans cheveux », le résidu de peinture du cuir chevelu est supprimé, sans enlever les détails du visage.
 - **Morphologie du Classique inspirée de la référence** : joues moins rondes, angles de mâchoire plus nets, menton mieux défini et dessous du menton relevé; forme du nez et palette conservées.
 - **Miniature PiP déplaçable** : glisser l’avatar vers n’importe quelle zone de la fenêtre; sa position est mémorisée et reste dans les limites de l’écran.

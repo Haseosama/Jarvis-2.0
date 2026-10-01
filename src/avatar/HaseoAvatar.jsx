@@ -2,19 +2,31 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import {
-  createHaseoIrisTexture,
   createHaseoSkinTexture,
   deriveHaseoEyeLayout,
 } from './HaseoSkinTexture.js';
 
 const MODEL_URL = './assets/avatar/haseo.fbx';
+const EYE_MODEL_URL = './assets/avatar/haseo-eye/eye.fbx';
+const EYE_TEXTURE_URLS = {
+  baseColor: './assets/avatar/haseo-eye/CORNEA_Base_Color.jpg',
+  corneaNormal: './assets/avatar/haseo-eye/CORNEA_Normal_DirectX.jpg',
+  corneaRoughness: './assets/avatar/haseo-eye/CORNEA_Roughness.jpg',
+  irisNormal: './assets/avatar/haseo-eye/IRIS_Normal_DirectX.jpg',
+};
+const EYE_IRIS_UV_CENTER = [0.5, 0.5];
+const EYE_TEXTURE_CROP = 0.36;
+const EYE_SURFACE_OFFSET = 0.00035;
+const EYE_APERTURE_FIT = 0.72;
+const EYE_DEPTH_COMPRESSION = 0.18;
+const EYE_TEXTURE_CENTER = [0.4725, 0.5161];
 const clamp = (value, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, Number(value) || 0));
 const rgb = (argb) => (Number(argb) >>> 0) & 0x00ffffff;
 
-// The FBX refers to an image that was not supplied. Return a blank texture instead
-// of making a broken network request; the model is deliberately rendered with a
-// material generated from Jarvis' skin / hologram selection.
+// The Haseo head FBX refers to a missing sidecar image; the head gets its
+// procedural material, while the supplied eye FBX is loaded with its own maps.
 let haseoTemplatePromise = null;
+let haseoEyeAssetsPromise = null;
 
 class EmptyTextureLoader {
   path = undefined;
@@ -38,7 +50,7 @@ function loadHaseoTemplate() {
       })
       .then((buffer) => {
         const manager = new THREE.LoadingManager();
-        manager.addHandler(/\.png$/i, new EmptyTextureLoader());
+        manager.addHandler(/\.(?:png|jpe?g)$/i, new EmptyTextureLoader());
         return new FBXLoader(manager).parse(buffer, '');
       })
       .catch((error) => {
@@ -47,6 +59,113 @@ function loadHaseoTemplate() {
       });
   }
   return haseoTemplatePromise;
+}
+
+function loadHaseoEyeAssets() {
+  if (!haseoEyeAssetsPromise) {
+    haseoEyeAssetsPromise = Promise.all([
+      fetch(EYE_MODEL_URL).then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status} while loading the supplied Haseo eye model`);
+        return response.arrayBuffer();
+      }),
+      ...Object.entries(EYE_TEXTURE_URLS).map(async ([name, url]) => [
+        name,
+        await new THREE.TextureLoader().loadAsync(url),
+      ]),
+    ]).then(([buffer, ...textureEntries]) => {
+      const manager = new THREE.LoadingManager();
+      manager.addHandler(/\.(?:png|jpe?g)$/i, new EmptyTextureLoader());
+      const template = new FBXLoader(manager).parse(buffer, '');
+      const textures = Object.fromEntries(textureEntries);
+      textures.baseColor.colorSpace = THREE.SRGBColorSpace;
+      for (const [name, texture] of Object.entries(textures)) {
+        texture.flipY = false;
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.repeat.set(EYE_TEXTURE_CROP, EYE_TEXTURE_CROP);
+        texture.offset.set(
+          EYE_TEXTURE_CENTER[0] - EYE_TEXTURE_CROP * 0.5,
+          EYE_TEXTURE_CENTER[1] - EYE_TEXTURE_CROP * 0.5
+        );
+        texture.anisotropy = 4;
+        texture.needsUpdate = true;
+        if (name !== 'baseColor') texture.colorSpace = THREE.NoColorSpace;
+      }
+
+      const irisMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0xffffff,
+        map: textures.baseColor,
+        normalMap: textures.irisNormal,
+        normalScale: new THREE.Vector2(1, -1),
+        roughness: 0.58,
+        metalness: 0,
+        side: THREE.DoubleSide,
+      });
+      const corneaMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0xffffff,
+        map: textures.baseColor,
+        normalMap: textures.corneaNormal,
+        normalScale: new THREE.Vector2(1, -1),
+        roughnessMap: textures.corneaRoughness,
+        roughness: 0.3,
+        metalness: 0,
+        clearcoat: 0.38,
+        clearcoatRoughness: 0.12,
+        side: THREE.DoubleSide,
+      });
+
+      template.traverse((object) => {
+        if (!object.isMesh) return;
+        const isCornea = /cornea/i.test(object.name);
+        const oldMaterials = Array.isArray(object.material) ? object.material : [object.material];
+        for (const material of oldMaterials) {
+          material?.map?.dispose?.();
+          material?.dispose?.();
+        }
+        object.material = isCornea ? corneaMaterial : irisMaterial;
+        object.renderOrder = isCornea ? 2 : 1;
+        object.frustumCulled = false;
+        object.userData.haseoEyeModelPart = true;
+      });
+
+      return { template, textures, irisMaterial, corneaMaterial };
+    }).catch((error) => {
+      haseoEyeAssetsPromise = null;
+      throw error;
+    });
+  }
+  return haseoEyeAssetsPromise;
+}
+
+function findEyeIrisAnchor(template) {
+  let irisMesh = null;
+  template.traverse((object) => {
+    if (!irisMesh && object.isMesh && /iris/i.test(object.name)) irisMesh = object;
+  });
+  const position = irisMesh?.geometry?.attributes?.position;
+  const uv = irisMesh?.geometry?.attributes?.uv;
+  const normals = irisMesh?.geometry?.attributes?.normal;
+  if (!position || !uv) throw new Error('The supplied eye FBX has no iris UV geometry');
+
+  let bestIndex = -1;
+  let bestDistance = Infinity;
+  for (let i = 0; i < uv.count; i++) {
+    const du = uv.getX(i) - EYE_IRIS_UV_CENTER[0];
+    const dv = uv.getY(i) - EYE_IRIS_UV_CENTER[1];
+    const distance = du * du + dv * dv;
+    if (distance < bestDistance) {
+      bestIndex = i;
+      bestDistance = distance;
+    }
+  }
+  if (bestIndex < 0) throw new Error('Could not locate the iris center in the supplied eye FBX');
+  const normal = normals
+    ? new THREE.Vector3(normals.getX(bestIndex), normals.getY(bestIndex), normals.getZ(bestIndex)).normalize()
+    : new THREE.Vector3(1, 0, 0);
+  return {
+    position: new THREE.Vector3(position.getX(bestIndex), position.getY(bestIndex), position.getZ(bestIndex)),
+    normal,
+  };
 }
 
 function createSurfaceMaterial(skinMode, primaryHex, skinTexture) {
@@ -92,35 +211,47 @@ function createSurfaceMaterial(skinMode, primaryHex, skinTexture) {
   });
 }
 
-function createHaseoEyeOverlays(surface, eyeLayout) {
-  const irisTexture = createHaseoIrisTexture();
-  const irisMaterial = new THREE.MeshBasicMaterial({
-    map: irisTexture,
-    side: THREE.DoubleSide,
-    transparent: true,
-    alphaTest: 0.025,
-    depthTest: true,
-    depthWrite: false,
-    polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -2,
-    toneMapped: false,
-  });
-  const irisGeometry = new THREE.CircleGeometry(1, 48);
+function fitHaseoEyeMeshes(surface, eyeLayout, eyeAssets) {
+  const anchor = findEyeIrisAnchor(eyeAssets.template);
+  const templateBounds = new THREE.Box3().setFromObject(eyeAssets.template);
+  const templateSize = templateBounds.getSize(new THREE.Vector3());
+  const verticalModelRadius = Math.max(templateSize.y, templateSize.z) * 0.5;
+  const horizontalModelRadius = verticalModelRadius;
+  const depthModelRadius = templateSize.x * 0.5;
 
   return eyeLayout.map((eye) => {
-    const iris = new THREE.Mesh(irisGeometry, irisMaterial);
     const normal = new THREE.Vector3(...eye.normal).normalize();
     if (normal.z < 0) normal.negate();
-    iris.position.set(...eye.center).addScaledVector(normal, 0.0015);
-    iris.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
-    iris.scale.set(eye.radius[0], eye.radius[1], 1);
-    iris.userData.haseoIris = true;
-    iris.userData.baseScaleY = eye.radius[1];
-    iris.userData.blinkMorph = eye.name;
-    iris.renderOrder = 2;
-    surface.add(iris);
-    return iris;
+    const center = new THREE.Vector3(...eye.center);
+    const orientation = new THREE.Quaternion().setFromUnitVectors(anchor.normal, normal);
+    // Use the supplied eye's front geometry, but flatten its depth so the
+    // eyeball sits inside the socket instead of bulging out at the temples.
+    const scale = new THREE.Vector3(
+      eye.scleraRadius[1] / depthModelRadius * EYE_APERTURE_FIT * EYE_DEPTH_COMPRESSION,
+      eye.scleraRadius[1] / verticalModelRadius * EYE_APERTURE_FIT,
+      eye.scleraRadius[0] / horizontalModelRadius * EYE_APERTURE_FIT
+    );
+    const eyeRoot = new THREE.Group();
+    eyeRoot.name = `Haseo_${eye.name}_EyeModel`;
+    eyeRoot.quaternion.copy(orientation);
+    eyeRoot.scale.copy(scale);
+    const anchorOffset = anchor.position.clone().multiply(scale).applyQuaternion(orientation);
+    // The eyeball is partly embedded in the head. Nudge it forward just enough
+    // for the full iris and sclera to show through the eye opening.
+    eyeRoot.position.copy(center).addScaledVector(normal, EYE_SURFACE_OFFSET).sub(anchorOffset);
+    eyeRoot.userData.haseoEyeModel = true;
+    eyeRoot.userData.blinkMorph = eye.name;
+    eyeRoot.userData.baseScaleY = scale.y;
+
+    const eyeModel = eyeAssets.template.clone(true);
+    eyeModel.traverse((object) => {
+      if (!object.isMesh) return;
+      object.geometry = object.geometry.clone();
+      object.userData.haseoEyeModelPart = true;
+    });
+    eyeRoot.add(eyeModel);
+    surface.add(eyeRoot);
+    return eyeRoot;
   });
 }
 
@@ -223,7 +354,7 @@ export default function HaseoAvatar({
 
     const loadModel = async () => {
       try {
-        const template = await loadHaseoTemplate();
+        const [template, eyeAssets] = await Promise.all([loadHaseoTemplate(), loadHaseoEyeAssets()]);
         if (cancelled) return;
         const imported = template.clone(true);
         imported.updateMatrixWorld(true);
@@ -251,7 +382,7 @@ export default function HaseoAvatar({
         surfaceMaterial.userData.haseoStyleKey = initialStyleKey;
         surface.material = surfaceMaterial;
         surface.frustumCulled = false;
-        const eyeMeshes = createHaseoEyeOverlays(surface, eyeLayout);
+        const eyeMeshes = fitHaseoEyeMeshes(surface, eyeLayout, eyeAssets);
 
         wireMesh = new THREE.Mesh(
           surface.geometry,
@@ -360,10 +491,11 @@ export default function HaseoAvatar({
         const blink = blinkAge < 170 ? Math.sin((Math.PI * blinkAge) / 170) : 0;
         setMorph(head, 'EyeBlink_L', blink);
         setMorph(head, 'EyeBlink_R', blink);
-        for (const iris of model.eyeMeshes || []) {
-          const blinkIndex = head.morphTargetDictionary?.[iris.userData.blinkMorph];
+        for (const eye of model.eyeMeshes || []) {
+          const blinkIndex = head.morphTargetDictionary?.[eye.userData.blinkMorph];
           const eyeBlink = blinkIndex === undefined ? 0 : clamp(head.morphTargetInfluences[blinkIndex]);
-          iris.scale.y = iris.userData.baseScaleY * Math.max(0.08, 1 - eyeBlink * 0.92);
+          eye.scale.y = eye.userData.baseScaleY * Math.max(0.015, 1 - eyeBlink * 0.985);
+          eye.visible = eyeBlink < 0.995;
         }
 
         if (wires && head.morphTargetInfluences && wires.morphTargetInfluences) {
@@ -382,9 +514,13 @@ export default function HaseoAvatar({
       cancelAnimationFrame(animationId);
       observer?.disconnect();
       window.removeEventListener('resize', resize);
+      const disposedEyeGeometry = new Set();
       root?.traverse((object) => {
         if (!object.isMesh) return;
-        if (object.userData.haseoIris) object.geometry?.dispose?.();
+        if (object.userData.haseoEyeModelPart && !disposedEyeGeometry.has(object.geometry)) {
+          disposedEyeGeometry.add(object.geometry);
+          object.geometry?.dispose?.();
+        }
         const materials = Array.isArray(object.material) ? object.material : [object.material];
         for (const material of materials) {
           material?.map?.dispose?.();

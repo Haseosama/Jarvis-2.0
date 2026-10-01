@@ -48,3 +48,6 @@ Hairstyles (assets/avatar/hair, chosen in Settings > Appearance > Hairstyle): ta
 and "12 Real-time woman Hairstyles collection 09" (https://sketchfab.com/3d-models/12-real-time-woman-hairstyles-collection-09-a2464050ef6f447dbff9ecde1fdb36ca).
 Changes: each style taken off its head (tools/avatar/prepare_hair.py), the parts hidden inside the head left out, the heaviest thinned by
 leaving out some strands (tools/avatar/export_hair.py), fitted onto the chosen face and coloured in the app (avatar/HairStyle.kt).
+
+Haseo's eye geometry and maps (assets/avatar/haseo-eye) are from the user-provided archive
+"eye-free-model-3d-by-oscar-creativo.zip"; the source filename credits Oscar Creativo. The FBX and the four supplied JPEG maps are bundled locally.

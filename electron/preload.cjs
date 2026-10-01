@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('jarvisHost', {
   fileManager: (payload) => ipcRenderer.invoke('jarvis:file-manager', payload),
   saveDocument: (payload) => ipcRenderer.invoke('jarvis:save-document', payload),
   httpFetch: (payload) => ipcRenderer.invoke('jarvis:http-fetch', payload),
+  spotifyAuthorize: (payload) => ipcRenderer.invoke('jarvis:spotify-authorize', payload),
+  googleAuthorize: (payload) => ipcRenderer.invoke('jarvis:google-authorize', payload),
+  skillRun: (payload) => ipcRenderer.invoke('jarvis:skill-run', payload),
   onHotkeyPtt: (cb) => {
     const handler = () => cb();
     ipcRenderer.on('jarvis:hotkey-ptt', handler);

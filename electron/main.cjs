@@ -20,6 +20,10 @@ const { exec, execFile } = require('child_process');
 
 let mainWindow = null;
 let localAssetServer = null;
+let spotifyAuthServer = null;
+let spotifyAuthTimer = null;
+let googleAuthServer = null;
+let googleAuthTimer = null;
 
 const MIME_MAP = {
   '.html': 'text/html; charset=utf-8',
@@ -920,12 +924,115 @@ ipcMain.handle('jarvis:file-manager', async (_e, payload) => {
   }
 });
 
+// Skill Crucible: runs generated skill code in the isolated worker sandbox (no network, no filesystem).
+ipcMain.handle('jarvis:skill-run', async (_e, input = {}) => {
+  const { runInSandbox } = require('./skillSandbox.cjs');
+  return runInSandbox({
+    code: typeof input.code === 'string' ? input.code : '',
+    args: input.args && typeof input.args === 'object' ? input.args : {},
+    mode: input.mode === 'check' ? 'check' : 'run',
+    timeoutMs: Number(input.timeoutMs) || 1500,
+  });
+});
+
+// Google OAuth 2.0 (installed app) + PKCE: loopback callback only, minimal read/write scopes.
+const GOOGLE_REDIRECT_PORT = 43822;
+const GOOGLE_REDIRECT_URI = `http://127.0.0.1:${GOOGLE_REDIRECT_PORT}/google/callback`;
+ipcMain.handle('jarvis:google-authorize', async (_e, input = {}) => {
+  const clientId = String(input.clientId || '').trim();
+  const codeChallenge = String(input.codeChallenge || '').trim();
+  const state = String(input.state || '').trim();
+  const scopes = Array.isArray(input.scopes) ? input.scopes.map(String) : [];
+  if (!/^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/i.test(clientId)) return { ok: false, error: 'Client ID Google invalide (format : …apps.googleusercontent.com).' };
+  if (!/^[A-Za-z0-9_-]{43}$/.test(codeChallenge) || !/^[a-f0-9]{48}$/.test(state)) return { ok: false, error: 'Paramètres PKCE invalides.' };
+  if (!scopes.length || scopes.length > 10 || !scopes.every((scope) => /^https:\/\/www\.googleapis\.com\/auth\/[a-z0-9._-]+$/i.test(scope))) {
+    return { ok: false, error: 'Scopes Google invalides.' };
+  }
+  if (googleAuthServer) return { ok: false, error: 'Une authentification Google est déjà en cours.' };
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (googleAuthTimer) clearTimeout(googleAuthTimer);
+      googleAuthTimer = null;
+      const activeServer = googleAuthServer;
+      googleAuthServer = null;
+      if (activeServer?.listening) activeServer.close();
+      resolve(result);
+    };
+    const server = http.createServer((req, res) => {
+      let callbackUrl;
+      try {
+        callbackUrl = new URL(req.url || '/', GOOGLE_REDIRECT_URI);
+      } catch {
+        res.writeHead(400);
+        res.end('Requête OAuth invalide.');
+        return;
+      }
+      if (callbackUrl.pathname !== '/google/callback') {
+        res.writeHead(404);
+        res.end('Not found');
+        return;
+      }
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
+      });
+      res.end('<!doctype html><html lang="fr"><meta charset="utf-8"><title>Google connecté</title><body style="font:16px system-ui;max-width:560px;margin:12vh auto;padding:24px;color:#163"><h1>Retour à Jarvis</h1><p>Vous pouvez fermer cette page et revenir à l’application Jarvis PC.</p></body></html>');
+      finish({
+        ok: !callbackUrl.searchParams.get('error'),
+        code: callbackUrl.searchParams.get('code') || '',
+        state: callbackUrl.searchParams.get('state') || '',
+        error: callbackUrl.searchParams.get('error') || '',
+      });
+    });
+    googleAuthServer = server;
+    server.once('error', (error) => {
+      finish({ ok: false, error: error.code === 'EADDRINUSE' ? `Le port de retour Google ${GOOGLE_REDIRECT_PORT} est déjà utilisé.` : (error.message || 'Impossible de démarrer le retour OAuth local.') });
+    });
+    googleAuthTimer = setTimeout(() => finish({ ok: false, error: 'Délai de connexion Google dépassé.' }), 4 * 60 * 1000);
+    server.listen(GOOGLE_REDIRECT_PORT, '127.0.0.1', async () => {
+      const authorizeUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+      authorizeUrl.search = new URLSearchParams({
+        response_type: 'code',
+        client_id: clientId,
+        redirect_uri: GOOGLE_REDIRECT_URI,
+        scope: scopes.join(' '),
+        state,
+        code_challenge_method: 'S256',
+        code_challenge: codeChallenge,
+        access_type: 'offline',
+        prompt: 'consent',
+      }).toString();
+      try {
+        await shell.openExternal(authorizeUrl.toString());
+      } catch (error) {
+        finish({ ok: false, error: error.message || 'Impossible d’ouvrir la page Google.' });
+      }
+    });
+  });
+});
+
 // Save generated document to Documents/Jarvis
 ipcMain.handle('jarvis:save-document', async (_e, { fileName, base64, openAfter }) => {
   try {
     const docsDir = path.join(app.getPath('documents'), 'Jarvis');
     fs.mkdirSync(docsDir, { recursive: true });
-    const fullPath = path.join(docsDir, path.basename(fileName));
+    const safeName = path.basename(String(fileName || 'document_jarvis.txt'));
+    const allowed = new Set(['.pdf', '.docx', '.xlsx', '.pptx', '.csv', '.md', '.txt']);
+    if (!allowed.has(path.extname(safeName).toLowerCase())) {
+      return { ok: false, message: 'Type de document non autorisé.' };
+    }
+    // Never overwrite an existing document: add a numeric suffix instead.
+    const parsedName = path.parse(safeName);
+    let fullPath = path.join(docsDir, safeName);
+    for (let n = 2; fs.existsSync(fullPath) && n < 1000; n++) {
+      fullPath = path.join(docsDir, `${parsedName.name}_${n}${parsedName.ext}`);
+    }
     fs.writeFileSync(fullPath, Buffer.from(base64, 'base64'));
     if (openAfter) {
       await shell.openPath(fullPath);
@@ -954,4 +1061,86 @@ ipcMain.handle('jarvis:http-fetch', async (_e, { url, method = 'GET', headers = 
   } finally {
     clearTimeout(timer);
   }
+});
+
+// Spotify Authorization Code + PKCE callback: loopback only, no client secret is used.
+ipcMain.handle('jarvis:spotify-authorize', async (_e, input = {}) => {
+  const clientId = String(input.clientId || '').trim();
+  const codeChallenge = String(input.codeChallenge || '').trim();
+  const state = String(input.state || '').trim();
+  const scope = String(input.scope || '').trim();
+  if (!/^[A-Za-z0-9_-]{10,128}$/.test(clientId)) return { ok: false, error: 'Client ID Spotify invalide.' };
+  if (!/^[A-Za-z0-9_-]{43}$/.test(codeChallenge) || !/^[a-f0-9]{48}$/.test(state)) {
+    return { ok: false, error: 'Paramètres PKCE invalides.' };
+  }
+  if (!scope || scope.length > 1000 || !/^[a-z0-9_ -]+$/i.test(scope)) {
+    return { ok: false, error: 'Scopes Spotify invalides.' };
+  }
+  if (spotifyAuthServer) return { ok: false, error: 'Une authentification Spotify est déjà en cours.' };
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const redirectUri = 'http://127.0.0.1:43821/spotify/callback';
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (spotifyAuthTimer) clearTimeout(spotifyAuthTimer);
+      spotifyAuthTimer = null;
+      const activeServer = spotifyAuthServer;
+      spotifyAuthServer = null;
+      if (activeServer?.listening) activeServer.close();
+      resolve(result);
+    };
+
+    const server = http.createServer((req, res) => {
+      let callbackUrl;
+      try {
+        callbackUrl = new URL(req.url || '/', redirectUri);
+      } catch {
+        res.writeHead(400);
+        res.end('Requête OAuth invalide.');
+        return;
+      }
+      if (callbackUrl.pathname !== '/spotify/callback') {
+        res.writeHead(404);
+        res.end('Not found');
+        return;
+      }
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
+      });
+      res.end('<!doctype html><html lang="fr"><meta charset="utf-8"><title>Spotify connecté</title><body style="font:16px system-ui;max-width:560px;margin:12vh auto;padding:24px;color:#163"><h1>Retour à Jarvis</h1><p>Vous pouvez fermer cette page et revenir à l’application Jarvis PC.</p></body></html>');
+      finish({
+        ok: !callbackUrl.searchParams.get('error'),
+        code: callbackUrl.searchParams.get('code') || '',
+        state: callbackUrl.searchParams.get('state') || '',
+        error: callbackUrl.searchParams.get('error') || '',
+      });
+    });
+    spotifyAuthServer = server;
+    server.once('error', (error) => {
+      finish({ ok: false, error: error.code === 'EADDRINUSE' ? 'Le port de retour Spotify 43821 est déjà utilisé.' : (error.message || 'Impossible de démarrer le retour OAuth local.') });
+    });
+    spotifyAuthTimer = setTimeout(() => finish({ ok: false, error: 'Délai de connexion Spotify dépassé.' }), 4 * 60 * 1000);
+    server.listen(43821, '127.0.0.1', async () => {
+      const authorizeUrl = new URL('https://accounts.spotify.com/authorize');
+      authorizeUrl.search = new URLSearchParams({
+        response_type: 'code',
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        scope,
+        state,
+        code_challenge_method: 'S256',
+        code_challenge: codeChallenge,
+      }).toString();
+      try {
+        await shell.openExternal(authorizeUrl.toString());
+      } catch (error) {
+        finish({ ok: false, error: error.message || 'Impossible d’ouvrir la page Spotify.' });
+      }
+    });
+  });
 });
