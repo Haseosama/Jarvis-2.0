@@ -1698,6 +1698,31 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     });
   });
   describe('Classic character creator', () => {
+    it('gives both Classic eyes the same opening shape (left copies right, mirrored)', () => {
+      const mesh = HeadMesh.refineClassicFace(HeadMesh.parse(readArrayBuffer('avatar/head_mesh.bin')));
+      const cX = 0.5 * (mesh.eyeCentre[0] + mesh.eyeCentre[3]);
+      const profile = (e) => {
+        const pts = [];
+        for (let k = 0; k < mesh.eyelidRim.length; k += 3) {
+          const vi = mesh.eyelidRim[k];
+          const x = mesh.verts[3 * vi];
+          const near = Math.abs(mesh.eyeCentre[3 * e] - x) <= Math.abs(mesh.eyeCentre[3 * (1 - e)] - x);
+          if (near) pts.push({ x: Math.abs(x - cX), y: mesh.verts[3 * vi + 1], up: mesh.eyelidRim[k + 2] });
+        }
+        const xs = pts.map((p) => p.x);
+        const mean = (flag) => {
+          const list = pts.filter((p) => p.up === flag).map((p) => p.y);
+          return list.reduce((sum, y) => sum + y, 0) / list.length;
+        };
+        return { x0: Math.min(...xs), x1: Math.max(...xs), y0: mean(0), y1: mean(1) };
+      };
+      const a = profile(0), b = profile(1);
+      assert.ok(Math.abs(a.x0 - b.x0) < 0.012, 'inner corners mirror each other');
+      assert.ok(Math.abs(a.x1 - b.x1) < 0.012, 'outer corners mirror each other');
+      assert.ok(Math.abs(a.y0 - b.y0) < 0.008, 'lower lids sit at the same height');
+      assert.ok(Math.abs(a.y1 - b.y1) < 0.008, 'upper lids sit at the same height');
+    });
+
     it('clips the Classic eyeballs to the eyelid opening so corners are filled', () => {
       const mesh = HeadMesh.refineClassicFace(HeadMesh.parse(readArrayBuffer('avatar/head_mesh.bin')));
       const render = (classicEyes) => {

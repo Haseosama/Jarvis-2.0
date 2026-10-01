@@ -83,8 +83,8 @@ export const BUILT_IN_FACES = [
 ];
 
 const EYE_OPEN_WIDTH = 0.15;
-const EYE_OPEN_UP = 0.6;
-const EYE_OPEN_DOWN = 0.3;
+const EYE_OPEN_UP = 0.72;
+const EYE_OPEN_DOWN = 0.46;
 const EYE_GLOBE_SCALE = 1.16;
 const LANDMARK_NAMES = ['eye_l', 'eye_r', 'brow_l', 'brow_r', 'lips_out', 'lips_in'];
 
@@ -142,6 +142,94 @@ export class HeadMesh {
   }
 
   /**
+   * Gives the viewer's left eye the exact opening of the right eye (mirrored about the face centre): same width,
+   * same upper and lower lid profile, corners at mirrored positions. The skin around follows through a smooth field.
+   */
+  static matchEyeShape(mesh, verts, headVertices, centres) {
+    const rim = mesh.eyelidRim;
+    const src = centres[0] > centres[3] ? 0 : 1; // eye on the +x side (viewer's right) is the model
+    const dst = 1 - src;
+    const centreX = 0.5 * (centres[0] + centres[3]);
+    const BINS = 14;
+
+    const analyse = (e) => {
+      const verts2 = [[], []];
+      let x0 = Infinity, x1 = -Infinity;
+      for (let k = 0; k < rim.length; k += 3) {
+        for (const vi of [rim[k], rim[k + 1]]) {
+          const x = verts[3 * vi];
+          const near = Math.abs(centres[3 * e] - x) <= Math.abs(centres[3 * (1 - e)] - x);
+          if (!near) continue;
+          verts2[rim[k + 2] === 1 ? 1 : 0].push(vi);
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+        }
+      }
+      const inwardPositive = centreX > centres[3 * e]; // inner corner at max x
+      const width = Math.max(x1 - x0, 1e-3);
+      const uOf = (x) => (inwardPositive ? (x1 - x) / width : (x - x0) / width);
+      const profile = verts2.map((list) => {
+        const sum = new Float32Array(BINS), cnt = new Float32Array(BINS);
+        for (const vi of list) {
+          const u = Math.max(0, Math.min(0.9999, uOf(verts[3 * vi])));
+          const b = Math.floor(u * BINS);
+          sum[b] += verts[3 * vi + 1] - centres[3 * e + 1];
+          cnt[b] += 1;
+        }
+        const val = new Float32Array(BINS).fill(NaN);
+        for (let b = 0; b < BINS; b++) if (cnt[b] > 0) val[b] = sum[b] / cnt[b];
+        // fill gaps by interpolation / extension
+        let last = -1;
+        for (let b = 0; b < BINS; b++) {
+          if (Number.isNaN(val[b])) continue;
+          if (last >= 0) for (let q = last + 1; q < b; q++) val[q] = val[last] + ((val[b] - val[last]) * (q - last)) / (b - last);
+          else for (let q = 0; q < b; q++) val[q] = val[b];
+          last = b;
+        }
+        if (last < 0) return null;
+        for (let q = last + 1; q < BINS; q++) val[q] = val[last];
+        return val;
+      });
+      const at = (arr, u) => {
+        const f = Math.max(0, Math.min(1, u)) * BINS - 0.5;
+        const i0 = Math.max(0, Math.min(BINS - 1, Math.floor(f)));
+        const i1 = Math.min(BINS - 1, i0 + 1);
+        const t = Math.max(0, Math.min(1, f - i0));
+        return arr[i0] * (1 - t) + arr[i1] * t;
+      };
+      return { x0, x1, width, inwardPositive, uOf, low: profile[0], up: profile[1], at };
+    };
+
+    const S = analyse(src), D = analyse(dst);
+    if (!S.low || !S.up || !D.low || !D.up) return;
+    // Mirror the model's corners about the face centre.
+    const innerT = D.inwardPositive ? 2 * centreX - S.x0 : 2 * centreX - S.x1;
+    const cxD = centres[3 * dst], cyD = centres[3 * dst + 1];
+    const ox = 0.5 * (D.x0 + D.x1);
+    const hw = D.width * 0.5;
+
+    for (let i = 0; i < headVertices; i++) {
+      const x = verts[3 * i], y = verts[3 * i + 1], z = verts[3 * i + 2];
+      if (z < 0.1) continue;
+      if (Math.abs(x - cxD) > Math.abs(x - centres[3 * src])) continue;
+      const rel = y - cyD;
+      const oyRel = 0.5 * (D.at(D.up, 0.5) + D.at(D.low, 0.5));
+      const rho = Math.hypot((x - ox) / (hw * 2.0), (rel - oyRel) / (hw * 1.2));
+      const w = 1 - smooth(0.75, 1.3, rho);
+      if (w <= 0) continue;
+      const uRaw = D.uOf(x);
+      const u = Math.max(0, Math.min(1, uRaw));
+      const yu = D.at(D.up, u), yl = D.at(D.low, u);
+      const a = Math.max(0, Math.min(1, (rel - yl) / Math.max(yu - yl, 1e-4)));
+      const dyU = S.at(S.up, u) - yu;
+      const dyL = S.at(S.low, u) - yl;
+      verts[3 * i + 1] = y + w * (a * dyU + (1 - a) * dyL);
+      const xT = D.inwardPositive ? innerT - uRaw * S.width : innerT + uRaw * S.width;
+      verts[3 * i] = x + w * (xT - x);
+    }
+  }
+
+  /**
    * Enlarges the eyelid opening of the Classic face in place (`verts` is already a copy) and scales the eyeballs
    * so they still fill it. The displacement is a smooth radial field around each opening, so nothing tears.
    * Returns the lid-weight array, scaled so a blink still closes the larger opening.
@@ -190,6 +278,8 @@ export class HeadMesh {
       verts[3 * i + 1] = o.y + dy * (1 + up * w);
       if (lid[i] !== 0) lid[i] *= 1 + 0.9 * w;
     }
+
+    if (eyes === 2) HeadMesh.matchEyeShape(mesh, verts, headVertices, centres);
 
     for (let e = 0; e < mesh.eyeFirst.length; e++) {
       const cx = centres[3 * e], cy = centres[3 * e + 1], cz = centres[3 * e + 2];

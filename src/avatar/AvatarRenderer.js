@@ -24,6 +24,7 @@ const BLUE_HOT = 0xff8fc1ff;
 
 const SKIN_TONES = [0xf1c9a8, 0xd9a47c, 0xb07a54, 0x7a4e36, 0x69b4f0];
 const LIP_TONES = [0xd9707f, 0xc02836, 0x8e3a6b, 0xe8735a];
+const EYE_BACK_PAINT = 0xff2b1f1c;
 const CLASSIC_TO_LEA_IRIS = new Map([
   [0xff16324f, 0xff0e4a36],
   [0xff3f7ca6, 0xff3dbe8c],
@@ -443,6 +444,8 @@ export class AvatarRenderer {
       const zBias = g > 1.5 ? 0.05 : g > 0.5 ? 0 : -1000;
       this.faceZ[t] = (v[3 * a + 2] + v[3 * b + 2] + v[3 * c + 2]) / 3 + zBias;
       if (eyePass && eyeMask[a] && eyeMask[b] && eyeMask[c]) {
+        // The flat dark disc inside each globe shows through at the lid corners: the sclera underlay replaces it.
+        if ((mesh.paint[a] >>> 0) === EYE_BACK_PAINT && (mesh.paint[b] >>> 0) === EYE_BACK_PAINT && (mesh.paint[c] >>> 0) === EYE_BACK_PAINT) continue;
         this.eyeFaces[eyeCount++] = t;
         continue;
       }
@@ -458,7 +461,7 @@ export class AvatarRenderer {
     for (let k = 0; k < count; k++) this.fillFace(ctx, activeOrder[k], expand);
 
     // 6b. Eyeballs, clipped to the actual eyelid opening
-    if (eyePass && eyeCount > 0) this.drawEyes(ctx, eyeCount, expand, nrm, amp, primary, bg);
+    if (eyePass && eyeCount > 0) this.drawEyes(ctx, eyeCount, expand, nrm, amp, primary, bg, strokePx, activeOrder);
 
     // 7. Structural Polygon Edges & Energy Scanner Sweep (on Web and Hologram modes)
     if (this.skin === 0 || this.holo) {
@@ -550,7 +553,49 @@ export class AvatarRenderer {
     return pts;
   }
 
-  drawEyes(ctx, eyeCount, expand, nrm, amp, primary, bg) {
+  // The skin facets right under the lower lid are lit unevenly and read as white teeth. Paint a soft band of the
+  // surrounding skin colour over them (the eyeball and the lashes are drawn on top afterwards).
+  _smoothLowerLid(ctx, e, minX, maxX, skinOrder) {
+    const low = this._lidPoints(this.lidCurves[e][0]);
+    const n = low.ux.length;
+    if (n < 2 || !skinOrder) return;
+    const wpx = Math.max(maxX - minX, 1);
+    let mx = 0, my = 0;
+    for (let i = 0; i < n; i++) { mx += low.ux[i]; my += low.uy[i]; }
+    mx /= n; my /= n;
+    const px = mx, py = my + 0.26 * wpx, rad = 0.09 * wpx;
+    const f = this.mesh.faces;
+    let sr = 0, sg = 0, sb = 0, cnt = 0;
+    for (let k = 0; k < skinOrder.length; k++) {
+      const t = skinOrder[k];
+      if (this.eyeFaceMark && this.eyeFaceMark[t]) continue;
+      const a = f[3 * t], b = f[3 * t + 1], c = f[3 * t + 2];
+      const cx = (this.xs[a] + this.xs[b] + this.xs[c]) / 3;
+      const cy = (this.ys[a] + this.ys[b] + this.ys[c]) / 3;
+      if (Math.abs(cx - px) > rad * 2.2 || Math.abs(cy - py) > rad) continue;
+      const col = this.faceColor[t];
+      sr += (col >> 16) & 0xff; sg += (col >> 8) & 0xff; sb += col & 0xff; cnt++;
+    }
+    if (cnt < 3) return;
+    const base = argb(255, (sr / cnt) | 0, (sg / cnt) | 0, (sb / cnt) | 0);
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const widths = [0.17, 0.13, 0.09, 0.05];
+    for (const wf of widths) {
+      ctx.strokeStyle = intToCss(base, 0.62);
+      ctx.lineWidth = wf * wpx;
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        const x = low.ux[i], y = low.uy[i] + 0.06 * wpx;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  drawEyes(ctx, eyeCount, expand, nrm, amp, primary, bg, strokePx, skinOrder) {
     const mesh = this.mesh;
     const eyes = mesh.eyeFirst.length;
     for (let e = 0; e < eyes; e++) {
@@ -559,6 +604,8 @@ export class AvatarRenderer {
       const first = mesh.eyeFirst[e], last = first + mesh.eyeCount[e];
       let minX = Infinity, maxX = -Infinity;
       for (const [x] of outline) { if (x < minX) minX = x; if (x > maxX) maxX = x; }
+
+      this._smoothLowerLid(ctx, e, minX, maxX, skinOrder);
 
       ctx.save();
       ctx.beginPath();
@@ -590,6 +637,19 @@ export class AvatarRenderer {
       const z = this.faceZ;
       list.sort((a, b) => z[a] - z[b]);
       for (const t of list) this.fillFace(ctx, t, expand);
+
+      // Smooth, softly lit lower lid (waterline) instead of the faceted skin edge.
+      const low = this._lidPoints(this.lidCurves[e][0]);
+      if (low.ux.length >= 2) {
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = intToCss(mixInt(sclera, 0xffe2a79e, 0.45), 0.7);
+        ctx.lineWidth = strokePx * 2.6;
+        ctx.beginPath();
+        ctx.moveTo(low.ux[0], low.uy[0]);
+        for (let i = 1; i < low.ux.length; i++) ctx.lineTo(low.ux[i], low.uy[i]);
+        ctx.stroke();
+      }
       ctx.restore();
     }
   }
