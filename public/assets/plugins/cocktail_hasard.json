@@ -1,0 +1,15 @@
+{
+  "name": "cocktail_hasard",
+  "description": "Propose un cocktail au hasard : nom, catégorie, verre et préparation, en anglais (source : thecocktaildb.com). Pour « un cocktail pour ce soir ».",
+  "parameters": [],
+  "type": "http",
+  "url": "https://www.thecocktaildb.com/api/json/v1/1/random.php",
+  "result_items": "drinks",
+  "result_fields": [
+    "strDrink",
+    "strCategory",
+    "strGlass",
+    "strInstructions"
+  ],
+  "result_max": 1
+}

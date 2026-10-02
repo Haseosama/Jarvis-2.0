@@ -1,0 +1,33 @@
+{
+  "name": "mode_sieste",
+  "description": "Prépare une pause sur le PC : met le lecteur multimédia en pause et lance un minuteur de réveil.",
+  "parameters": [
+    {
+      "name": "duree",
+      "description": "Durée de la sieste, par exemple « 20 minutes »",
+      "required": true
+    },
+    {
+      "name": "minutes",
+      "description": "La même durée, en minutes",
+      "required": true
+    }
+  ],
+  "type": "routine",
+  "steps": [
+    {
+      "tool": "device_settings",
+      "args": {
+        "setting": "media_pause"
+      }
+    },
+    {
+      "tool": "set_timer",
+      "args": {
+        "action": "start",
+        "minutes": "{minutes}",
+        "label": "Fin de la sieste ({duree})"
+      }
+    }
+  ]
+}

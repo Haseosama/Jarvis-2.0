@@ -1,0 +1,34 @@
+{
+  "name": "routine_matin",
+  "description": "Prépare la journée sur le PC : météo de la ville, agenda et liste de tâches à faire.",
+  "parameters": [
+    {
+      "name": "ville",
+      "description": "Ville pour la météo (« ici » pour la position du téléphone)",
+      "required": true
+    }
+  ],
+  "type": "routine",
+  "steps": [
+    {
+      "tool": "weather",
+      "args": {
+        "city": "{ville}"
+      }
+    },
+    {
+      "tool": "calendar",
+      "args": {
+        "action": "list",
+        "days": "1"
+      }
+    },
+    {
+      "tool": "tasks",
+      "args": {
+        "action": "list",
+        "list_name": "todo"
+      }
+    }
+  ]
+}

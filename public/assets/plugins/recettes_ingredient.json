@@ -1,0 +1,19 @@
+{
+  "name": "recettes_ingredient",
+  "description": "Liste des plats qui utilisent un ingrédient (noms et pays d'origine, en anglais, source : themealdb.com). Pour « que faire avec du poulet », « des idées avec des œufs ».",
+  "parameters": [
+    {
+      "name": "ingredient",
+      "description": "Ingrédient en anglais, par exemple chicken, beef, salmon, eggs, rice",
+      "required": true
+    }
+  ],
+  "type": "http",
+  "url": "https://www.themealdb.com/api/json/v1/1/filter.php?i={ingredient}",
+  "result_items": "meals",
+  "result_fields": [
+    "strMeal",
+    "strMealThumb"
+  ],
+  "result_max": 8
+}

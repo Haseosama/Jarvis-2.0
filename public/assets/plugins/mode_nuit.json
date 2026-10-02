@@ -1,0 +1,34 @@
+{
+  "name": "mode_nuit",
+  "description": "Prépare le PC pour la nuit : baisse le volume, réduit la luminosité si l’écran le permet et met le lecteur multimédia en pause.",
+  "parameters": [
+    {
+      "name": "volume",
+      "description": "Volume en pourcentage (0 à 100)",
+      "required": false
+    }
+  ],
+  "type": "routine",
+  "steps": [
+    {
+      "tool": "device_settings",
+      "args": {
+        "setting": "volume",
+        "value": "{volume}"
+      }
+    },
+    {
+      "tool": "device_settings",
+      "args": {
+        "setting": "brightness",
+        "value": "25"
+      }
+    },
+    {
+      "tool": "device_settings",
+      "args": {
+        "setting": "media_pause"
+      }
+    }
+  ]
+}

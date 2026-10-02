@@ -1,0 +1,14 @@
+{
+  "name": "meteo_aeroport",
+  "description": "Récupère le METAR brut d’un aéroport (observation météo aviation), code OACI requis.",
+  "parameters": [
+    {
+      "name": "icao",
+      "description": "Code OACI de l'aéroport à 4 lettres : LFPG Paris-CDG, LFPO Orly, LFML Marseille, LFLL Lyon, LFBO Toulouse, LFMN Nice, EGLL Londres, KJFK New York",
+      "required": true
+    }
+  ],
+  "type": "http",
+  "url": "https://aviationweather.gov/api/data/metar?ids={icao}&format=raw",
+  "result_fields": []
+}
