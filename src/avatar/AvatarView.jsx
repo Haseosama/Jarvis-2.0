@@ -13,7 +13,7 @@ import {
 import { customizeClassicFace, faceCustomKey, isDefaultFaceCustom, normalizeFaceCustom } from './FaceCustomizer.js';
 import { HoloAvatar } from './Visemes.js';
 import { loadHeadMesh } from './meshLoader.js';
-import { applySculpt, normalizeSculpt, sculptKey } from './MeshSculpt.js';
+import { applySculpt, normalizeSculpt, sculptForFace, sculptKey } from './MeshSculpt.js';
 import {
   AvatarRenderer,
   DEEP_BLUE,
@@ -104,7 +104,7 @@ export default function AvatarView({
       : config?.avatarHairColour?.[faceSpec.label] || '';
   const faceCustom = faceSpec.id === 'classic' ? normalizeFaceCustom(customization || config?.avatarCustom) : null;
   const faceCustomId = faceCustom && !isDefaultFaceCustom(faceCustom) ? faceCustomKey(faceCustom) : '';
-  const sculptData = faceSpec.id === 'classic' ? normalizeSculpt(sculpt || config?.avatarSculpt) : {};
+  const sculptData = normalizeSculpt(sculpt || sculptForFace(config, faceSpec.id));
   const sculptId = sculptKey(sculptData);
   const showFace = avatarMode !== 'reactor' && config?.avatarFace !== false;
   const skinMode = resolveSkinCode(skin, config);
@@ -128,7 +128,7 @@ export default function AvatarView({
         // Classic: refined proportions, then the user's character-creator sliders. Hair is fitted on that shape.
         const shapedMesh = faceSpec.id === 'classic'
           ? applySculpt(customizeClassicFace(HeadMesh.refineClassicFace(baseMesh), faceCustom), sculptData)
-          : baseMesh;
+          : applySculpt(baseMesh, sculptData);
         let finalMesh = shapedMesh;
 
         if (effectiveHairId) {

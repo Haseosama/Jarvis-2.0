@@ -17,14 +17,14 @@ const VIEWS = [
   { id: 'rprof', label: 'Profil droit', yaw: 1.5 },
 ];
 const HISTORY_LIMIT = 100;
-const CLASSIC = BUILT_IN_FACES.find((face) => face.id === 'classic');
 
 /**
  * Éditeur de polygones du visage Classique : sélection de sommets / polygones, déplacement dans le plan de la vue
  * avec influence douce, lissage, symétrie, annuler/rétablir. Les retouches sont des décalages par sommet
  * (appliqués après les curseurs) : rien n'est enregistré avant « Appliquer ».
  */
-export default function PolygonEditor({ custom, sculpt, onApply, onClose }) {
+export default function PolygonEditor({ faceId = 'classic', custom, sculpt, onApply, onClose }) {
+  const face = BUILT_IN_FACES.find((entry) => entry.id === faceId) || BUILT_IN_FACES[0];
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   const dataRef = useRef(null); // { base, topo, cx, eyes }
@@ -104,8 +104,9 @@ export default function PolygonEditor({ custom, sculpt, onApply, onClose }) {
     let cancelled = false;
     (async () => {
       try {
-        const raw = await loadHeadMesh(CLASSIC.asset);
-        const base = customizeClassicFace(HeadMesh.refineClassicFace(raw), custom);
+        const raw = await loadHeadMesh(face.asset);
+        // Classique : proportions affinées + curseurs du créateur ; Léa et Marc : maillage d'origine.
+        const base = face.id === 'classic' ? customizeClassicFace(HeadMesh.refineClassicFace(raw), custom) : raw;
         const topo = buildTopology(base);
         const xs = [];
         for (let e = 0; e < (base.eyeCentre?.length || 0) / 3; e++) xs.push({ x: base.eyeCentre[3 * e], y: base.eyeCentre[3 * e + 1], z: base.eyeCentre[3 * e + 2] });
@@ -122,7 +123,7 @@ export default function PolygonEditor({ custom, sculpt, onApply, onClose }) {
       }
     })();
     return () => { cancelled = true; cancelAnimationFrame(rafRef.current); };
-  }, [custom, syncDisplay]);
+  }, [custom, face, syncDisplay]);
 
   useEffect(() => { if (status === 'ready') requestRedraw(); }, [status, tool, pickMode, radius, mirror, viewMode, showPoints, selection, offsets, requestRedraw]);
 
@@ -415,7 +416,7 @@ export default function PolygonEditor({ custom, sculpt, onApply, onClose }) {
       <div className="creator-panel poly-panel">
         <div className="space-header">
           <div>
-            <strong>🧱 Éditeur de polygones — Classique</strong>
+            <strong>🧱 Éditeur de polygones — {face.label}</strong>
             <div className="space-sub">Clic : sélectionner · glisser : cadre · outil Déplacer : glisser les points · clic droit ou Alt+glisser : tourner · Espace+glisser : déplacer la vue · molette : zoom</div>
           </div>
           <button className="space-close-btn" onClick={close} title="Fermer (Échap)">✕</button>

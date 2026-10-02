@@ -8,6 +8,8 @@ import { configStore, REST_MODELS, VOICE_PROFILES, DEFAULT_TTS_MODEL } from './C
 import { dataStore } from './DataStore.js';
 import { hostBridge } from './hostBridge.js';
 import { pluginEngine } from './PluginEngine.js';
+import { llmStore } from '../llm/llmStore.js';
+import { runBrain } from '../llm/brain.js';
 import { textToVisemes, VISEMES, pcmVisemes, VisemeStream } from '../avatar/Visemes.js';
 import { analyzeAudioSpectrum, AUDIO_SPECTRUM_BAND_COUNT } from '../audio/AudioSpectrum.js';
 
@@ -47,6 +49,7 @@ export class JarvisEngine {
     this.recognition = null;
     this.ttsTimer = null;
     this.chatHistory = [];
+    this.externalHistory = []; // tours terminés (texte) du cerveau externe
 
     // Reconnect Gemini Live automatically whenever voiceName or API key changes
     this._unsubConfig = configStore.subscribe((cfg) => {
@@ -112,6 +115,16 @@ export class JarvisEngine {
 
     this._setState('THINKING', 'Analyse de la demande...');
 
+    // 0. Cerveau externe (OpenAI / Anthropic / OpenRouter / local), texte uniquement, avec les outils de Jarvis.
+    //    La voix en direct (micro) reste sur Gemini Live. En cas d'échec, on retombe sur le chemin Gemini ci-dessous.
+    if (!imageBase64) {
+      const external = await this._tryExternalBrain(clean);
+      if (external !== null) {
+        this._deliverAssistantReply(external, speakReply);
+        return;
+      }
+    }
+
     const apiKey = configStore.getActiveApiKey();
     const mode = configStore.get().voiceMode;
 
@@ -148,6 +161,41 @@ export class JarvisEngine {
     // 3. Local / Offline Intent Engine (works 100% without API key!)
     const localReply = await this._runLocalIntent(clean);
     this._deliverAssistantReply(localReply, speakReply);
+  }
+
+  /** Renvoie le texte du modèle externe, ou null s'il est désactivé / non configuré / en échec. */
+  async _tryExternalBrain(text) {
+    let brain = null;
+    try {
+      if (!llmStore.ready) await llmStore.init();
+      brain = llmStore.get().brain;
+      if (!brain?.enabled || !brain.model || brain.provider === 'gemini' || !llmStore.isConfigured(brain.provider)) return null;
+      const res = await runBrain({
+        slot: llmStore.resolve(brain),
+        system: this.buildSystemPrompt(),
+        history: this.externalHistory || (this.externalHistory = []),
+        userText: text,
+        declarations: this.tools.getDeclarations(),
+        execute: async (name, args) => {
+          this._setState('THINKING', `Exécution : ${name}...`);
+          return this.tools.execute(name, args);
+        },
+      });
+      if (!res.ok) throw new Error(res.error || 'Réponse invalide');
+      this.externalHistory.push({ role: 'user', content: text }, { role: 'assistant', content: res.text });
+      if (this.externalHistory.length > 20) this.externalHistory = this.externalHistory.slice(-20);
+      return res.text;
+    } catch (err) {
+      if (brain?.enabled) {
+        this.cb.onMessage?.({
+          id: `a_${Date.now()}`,
+          role: 'assistant',
+          text: `⚠️ Le modèle externe (${brain.model || brain.provider}) n’a pas répondu : ${String(err.message || err).slice(0, 200)}. Je reprends avec Gemini.`,
+          timestamp: Date.now(),
+        });
+      }
+      return null;
+    }
   }
 
   _deliverAssistantReply(replyText, speak = true) {

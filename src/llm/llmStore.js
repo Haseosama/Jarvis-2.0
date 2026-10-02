@@ -16,6 +16,7 @@ export const DEFAULT_LLM_STATE = {
     { provider: 'gemini', model: 'gemini-2.5-pro' },
   ],
   ratings: {}, // { 'provider|model': { elo, games, wins } }
+  brain: { enabled: false, provider: 'openai', model: '' }, // modèle externe qui répond à la place de Gemini REST (texte)
 };
 
 export function slotKey(slot) {
@@ -39,6 +40,10 @@ export function sanitizeState(raw) {
   if (Array.isArray(raw.compareSlots)) {
     const slots = raw.compareSlots.filter(validSlot).slice(0, MAX_SLOTS).map((s) => ({ provider: s.provider, model: s.model.trim() }));
     if (slots.length >= 2) state.compareSlots = slots;
+  }
+  const b = raw.brain;
+  if (b && typeof b === 'object' && PROVIDERS[b.provider] && b.provider !== 'gemini') {
+    state.brain = { enabled: b.enabled === true, provider: b.provider, model: typeof b.model === 'string' ? b.model.trim().slice(0, 200) : '' };
   }
   if (raw.ratings && typeof raw.ratings === 'object') {
     for (const [key, value] of Object.entries(raw.ratings).slice(0, 500)) {

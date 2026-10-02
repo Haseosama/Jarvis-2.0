@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import CodeStudio from './CodeStudio.jsx';
 import ModelCompare from './ModelCompare.jsx';
 import ProviderSettings from './ProviderSettings.jsx';
+import BrainSettings from './BrainSettings.jsx';
 
 const TABS = [
   { id: 'code', label: '💻 Studio de code' },
   { id: 'compare', label: '⚔️ Comparateur' },
+  { id: 'brain', label: '🧠 Cerveau' },
   { id: 'providers', label: '🔑 Fournisseurs' },
 ];
 
@@ -27,6 +29,7 @@ export default function ModelStudioPanel({ tab = 'code', seed = '', onClose }) {
       <div className="llm-body">
         {active === 'code' && <CodeStudio seed={seed} />}
         {active === 'compare' && <ModelCompare seed={seed} />}
+        {active === 'brain' && <BrainSettings />}
         {active === 'providers' && <ProviderSettings />}
       </div>
     </div>

@@ -29,6 +29,25 @@ export function normalizeSculpt(raw) {
   return out;
 }
 
+export const SCULPT_FACE_IDS = ['lea', 'marc']; // retouches des autres visages (le Classique garde `avatarSculpt`)
+
+/** Retouches par visage : { lea: {...}, marc: {...} }. */
+export function normalizeSculptFaces(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const id of SCULPT_FACE_IDS) {
+    const clean = normalizeSculpt(raw[id]);
+    if (Object.keys(clean).length) out[id] = clean;
+  }
+  return out;
+}
+
+/** Retouches enregistrées pour un visage donné (Classique : `avatarSculpt`). */
+export function sculptForFace(cfg, faceId) {
+  if (!cfg) return {};
+  return faceId === 'classic' || !faceId ? cfg.avatarSculpt || {} : cfg.avatarSculptFaces?.[faceId] || {};
+}
+
 export function isEmptySculpt(sculpt) {
   return Object.keys(normalizeSculpt(sculpt)).length === 0;
 }

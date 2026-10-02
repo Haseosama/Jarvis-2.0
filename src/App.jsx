@@ -13,6 +13,8 @@ import CircuitPanel from './ui/CircuitPanel.jsx';
 import SkillPanel from './ui/SkillPanel.jsx';
 import ModelStudioPanel from './ui/ModelStudioPanel.jsx';
 import { llmStore } from './llm/llmStore.js';
+import PolygonEditor from './ui/PolygonEditor.jsx';
+import { sculptForFace } from './avatar/MeshSculpt.js';
 import AvatarCreator from './ui/AvatarCreator.jsx';
 import SettingsModal from './ui/SettingsModal.jsx';
 import { configStore } from './core/ConfigStore.js';
@@ -60,6 +62,7 @@ export default function App() {
   const [cfg, setCfg] = useState(configStore.get());
   const [activeView, setActiveView] = useState('avatar'); // 'avatar' | 'space' | 'globe' | 'circuit' | 'skills' | 'media' | 'productivity' | 'pc' | 'plugins' | 'studio'
   const [creatorOpen, setCreatorOpen] = useState(false);
+  const [polyOpen, setPolyOpen] = useState(false);
   const [studio, setStudio] = useState({ tab: 'code', seed: '' });
   const [spaceConfig, setSpaceConfig] = useState({
     mode: 'map',
@@ -477,6 +480,15 @@ export default function App() {
                   >
                     🎨 Créer mon visage
                   </button>
+                  {cfg.avatarMode === '3d' && (
+                    <button
+                      className="space-pill"
+                      onClick={() => setPolyOpen(true)}
+                      title="Modifier chaque point et chaque polygone du visage actuel (Classique, Léa ou Marc)"
+                    >
+                      🧱 Éditer les polygones
+                    </button>
+                  )}
                 </div>
 
                 {cfg.avatarMode === '3d' && (
@@ -556,7 +568,7 @@ export default function App() {
                   hairStyleId={cfg.avatarHair}
                   hairShadeId={cfg.avatarHairShade}
                   customization={cfg.avatarCustom}
-                  sculpt={cfg.avatarSculpt}
+                  sculpt={sculptForFace(cfg, cfg.avatarFaceId)}
                   avatarMode={cfg.avatarMode}
                   onPolygonCountChange={setPolygonCount}
                 />
@@ -696,7 +708,7 @@ export default function App() {
                   hairStyleId={cfg.avatarHair}
                   hairShadeId={cfg.avatarHairShade}
                   customization={cfg.avatarCustom}
-                  sculpt={cfg.avatarSculpt}
+                  sculpt={sculptForFace(cfg, cfg.avatarFaceId)}
                   avatarMode={cfg.avatarMode}
                   closeUp={true}
                 />
@@ -847,6 +859,19 @@ export default function App() {
 
       {toast && <div className="hud-toast">{toast}</div>}
 
+      {polyOpen && (
+        <PolygonEditor
+          faceId={cfg.avatarFaceId}
+          custom={cfg.avatarCustom}
+          sculpt={sculptForFace(cfg, cfg.avatarFaceId)}
+          onClose={() => setPolyOpen(false)}
+          onApply={(next) => {
+            if (cfg.avatarFaceId === 'classic') configStore.update({ avatarSculpt: next });
+            else configStore.update({ avatarSculptFaces: { ...(cfg.avatarSculptFaces || {}), [cfg.avatarFaceId]: next } });
+            setPolyOpen(false);
+          }}
+        />
+      )}
       {creatorOpen && <AvatarCreator cfg={cfg} onClose={() => setCreatorOpen(false)} />}
 
       {showSettings && (

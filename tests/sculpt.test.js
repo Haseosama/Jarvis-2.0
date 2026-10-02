@@ -7,7 +7,7 @@ import { customizeClassicFace } from '../src/avatar/FaceCustomizer.js';
 import {
   addDelta, applySculpt, boxSelect, buildScene, buildTopology, clearOffsets, displayVerts, growSelection, isEmptySculpt, makeCamera,
   mirrorWeights, normalizeSculpt, pickTriangle, pickVertex, projectPoint, screenDeltaToWorld, sculptKey, sculptableVertexCount,
-  selectEyelids, shrinkSelection, smoothOffsets, softWeights, trianglePoints, visibleReps, estimateSymmetryPlane, symmetrizeOffsets,
+  selectEyelids, shrinkSelection, smoothOffsets, softWeights, trianglePoints, visibleReps, estimateSymmetryPlane, symmetrizeOffsets, normalizeSculptFaces, sculptForFace,
 } from '../src/avatar/MeshSculpt.js';
 import { drawSculptScene } from '../src/avatar/SculptView.js';
 import { configStore } from '../src/core/ConfigStore.js';
@@ -210,5 +210,44 @@ describe('Éditeur de polygones : symétrie', () => {
     const editor = fs.readFileSync(new URL('../src/ui/PolygonEditor.jsx', import.meta.url), 'utf8');
     assert.match(editor, /Copier gauche → droite/);
     assert.match(editor, /Copier droite → gauche/);
+  });
+});
+
+describe('Éditeur de polygones : Léa et Marc', () => {
+  for (const id of ['lea', 'marc']) {
+    it(`edits, mirrors and renders the ${id} face`, () => {
+      const f = fs.readFileSync(new URL(`../public/assets/avatar/head_mesh_${id}.bin`, import.meta.url));
+      const mesh = HeadMesh.parse(f.buffer.slice(f.byteOffset, f.byteOffset + f.byteLength));
+      const t = buildTopology(mesh);
+      assert.ok(t.limit > 5000 && t.limit < mesh.vertexCount, 'hair is excluded');
+      const lids = selectEyelids(mesh, t, 'left', 1);
+      assert.ok(lids.size > 40, 'eyelids found');
+      const edits = addDelta({}, t, softWeights(t, mesh.verts, lids, 0.02), [0, 0.01, 0]);
+      const edited = applySculpt(mesh, edits);
+      assert.notEqual(edited, mesh);
+      assert.ok(edited.verts.every(Number.isFinite));
+      const cx = estimateSymmetryPlane(mesh, t, 0.5 * (mesh.eyeCentre[0] + mesh.eyeCentre[3]));
+      const sym = symmetrizeOffsets(mesh, t, {}, { from: 'left', cx });
+      assert.ok(sym.moved > 3000);
+      const avatar = new HoloAvatar(applySculpt(mesh, sym.offsets));
+      avatar.step(0.02, 1, true, 'IDLE', [{ level: 1, open: 1, wide: 0.1 }], 0.02);
+      avatar.pose();
+      assert.ok(avatar.pv.every(Number.isFinite));
+    });
+  }
+
+  it('stores the edits per face and wires the editor into the app', () => {
+    assert.deepEqual(normalizeSculptFaces({ lea: { 4: [0.1, 0, 0] }, marc: {}, evil: { 1: [1, 1, 1] }, classic: { 2: [1, 0, 0] } }), { lea: { 4: [0.1, 0, 0] } });
+    configStore.update({ avatarSculpt: { 7: [0.02, 0, 0] }, avatarSculptFaces: { marc: { 9: [0, 0.02, 0] }, junk: { 1: [1, 1, 1] } } });
+    const cfg = configStore.get();
+    assert.deepEqual(sculptForFace(cfg, 'classic'), { 7: [0.02, 0, 0] });
+    assert.deepEqual(sculptForFace(cfg, 'marc'), { 9: [0, 0.02, 0] });
+    assert.deepEqual(sculptForFace(cfg, 'lea'), {});
+    configStore.update({ avatarSculpt: {}, avatarSculptFaces: {} });
+    const app = fs.readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    assert.match(app, /Éditer les polygones/);
+    assert.match(app, /avatarSculptFaces: \{ \.\.\.\(cfg\.avatarSculptFaces/);
+    const view = fs.readFileSync(new URL('../src/avatar/AvatarView.jsx', import.meta.url), 'utf8');
+    assert.match(view, /: applySculpt\(baseMesh, sculptData\)/);
   });
 });

@@ -1515,3 +1515,5 @@ html, body, #root {
 .poly-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; align-items: center; justify-items: stretch; margin-bottom: 6px; text-align: center; }
 .poly-side select { background: rgba(5, 12, 24, 0.9); color: #e8f6ff; border: 1px solid var(--border-cyan); border-radius: 8px; padding: 4px 6px; }
 @media (max-width: 900px) { .poly-body { grid-template-columns: 1fr; overflow: auto; } .poly-canvas-wrap { min-height: 380px; } }
+.llm-brain { display: flex; flex-direction: column; gap: 12px; }
+.llm-brain-notes { margin: 0; padding-left: 18px; line-height: 1.6; }

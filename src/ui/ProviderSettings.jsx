@@ -9,14 +9,14 @@ export function useLlmState() {
 }
 
 /** Sélecteur fournisseur + modèle (saisie libre avec suggestions). */
-export function ModelPicker({ value, onChange, disabled }) {
+export function ModelPicker({ value, onChange, disabled, exclude = [] }) {
   useLlmState();
   const listId = `llm-models-${value.provider}`;
   const configured = llmStore.isConfigured(value.provider);
   return (
     <div className="llm-picker">
       <select value={value.provider} disabled={disabled} onChange={(e) => onChange({ provider: e.target.value, model: llmStore.modelsOf(e.target.value)[0] || '' })}>
-        {PROVIDER_IDS.map((id) => <option key={id} value={id}>{PROVIDERS[id].label}{llmStore.isConfigured(id) ? '' : ' (non configuré)'}</option>)}
+        {PROVIDER_IDS.filter((id) => !exclude.includes(id)).map((id) => <option key={id} value={id}>{PROVIDERS[id].label}{llmStore.isConfigured(id) ? '' : ' (non configuré)'}</option>)}
       </select>
       <input list={listId} value={value.model} disabled={disabled} placeholder="identifiant du modèle" onChange={(e) => onChange({ ...value, model: e.target.value })} />
       <datalist id={listId}>{llmStore.modelsOf(value.provider).map((m) => <option key={m} value={m} />)}</datalist>

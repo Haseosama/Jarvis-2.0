@@ -89,20 +89,25 @@ function textOf(content) {
 }
 
 /** Construit la requête HTTP (fonction pure, testable). `messages` = [{role:'user'|'assistant', content}] */
-export function buildRequest({ provider, model, messages, system = '', apiKey = '', baseUrl = '', maxTokens, temperature }) {
+export function buildRequest({ provider, model, messages, system = '', apiKey = '', baseUrl = '', maxTokens, temperature, tools = null, raw = false }) {
   const def = PROVIDERS[provider];
   if (!def) throw new Error(`Fournisseur inconnu : ${provider}`);
   if (!model) throw new Error('Aucun modèle choisi.');
   const base = validateBaseUrl(baseUrl || def.baseUrl);
-  const turns = (messages || [])
-    .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && String(m.content || '').trim())
-    .map((m) => ({ role: m.role, content: String(m.content) }));
+  // raw : messages déjà au format du fournisseur (boucle d'outils : tool_calls, tool_use, tool_result…)
+  if (raw && def.kind === 'gemini') throw new Error('Mode brut non pris en charge pour Gemini.');
+  const turns = raw
+    ? (messages || []).filter(Boolean)
+    : (messages || [])
+      .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && String(m.content || '').trim())
+      .map((m) => ({ role: m.role, content: String(m.content) }));
   if (!turns.length) throw new Error('Message vide.');
 
   if (def.kind === 'anthropic') {
     const body = { model, max_tokens: maxTokens || 8192, messages: turns };
     if (system) body.system = system;
     if (temperature !== undefined) body.temperature = temperature;
+    if (tools?.length) body.tools = tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters }));
     return {
       url: `${base}/messages`,
       method: 'POST',
@@ -132,25 +137,39 @@ export function buildRequest({ provider, model, messages, system = '', apiKey = 
   const body = { model, messages: [...(system ? [{ role: 'system', content: system }] : []), ...turns] };
   if (maxTokens) body.max_tokens = maxTokens;
   if (temperature !== undefined) body.temperature = temperature;
+  if (tools?.length) body.tools = tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }));
   return { url: `${base}/chat/completions`, method: 'POST', headers, body: JSON.stringify(body) };
 }
 
-/** Extrait texte + usage d'une réponse JSON de fournisseur (fonction pure). */
+function safeParseArgs(value) {
+  if (value && typeof value === 'object') return value;
+  try { const parsed = JSON.parse(String(value || '{}')); return parsed && typeof parsed === 'object' ? parsed : {}; } catch { return {}; }
+}
+
+/** Extrait texte, usage et appels d'outils d'une réponse JSON de fournisseur (fonction pure). */
 export function parseResponse(provider, json) {
   const def = PROVIDERS[provider];
-  if (!def || !json) return { text: '', usage: null };
+  const empty = { text: '', usage: null, toolCalls: [], assistantMessage: null };
+  if (!def || !json) return empty;
   if (def.kind === 'anthropic') {
-    const text = (json.content || []).filter((b) => b?.type === 'text').map((b) => b.text || '').join('');
-    return { text, usage: json.usage ? { input: json.usage.input_tokens, output: json.usage.output_tokens } : null };
+    const blocks = Array.isArray(json.content) ? json.content : [];
+    const text = blocks.filter((b) => b?.type === 'text').map((b) => b.text || '').join('');
+    const toolCalls = blocks.filter((b) => b?.type === 'tool_use').map((b) => ({ id: b.id, name: b.name, args: safeParseArgs(b.input) }));
+    return { text, usage: json.usage ? { input: json.usage.input_tokens, output: json.usage.output_tokens } : null, toolCalls, assistantMessage: { role: 'assistant', content: blocks } };
   }
   if (def.kind === 'gemini') {
     const parts = json.candidates?.[0]?.content?.parts || [];
     const text = parts.filter((p) => !p.thought).map((p) => p.text || '').join('');
     const u = json.usageMetadata;
-    return { text, usage: u ? { input: u.promptTokenCount, output: u.candidatesTokenCount } : null };
+    return { ...empty, text, usage: u ? { input: u.promptTokenCount, output: u.candidatesTokenCount } : null };
   }
-  const text = textOf(json.choices?.[0]?.message?.content);
-  return { text, usage: json.usage ? { input: json.usage.prompt_tokens, output: json.usage.completion_tokens } : null };
+  const message = json.choices?.[0]?.message || {};
+  const text = textOf(message.content);
+  const calls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+  const toolCalls = calls.filter((c) => c?.function?.name).map((c, i) => ({ id: c.id || `call_${i}`, name: c.function.name, args: safeParseArgs(c.function.arguments) }));
+  const assistantMessage = { role: 'assistant', content: message.content ?? null };
+  if (calls.length) assistantMessage.tool_calls = calls.map((c, i) => ({ id: c.id || `call_${i}`, type: 'function', function: { name: c.function?.name, arguments: typeof c.function?.arguments === 'string' ? c.function.arguments : JSON.stringify(c.function?.arguments || {}) } }));
+  return { text, usage: json.usage ? { input: json.usage.prompt_tokens, output: json.usage.completion_tokens } : null, toolCalls, assistantMessage };
 }
 
 export function redact(text, ...secrets) {
@@ -182,8 +201,8 @@ export async function callModel(options, fetcher = hostBridge.httpFetch.bind(hos
       return { ok: false, text: '', ms, usage: null, error: res?.status ? errorMessage(res.status, res.json, res.text, apiKey) : redact(res?.error || 'Réseau indisponible.', apiKey) };
     }
     const parsed = parseResponse(options.provider, res.json);
-    if (!parsed.text.trim()) return { ok: false, text: '', ms, usage: parsed.usage, error: 'Réponse vide du modèle.' };
-    return { ok: true, text: parsed.text, ms, usage: parsed.usage, error: '' };
+    if (!parsed.text.trim() && !parsed.toolCalls.length) return { ok: false, text: '', ms, usage: parsed.usage, error: 'Réponse vide du modèle.' };
+    return { ok: true, text: parsed.text, ms, usage: parsed.usage, error: '', toolCalls: parsed.toolCalls, assistantMessage: parsed.assistantMessage };
   } catch (error) {
     return { ok: false, text: '', ms: Date.now() - started, usage: null, error: redact(error.message || String(error), apiKey) };
   }

@@ -44,7 +44,9 @@ describe('Studio IA : fournisseurs par API officielle', () => {
 
   it('parses the three response shapes', () => {
     assert.equal(parseResponse('openai', { choices: [{ message: { content: 'salut' } }], usage: { prompt_tokens: 3, completion_tokens: 5 } }).text, 'salut');
-    assert.deepEqual(parseResponse('anthropic', { content: [{ type: 'text', text: 'a' }, { type: 'text', text: 'b' }], usage: { input_tokens: 1, output_tokens: 2 } }), { text: 'ab', usage: { input: 1, output: 2 } });
+    const anthropic = parseResponse('anthropic', { content: [{ type: 'text', text: 'a' }, { type: 'text', text: 'b' }], usage: { input_tokens: 1, output_tokens: 2 } });
+    assert.equal(anthropic.text, 'ab');
+    assert.deepEqual(anthropic.usage, { input: 1, output: 2 });
     assert.equal(parseResponse('gemini', { candidates: [{ content: { parts: [{ text: 'x', thought: true }, { text: 'y' }] } }] }).text, 'y');
   });
 
