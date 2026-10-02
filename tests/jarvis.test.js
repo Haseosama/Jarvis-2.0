@@ -1900,3 +1900,22 @@ describe('Jarvis 2.0 PC Edition — Core & Binary Asset Suite', () => {
     });
   });
 });
+
+describe('Productivité : suppression des données', () => {
+  const src = fs.readFileSync(new URL('../src/ui/ProductivityPanel.jsx', import.meta.url), 'utf8');
+
+  it('lets the user delete every kind of listed data, with confirmation for bulk wipes and an undo', () => {
+    for (const key of ['calendarEvents', 'expenses', 'subscriptions', 'habits', 'parcels', 'birthdays', 'recipes', 'memories']) {
+      assert.match(src, new RegExp(`(removeById\\('${key}'|clearAll\\('${key}'|memories: \\(data\\.memories)`), `delete wired for ${key}`);
+      assert.match(src, new RegExp(`clearAll\\('${key}'`), `bulk wipe wired for ${key}`);
+    }
+    assert.match(src, /window\.confirm/);
+    assert.match(src, /undoDelete/);
+    assert.equal((src.match(/<DelBtn/g) || []).length, 10);
+  });
+
+  it('defines the delete buttons outside the component so the 1 s timer re-render never swallows a click', () => {
+    assert.ok(src.indexOf('const DelBtn') < src.indexOf('export default function ProductivityPanel'));
+    assert.ok(src.indexOf('const ClearBtn') < src.indexOf('export default function ProductivityPanel'));
+  });
+});

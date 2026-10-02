@@ -1517,3 +1517,15 @@ html, body, #root {
 @media (max-width: 900px) { .poly-body { grid-template-columns: 1fr; overflow: auto; } .poly-canvas-wrap { min-height: 380px; } }
 .llm-brain { display: flex; flex-direction: column; gap: 12px; }
 .llm-brain-notes { margin: 0; padding-left: 18px; line-height: 1.6; }
+
+/* Productivité : suppression */
+.prod-del-btn { background: transparent; border: 1px solid rgba(255, 107, 74, 0.35); color: #ff8a80; border-radius: 6px; padding: 2px 7px; cursor: pointer; font-size: 12px; line-height: 1.4; }
+.prod-del-btn:hover { background: rgba(255, 107, 74, 0.18); }
+.prod-row-actions { display: inline-flex; align-items: center; gap: 8px; }
+.prod-clear-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.prod-clear-btn { background: transparent; border: 1px solid rgba(255, 107, 74, 0.35); color: #ff8a80; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 11.5px; }
+.prod-clear-btn:hover { background: rgba(255, 107, 74, 0.15); }
+.prod-undo-bar { display: flex; align-items: center; gap: 10px; margin: 8px 14px 0; padding: 7px 12px; border-radius: 8px; background: rgba(255, 213, 79, 0.12); border: 1px solid rgba(255, 213, 79, 0.4); font-size: 12.5px; }
+.prod-undo-bar span { flex: 1; }
+.prod-undo-bar button { background: transparent; border: 1px solid rgba(255, 213, 79, 0.5); color: #ffd54f; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+.prod-undo-bar .prod-undo-close { border-color: transparent; padding: 3px 6px; }

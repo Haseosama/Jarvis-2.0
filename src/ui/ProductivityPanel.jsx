@@ -2,9 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { dataStore } from '../core/DataStore.js';
 import { createAndSaveDocument } from '../actions/documentGenerator.js';
 
-export default function ProductivityPanel({ onClose, onNotify }) {
+const DelBtn = ({ onClick, title = 'Supprimer' }) => (
+  <button type="button" className="prod-del-btn" title={title} aria-label={title} onClick={onClick}>🗑</button>
+);
+const ClearBtn = ({ onClick, children }) => (
+  <button type="button" className="prod-clear-btn" onClick={onClick}>{children}</button>
+);
+
+export default function ProductivityPanel({ onClose, onNotify, initialTab = 'tasks' }) {
   const [data, setData] = useState(dataStore.get());
-  const [subTab, setSubTab] = useState('tasks'); // 'tasks' | 'finance' | 'habits' | 'docs' | 'life'
+  const [subTab, setSubTab] = useState(initialTab); // 'tasks' | 'finance' | 'habits' | 'docs' | 'life'
   const [activeList, setActiveList] = useState('courses');
   const [newItemText, setNewItemText] = useState('');
   const [newExpAmount, setNewExpAmount] = useState('');
@@ -17,6 +24,7 @@ export default function ProductivityPanel({ onClose, onNotify }) {
   );
   const [docStatus, setDocStatus] = useState('');
   const [now, setNow] = useState(Date.now());
+  const [undo, setUndo] = useState(null); // { label, previous } : dernière suppression annulable
 
   useEffect(() => {
     const unsub = dataStore.subscribe(setData);
@@ -28,6 +36,27 @@ export default function ProductivityPanel({ onClose, onNotify }) {
   }, []);
 
   const taskItems = data.taskLists?.[activeList] || [];
+
+  // Suppression avec annulation : on garde l'ancienne valeur des clés modifiées.
+  const applyDeletion = (label, patch) => {
+    const previous = {};
+    for (const key of Object.keys(patch)) previous[key] = dataStore.get()[key];
+    dataStore.update(patch);
+    setUndo({ label, previous });
+  };
+  const removeById = (key, id, label) =>
+    applyDeletion(label, { [key]: (dataStore.get()[key] || []).filter((x) => x.id !== id) });
+  const clearAll = (key, what, patch = null) => {
+    const count = patch ? 1 : (dataStore.get()[key] || []).length;
+    if (!count) return;
+    if (!window.confirm(`Supprimer tout : ${what} ? (vous pourrez annuler juste après)`)) return;
+    applyDeletion(`${what} supprimé(e)s`, patch || { [key]: [] });
+  };
+  const undoDelete = () => {
+    if (!undo) return;
+    dataStore.update(undo.previous);
+    setUndo(null);
+  };
 
   const handleAddTask = (e) => {
     e.preventDefault();
@@ -51,7 +80,14 @@ export default function ProductivityPanel({ onClose, onNotify }) {
   const removeTask = (id) => {
     const lists = { ...(data.taskLists || {}) };
     lists[activeList] = (lists[activeList] || []).filter((t) => t.id !== id);
-    dataStore.update({ taskLists: lists });
+    applyDeletion('Tâche supprimée', { taskLists: lists });
+  };
+  const clearTasks = (onlyDone) => {
+    const list = data.taskLists?.[activeList] || [];
+    const kept = onlyDone ? list.filter((t) => !t.done) : [];
+    if (kept.length === list.length) return;
+    if (!onlyDone && !window.confirm(`Vider la liste « ${activeList} » ?`)) return;
+    applyDeletion(onlyDone ? 'Tâches terminées supprimées' : `Liste « ${activeList} » vidée`, { taskLists: { ...(data.taskLists || {}), [activeList]: kept } });
   };
 
   const handleAddExpense = (e) => {
@@ -146,6 +182,13 @@ export default function ProductivityPanel({ onClose, onNotify }) {
         )}
       </div>
 
+      {undo && (
+        <div className="prod-undo-bar" role="status">
+          <span>🗑 {undo.label}</span>
+          <button type="button" onClick={undoDelete}>↩ Annuler</button>
+          <button type="button" className="prod-undo-close" onClick={() => setUndo(null)} aria-label="Fermer">✕</button>
+        </div>
+      )}
       <div className="prod-body">
         {subTab === 'tasks' && (
           <div className="prod-grid-2">
@@ -186,12 +229,17 @@ export default function ProductivityPanel({ onClose, onNotify }) {
                       />
                       <span>{it.text}</span>
                     </label>
-                    <button className="prod-del-btn" onClick={() => removeTask(it.id)}>
-                      ✕
-                    </button>
+                    <DelBtn onClick={() => removeTask(it.id)} />
                   </div>
                 ))}
+                {taskItems.length === 0 && <div className="space-sub">Liste vide.</div>}
               </div>
+              {taskItems.length > 0 && (
+                <div className="prod-clear-row">
+                  {taskItems.some((t) => t.done) && <ClearBtn onClick={() => clearTasks(true)}>Supprimer les terminées</ClearBtn>}
+                  <ClearBtn onClick={() => clearTasks(false)}>Vider la liste</ClearBtn>
+                </div>
+              )}
             </div>
 
             <div className="space-card">
@@ -203,6 +251,7 @@ export default function ProductivityPanel({ onClose, onNotify }) {
                     .map((t) => (
                       <div key={t.id} className="prod-timer-pill">
                         ⏱️ {t.label} : <strong>{Math.ceil((t.endsAt - now) / 1000)}s</strong>
+                        <DelBtn title="Arrêter le minuteur" onClick={() => removeById('timers', t.id, 'Minuteur supprimé')} />
                       </div>
                     ))}
                 </div>
@@ -221,20 +270,34 @@ export default function ProductivityPanel({ onClose, onNotify }) {
                         {ev.location ? `• ${ev.location}` : ''}
                       </div>
                     </div>
+                    <DelBtn onClick={() => removeById('calendarEvents', ev.id, `Événement « ${ev.title} » supprimé`)} />
                   </div>
                 ))}
+                {(data.calendarEvents || []).length === 0 && <div className="space-sub">Aucun événement.</div>}
               </div>
+              {(data.calendarEvents || []).length > 0 && (
+                <div className="prod-clear-row">
+                  {(data.calendarEvents || []).some((ev) => new Date(ev.endIso || ev.startIso).getTime() < now) && (
+                    <ClearBtn onClick={() => applyDeletion('Événements passés supprimés', { calendarEvents: (data.calendarEvents || []).filter((ev) => new Date(ev.endIso || ev.startIso).getTime() >= now) })}>Supprimer les événements passés</ClearBtn>
+                  )}
+                  <ClearBtn onClick={() => clearAll('calendarEvents', 'tout l’agenda')}>Vider l’agenda</ClearBtn>
+                </div>
+              )}
 
               <h4 style={{ marginTop: '14px' }}>🧠 Mémoire à long terme</h4>
               <div className="prod-items">
                 {(data.memories || []).map((m, i) => (
-                  <div key={i} className="space-list-item">
+                  <div key={`${m.key}-${i}`} className="space-list-item">
                     <div>
                       <strong>{m.key}</strong> : {m.value}
                     </div>
+                    <DelBtn onClick={() => applyDeletion(`Souvenir « ${m.key} » supprimé`, { memories: (data.memories || []).filter((_, j) => j !== i) })} />
                   </div>
                 ))}
               </div>
+              {(data.memories || []).length > 0 && (
+                <div className="prod-clear-row"><ClearBtn onClick={() => clearAll('memories', 'toute la mémoire à long terme')}>Tout oublier</ClearBtn></div>
+              )}
             </div>
           </div>
         )}
@@ -277,10 +340,17 @@ export default function ProductivityPanel({ onClose, onNotify }) {
                         {ex.category} • {ex.date}
                       </div>
                     </div>
-                    <span className="space-tag">{Number(ex.amount).toFixed(2)} €</span>
+                    <span className="prod-row-actions">
+                      <span className="space-tag">{Number(ex.amount).toFixed(2)} €</span>
+                      <DelBtn onClick={() => removeById('expenses', ex.id, `Dépense « ${ex.label} » supprimée`)} />
+                    </span>
                   </div>
                 ))}
+                {(data.expenses || []).length === 0 && <div className="space-sub">Aucune dépense.</div>}
               </div>
+              {(data.expenses || []).length > 0 && (
+                <div className="prod-clear-row"><ClearBtn onClick={() => clearAll('expenses', 'toutes les dépenses')}>Effacer toutes les dépenses</ClearBtn></div>
+              )}
             </div>
 
             <div className="space-card">
@@ -294,10 +364,17 @@ export default function ProductivityPanel({ onClose, onNotify }) {
                         {sub.category} • Prélèvement le {sub.dayOfMonth} du mois
                       </div>
                     </div>
-                    <span className="space-tag">{Number(sub.amount).toFixed(2)} €</span>
+                    <span className="prod-row-actions">
+                      <span className="space-tag">{Number(sub.amount).toFixed(2)} €</span>
+                      <DelBtn onClick={() => removeById('subscriptions', sub.id, `Abonnement « ${sub.name} » supprimé`)} />
+                    </span>
                   </div>
                 ))}
+                {(data.subscriptions || []).length === 0 && <div className="space-sub">Aucun abonnement.</div>}
               </div>
+              {(data.subscriptions || []).length > 0 && (
+                <div className="prod-clear-row"><ClearBtn onClick={() => clearAll('subscriptions', 'tous les abonnements')}>Supprimer tous les abonnements</ClearBtn></div>
+              )}
             </div>
           </div>
         )}
@@ -319,11 +396,17 @@ export default function ProductivityPanel({ onClose, onNotify }) {
                         />
                         <strong>{h.name}</strong>
                       </label>
-                      <span className="space-tag">🔥 {h.streak || 0} jours</span>
+                      <span className="prod-row-actions">
+                        <span className="space-tag">🔥 {h.streak || 0} jours</span>
+                        <DelBtn onClick={() => removeById('habits', h.id, `Habitude « ${h.name} » supprimée`)} />
+                      </span>
                     </div>
                   );
                 })}
               </div>
+              {(data.habits || []).length > 0 && (
+                <div className="prod-clear-row"><ClearBtn onClick={() => clearAll('habits', 'toutes les habitudes')}>Supprimer toutes les habitudes</ClearBtn></div>
+              )}
 
               <h4 style={{ marginTop: '14px' }}>📦 Suivi de colis</h4>
               <div className="prod-items">
@@ -333,9 +416,13 @@ export default function ProductivityPanel({ onClose, onNotify }) {
                       <strong>{p.label} ({p.carrier} : {p.number})</strong>
                       <div className="space-sub">{p.status}</div>
                     </div>
+                    <DelBtn onClick={() => removeById('parcels', p.id, `Colis « ${p.label} » supprimé`)} />
                   </div>
                 ))}
               </div>
+              {(data.parcels || []).length > 0 && (
+                <div className="prod-clear-row"><ClearBtn onClick={() => clearAll('parcels', 'tous les colis')}>Supprimer tous les colis</ClearBtn></div>
+              )}
             </div>
 
             <div className="space-card">
@@ -343,17 +430,27 @@ export default function ProductivityPanel({ onClose, onNotify }) {
               {(data.birthdays || []).map((b) => (
                 <div key={b.id} className="space-list-item">
                   <strong>🎂 {b.name}</strong>
-                  <span className="space-tag">{b.date}</span>
+                  <span className="prod-row-actions">
+                    <span className="space-tag">{b.date}</span>
+                    <DelBtn onClick={() => removeById('birthdays', b.id, `Anniversaire de ${b.name} supprimé`)} />
+                  </span>
                 </div>
               ))}
+              {(data.birthdays || []).length > 0 && (
+                <div className="prod-clear-row"><ClearBtn onClick={() => clearAll('birthdays', 'tous les anniversaires')}>Supprimer tous les anniversaires</ClearBtn></div>
+              )}
               {(data.recipes || []).map((r) => (
                 <div key={r.id} className="space-list-item" style={{ marginTop: '8px' }}>
                   <div>
                     <strong>🍳 {r.title} ({r.servings} pers. • {r.prepMinutes} min)</strong>
-                    <div className="space-sub">{r.ingredients.join(', ')}</div>
+                    <div className="space-sub">{(r.ingredients || []).join(', ')}</div>
                   </div>
+                  <DelBtn onClick={() => removeById('recipes', r.id, `Recette « ${r.title} » supprimée`)} />
                 </div>
               ))}
+              {(data.recipes || []).length > 0 && (
+                <div className="prod-clear-row"><ClearBtn onClick={() => clearAll('recipes', 'toutes les recettes')}>Supprimer toutes les recettes</ClearBtn></div>
+              )}
             </div>
           </div>
         )}
