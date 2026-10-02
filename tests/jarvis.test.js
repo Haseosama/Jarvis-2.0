@@ -1919,3 +1919,125 @@ describe('Productivité : suppression des données', () => {
     assert.ok(src.indexOf('const ClearBtn') < src.indexOf('export default function ProductivityPanel'));
   });
 });
+
+describe('Configuration : les clés API ne sont jamais écrites en clair', () => {
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 5));
+  async function withStubs(run, { secretOk = true, disk = null, secrets = {} } = {}) {
+    const realLocal = globalThis.localStorage;
+    const realStorageGet = hostBridge.storageGet;
+    const realStorageSet = hostBridge.storageSet;
+    const realGetSecret = hostBridge.getSecret;
+    const realSetSecret = hostBridge.setSecret;
+    const local = new Map();
+    const written = [];
+    const secretWrites = [];
+    globalThis.localStorage = { getItem: (k) => local.get(k) ?? null, setItem: (k, v) => local.set(k, String(v)), removeItem: (k) => local.delete(k) };
+    hostBridge.storageGet = async () => disk;
+    hostBridge.storageSet = async (key, value) => { written.push({ key, value: JSON.parse(JSON.stringify(value)) }); return true; };
+    hostBridge.getSecret = async (slot, fallback) => (slot in secrets ? secrets[slot] : fallback);
+    hostBridge.setSecret = async (slot, value) => { secretWrites.push({ slot, value }); return secretOk; };
+    const snapshot = configStore.get();
+    try {
+      await run({ local, written, secretWrites });
+    } finally {
+      configStore.state = snapshot;
+      configStore._secretsFailed = false;
+      globalThis.localStorage = realLocal;
+      Object.assign(hostBridge, { storageGet: realStorageGet, storageSet: realStorageSet, getSecret: realGetSecret, setSecret: realSetSecret });
+    }
+  }
+
+  it('scrubs apiKeys and haToken from the plain copies and keeps them in the encrypted slots', async () => {
+    await withStubs(async ({ local, written, secretWrites }) => {
+      configStore.update({ apiKeys: ['AIza-secret-1', '', ''], haToken: 'ha-secret' });
+      await flush();
+      const stored = local.get('jarvis2_config_v1');
+      assert.ok(!stored.includes('AIza-secret-1') && !stored.includes('ha-secret'), 'no secret in localStorage');
+      assert.ok(written.every((w) => !JSON.stringify(w.value).includes('AIza-secret-1') && !JSON.stringify(w.value).includes('ha-secret')), 'no secret in jarvis-store.json');
+      assert.deepEqual(secretWrites.map((w) => w.slot).sort(), ['apiKeys', 'haToken']);
+      assert.equal(configStore.getActiveApiKey(), 'AIza-secret-1', 'the in-memory key still works');
+    });
+  });
+
+  it('migrates plaintext keys from an old install, then rewrites the config without them', async () => {
+    const old = { apiKeys: ['AIza-old-key', '', ''], haToken: 'ha-old', userCity: 'Lyon' };
+    await withStubs(async ({ local, written, secretWrites }) => {
+      await configStore.initSecrets();
+      assert.deepEqual(secretWrites.map((w) => w.slot).sort(), ['apiKeys', 'haToken']);
+      assert.equal(configStore.getActiveApiKey(), 'AIza-old-key');
+      assert.equal(configStore.get().userCity, 'Lyon');
+      assert.ok(!local.get('jarvis2_config_v1').includes('AIza-old-key'));
+      assert.ok(!JSON.stringify(written.at(-1).value).includes('ha-old'));
+    }, { disk: old });
+  });
+
+  it('falls back to the old storage (never loses a key) when the encrypted write fails', async () => {
+    await withStubs(async ({ local }) => {
+      configStore.update({ apiKeys: ['AIza-keep-me', '', ''] });
+      await flush();
+      assert.ok(local.get('jarvis2_config_v1').includes('AIza-keep-me'));
+    }, { secretOk: false });
+  });
+});
+
+describe('Productivité : ajout de données', () => {
+  const src = fs.readFileSync(new URL('../src/ui/ProductivityPanel.jsx', import.meta.url), 'utf8');
+  it('has add forms for agenda events, subscriptions, habits and birthdays', () => {
+    for (const fn of ['addEvent', 'addSubscription', 'addHabit', 'addBirthday']) {
+      assert.match(src, new RegExp(`const ${fn} = `));
+      assert.match(src, new RegExp(`onSubmit=\\{${fn}\\}`));
+    }
+    assert.match(src, /type="datetime-local"/);
+    assert.ok(src.includes('\\d{4}') && !src.includes('\\\\d{4}'), 'the date regex is not double-escaped');
+    assert.match(src, /`\$\{m\[2\]\}-\$\{m\[3\]\}`/, 'birthdays are stored as MM-DD like the existing data');
+  });
+});
+
+describe('Budgets par mois', () => {
+  const expenses = [
+    { id: '1', amount: 40, category: 'courses', date: '2026-09-15' },
+    { id: '2', amount: 20.5, category: 'courses', date: '2026-10-02' },
+    { id: '3', amount: 15, category: 'repas', date: '2026-10-02' },
+    { id: '4', amount: 99, category: 'loisirs', date: '2026-10-30' },
+  ];
+  it('sums only the chosen month, by category, and flags exceeded budgets', async () => {
+    const { summarizeMonth, shiftMonth, expensesOfMonth, monthKey } = await import('../src/core/finance.js');
+    const sum = summarizeMonth(expenses, { global: 120, courses: 20, repas: 50 }, '2026-10');
+    assert.equal(sum.total, 134.5);
+    assert.deepEqual(sum.categories.map((c) => [c.category, c.spent, c.over]), [['loisirs', 99, false], ['courses', 20.5, true], ['repas', 15, false]]);
+    assert.equal(sum.overGlobal, true);
+    assert.equal(summarizeMonth(expenses, {}, '2026-09').total, 40);
+    assert.equal(summarizeMonth(expenses, { global: 0 }, '2026-10').overGlobal, false, 'no budget = never exceeded');
+    assert.equal(expensesOfMonth(expenses, '2026-08').length, 0);
+    assert.equal(shiftMonth('2026-01', -1), '2025-12');
+    assert.equal(shiftMonth('2026-12', 1), '2027-01');
+    assert.match(monthKey(new Date(2026, 9, 2)), /^2026-10$/);
+  });
+
+  it('answers the voice summary for the current month only and for a requested month', async () => {
+    const { monthKey } = await import('../src/core/finance.js');
+    const { dataStore } = await import('../src/core/DataStore.js');
+    const reg = new ToolRegistry();
+    const real = dataStore.get();
+    const today = new Date().toISOString().slice(0, 10);
+    const lastMonth = new Date(); lastMonth.setDate(1); lastMonth.setMonth(lastMonth.getMonth() - 1);
+    const lastKey = monthKey(lastMonth);
+    dataStore.data = { ...real, budgets: { global: 100, courses: 10 }, expenses: [{ id: 'a', amount: 30, category: 'courses', date: today }, { id: 'b', amount: 500, category: 'loisirs', date: `${lastKey}-10` }] };
+    try {
+      const now = await reg.execute('expenses', { action: 'summary' });
+      assert.match(now, /30\.00 €/);
+      assert.match(now, /courses : 30\.00 € \/ budget 10 € ⚠️ dépassé/);
+      assert.ok(!now.includes('500'));
+      const past = await reg.execute('expenses', { action: 'summary', month: lastKey });
+      assert.match(past, /500\.00 €/);
+    } finally { dataStore.data = real; }
+  });
+
+  it('shows custom task lists and lets the user create and delete them', () => {
+    const src = fs.readFileSync(new URL('../src/ui/ProductivityPanel.jsx', import.meta.url), 'utf8');
+    assert.match(src, /listNames\.map/);
+    assert.match(src, /onSubmit=\{addList\}/);
+    assert.match(src, /deleteList/);
+    assert.match(src, /onSubmit=\{addMemory\}/);
+  });
+});

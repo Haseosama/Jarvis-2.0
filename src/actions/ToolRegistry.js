@@ -1,6 +1,7 @@
 // Complete Tool Registry for Jarvis 2.0 PC Edition
 // Adapts Jarvis-Android v0.9.53 + Jarvis-Pc tools to standalone PC desktop
 
+import { monthKey, monthLabel, summarizeMonth } from '../core/finance.js';
 import { hostBridge } from '../core/hostBridge.js';
 import { configStore, ALL_VOICES, VOICE_DESC } from '../core/ConfigStore.js';
 import { dataStore } from '../core/DataStore.js';
@@ -1114,6 +1115,7 @@ export class ToolRegistry {
           amount: { type: 'NUMBER', description: 'Montant en euros.' },
           category: { type: 'STRING', description: 'courses, repas, transport, loisirs, logement, autre' },
           label: { type: 'STRING', description: 'Description de la dépense.' },
+          month: { type: 'STRING', description: 'Pour summary : mois au format AAAA-MM (défaut : le mois en cours).' },
         },
         required: ['action'],
       },
@@ -1141,15 +1143,13 @@ export class ToolRegistry {
           dataStore.update({ budgets });
           return `Budget « ${cat} » fixé à ${Number(args.amount).toFixed(2)} €/mois.`;
         }
-        const total = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
-        const byCat = {};
-        for (const e of expenses) {
-          byCat[e.category] = (byCat[e.category] || 0) + Number(e.amount || 0);
-        }
-        const catLines = Object.entries(byCat)
-          .map(([c, val]) => `• ${c} : ${val.toFixed(2)} €${budgets[c] ? ` / budget ${budgets[c]} €` : ''}`)
-          .join('\n');
-        return `Total des dépenses : ${total.toFixed(2)} € (Budget global : ${budgets.global || 1200} €)\n${catLines}`;
+        const month = /^\d{4}-\d{2}$/.test(String(args.month || '')) ? String(args.month) : monthKey();
+        const sum = summarizeMonth(expenses, budgets, month);
+        const total = sum.total;
+        const catLines = sum.categories
+          .map((c) => `• ${c.category} : ${c.spent.toFixed(2)} €${c.budget ? ` / budget ${c.budget} €${c.over ? ' ⚠️ dépassé' : ''}` : ''}`)
+          .join('\n') || '• Aucune dépense ce mois-ci.';
+        return `Total des dépenses de ${monthLabel(month)} : ${total.toFixed(2)} € (Budget global : ${budgets.global || 1200} €${sum.overGlobal ? ' ⚠️ dépassé' : ''})\n${catLines}`;
       },
     });
 

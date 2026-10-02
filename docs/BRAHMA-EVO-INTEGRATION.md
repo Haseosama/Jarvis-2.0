@@ -75,7 +75,7 @@
 - Interface : réglages Tuya (Access ID, secret, centre de données, test de connexion) dans Paramètres > Système PC & Domotique; intentions locales « allume/éteins la lumière/lampe/prise… » et « liste mes appareils connectés ».
 - Vérification : 6 tests (vecteurs de signature, flux client simulé, appariement de noms, Home Assistant, Tuya, intentions); build OK.
 - Non vérifié : appels réels à Tuya Cloud (le code de liste via `/v1.0/iot-01/associated-users/devices` suppose un compte Smart Life lié) et à une instance Home Assistant; rendu des nouveaux réglages. Hors périmètre : API locale Tuya sans cloud, découverte réseau.
-- Remarque : le jeton Home Assistant existant (`haToken`) reste enregistré aussi dans la configuration locale; à migrer vers le stockage chiffré dans une tranche ultérieure.
+- Le jeton Home Assistant (`haToken`) et les clés Gemini (`apiKeys`) ne sont écrits que dans le stockage chiffré (`safeStorage`) ; la configuration en clair (`jarvis-store.json`, `localStorage`) n'en contient plus. Les anciennes installations sont migrées au démarrage ; si l'écriture chiffrée échoue, Jarvis garde l'ancien stockage plutôt que de perdre la clé.
 
 ## Tranche Spotify (bibliothèque et playlists)
 

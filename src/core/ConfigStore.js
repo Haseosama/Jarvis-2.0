@@ -178,6 +178,11 @@ const DEFAULT_CONFIG = {
   confirmDestructiveActions: true,
 };
 
+/** Copie de la configuration sans secrets : c'est elle qui est écrite en clair (localStorage, jarvis-store.json). */
+export function scrubSecrets(state) {
+  return { ...state, apiKeys: (state.apiKeys || []).map(() => ''), haToken: '' };
+}
+
 class ConfigStore {
   constructor() {
     this.state = { ...DEFAULT_CONFIG };
@@ -226,19 +231,23 @@ class ConfigStore {
           avatarSculpt: normalizeSculpt(diskConfig.avatarSculpt || this.state.avatarSculpt),
           avatarSculptFaces: normalizeSculptFaces(diskConfig.avatarSculptFaces || this.state.avatarSculptFaces),
         };
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
-        } catch {
-          // ignore
-        }
       }
 
+      // Les clés ne vivent que dans le stockage chiffré. Anciennes installations : on migre les clés trouvées en clair,
+      // puis on réécrit la configuration sans elles (seulement si l'écriture chiffrée a réussi).
       const savedKeys = await hostBridge.getSecret('apiKeys', null);
       if (Array.isArray(savedKeys) && savedKeys.some(Boolean)) {
         this.state.apiKeys = savedKeys;
+      } else if ((this.state.apiKeys || []).some(Boolean)) {
+        if (!(await hostBridge.setSecret('apiKeys', this.state.apiKeys))) this._secretsFailed = true;
       }
       const haToken = await hostBridge.getSecret('haToken', '');
-      if (haToken) this.state.haToken = haToken;
+      if (haToken) {
+        this.state.haToken = haToken;
+      } else if (this.state.haToken) {
+        if (!(await hostBridge.setSecret('haToken', this.state.haToken))) this._secretsFailed = true;
+      }
+      this._persist();
       this._notify();
     } catch {
       // ignore
@@ -265,20 +274,34 @@ class ConfigStore {
       nextPatch.avatarMode = '3d';
     }
     this.state = { ...this.state, ...nextPatch };
+    this._persist();
+    const saveSecret = (slot, value) => {
+      Promise.resolve(hostBridge.setSecret(slot, value))
+        .then((ok) => {
+          if (ok === false) {
+            this._secretsFailed = true; // pas de perte de clé : on retombe sur l'ancien stockage
+            this._persist();
+          }
+        })
+        .catch(() => {
+          this._secretsFailed = true;
+          this._persist();
+        });
+    };
+    if (patch.apiKeys) saveSecret('apiKeys', this.state.apiKeys);
+    if (patch.haToken !== undefined) saveSecret('haToken', this.state.haToken);
+    this._notify();
+    return this.state;
+  }
+
+  _persist() {
+    const toSave = this._secretsFailed ? this.state : scrubSecrets(this.state);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
     } catch {
       // ignore
     }
-    hostBridge.storageSet('config_v1', this.state).catch(() => {});
-    if (patch.apiKeys) {
-      hostBridge.setSecret('apiKeys', this.state.apiKeys).catch(() => {});
-    }
-    if (patch.haToken !== undefined) {
-      hostBridge.setSecret('haToken', this.state.haToken).catch(() => {});
-    }
-    this._notify();
-    return this.state;
+    Promise.resolve(hostBridge.storageSet('config_v1', toSave)).catch(() => {});
   }
 
   getActiveApiKey() {

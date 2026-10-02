@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { dataStore } from '../core/DataStore.js';
+import { expensesOfMonth, monthKey, monthLabel, shiftMonth, summarizeMonth } from '../core/finance.js';
 import { createAndSaveDocument } from '../actions/documentGenerator.js';
 
 const DelBtn = ({ onClick, title = 'Supprimer' }) => (
@@ -24,6 +25,10 @@ export default function ProductivityPanel({ onClose, onNotify, initialTab = 'tas
   );
   const [docStatus, setDocStatus] = useState('');
   const [now, setNow] = useState(Date.now());
+  const [draft, setDraft] = useState({}); // champs des formulaires d'ajout
+  const field = (k) => ({ value: draft[k] || '', onChange: (e) => setDraft((x) => ({ ...x, [k]: e.target.value })) });
+  const clearDraft = (...keys) => setDraft((x) => Object.fromEntries(Object.entries(x).filter(([k]) => !keys.includes(k))));
+  const [month, setMonth] = useState(monthKey());
   const [undo, setUndo] = useState(null); // { label, previous } : dernière suppression annulable
 
   useEffect(() => {
@@ -35,7 +40,25 @@ export default function ProductivityPanel({ onClose, onNotify, initialTab = 'tas
     };
   }, []);
 
+  const BASE_LISTS = ['courses', 'todo', 'travail'];
+  const listNames = [...new Set([...BASE_LISTS, ...Object.keys(data.taskLists || {})])];
   const taskItems = data.taskLists?.[activeList] || [];
+  const addList = (e) => {
+    e.preventDefault();
+    const name = (draft.listName || '').trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 30);
+    if (!name || name === '__proto__' || name === 'constructor') return;
+    if (!(name in (data.taskLists || {}))) dataStore.update({ taskLists: { ...(data.taskLists || {}), [name]: [] } });
+    setActiveList(name);
+    clearDraft('listName');
+  };
+  const deleteList = () => {
+    if (BASE_LISTS.includes(activeList)) return;
+    const lists = { ...(data.taskLists || {}) };
+    if ((lists[activeList] || []).length && !window.confirm(`Supprimer la liste « ${activeList} » et ses ${lists[activeList].length} élément(s) ?`)) return;
+    delete lists[activeList];
+    applyDeletion(`Liste « ${activeList} » supprimée`, { taskLists: lists });
+    setActiveList('todo');
+  };
 
   // Suppression avec annulation : on garde l'ancienne valeur des clés modifiées.
   const applyDeletion = (label, patch) => {
@@ -90,6 +113,45 @@ export default function ProductivityPanel({ onClose, onNotify, initialTab = 'tas
     applyDeletion(onlyDone ? 'Tâches terminées supprimées' : `Liste « ${activeList} » vidée`, { taskLists: { ...(data.taskLists || {}), [activeList]: kept } });
   };
 
+  const addEvent = (e) => {
+    e.preventDefault();
+    const title = (draft.evTitle || '').trim();
+    const start = new Date(draft.evStart || '');
+    if (!title || Number.isNaN(start.getTime())) return;
+    const end = new Date(start.getTime() + 3600000);
+    const ev = { id: `ev_${Date.now()}`, title, startIso: start.toISOString(), endIso: end.toISOString(), location: (draft.evLoc || '').trim(), notes: '' };
+    dataStore.update({ calendarEvents: [...(dataStore.get().calendarEvents || []), ev].sort((a, b) => new Date(a.startIso) - new Date(b.startIso)) });
+    clearDraft('evTitle', 'evStart', 'evLoc');
+  };
+  const addSubscription = (e) => {
+    e.preventDefault();
+    const name = (draft.subName || '').trim();
+    const amount = parseFloat(draft.subAmount);
+    const day = Math.min(31, Math.max(1, parseInt(draft.subDay, 10) || 1));
+    if (!name || Number.isNaN(amount) || amount <= 0) return;
+    dataStore.update({ subscriptions: [...(dataStore.get().subscriptions || []), { id: `sub_${Date.now()}`, name, amount, period: 'mensuel', category: 'autre', dayOfMonth: day }] });
+    clearDraft('subName', 'subAmount', 'subDay');
+  };
+  const addMemory = (e) => {
+    e.preventDefault();
+    if (dataStore.rememberFact(draft.memKey, draft.memValue)) clearDraft('memKey', 'memValue');
+  };
+  const addHabit = (e) => {
+    e.preventDefault();
+    const name = (draft.habitName || '').trim();
+    if (!name) return;
+    dataStore.update({ habits: [...(dataStore.get().habits || []), { id: `h_${Date.now()}`, name, streak: 0, history: [] }] });
+    clearDraft('habitName');
+  };
+  const addBirthday = (e) => {
+    e.preventDefault();
+    const name = (draft.bdName || '').trim();
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(draft.bdDate || '');
+    if (!name || !m) return;
+    dataStore.update({ birthdays: [...(dataStore.get().birthdays || []), { id: `b_${Date.now()}`, name, date: `${m[2]}-${m[3]}`, year: Number(m[1]) }] });
+    clearDraft('bdName', 'bdDate');
+  };
+
   const handleAddExpense = (e) => {
     e.preventDefault();
     const amt = parseFloat(newExpAmount);
@@ -142,7 +204,16 @@ export default function ProductivityPanel({ onClose, onNotify, initialTab = 'tas
     }
   };
 
-  const totalExpenses = (data.expenses || []).reduce((s, e) => s + Number(e.amount || 0), 0);
+  const summary = summarizeMonth(data.expenses, data.budgets, month);
+  const monthExpenses = expensesOfMonth(data.expenses, month);
+  const totalExpenses = summary.total;
+  const setBudget = (cat, value) => {
+    const amount = parseFloat(value);
+    const budgets = { ...(dataStore.get().budgets || {}) };
+    if (Number.isNaN(amount) || amount <= 0) delete budgets[cat];
+    else budgets[cat] = amount;
+    dataStore.update({ budgets });
+  };
   const totalSubs = (data.subscriptions || []).reduce((s, sub) => s + Number(sub.amount || 0), 0);
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -196,7 +267,7 @@ export default function ProductivityPanel({ onClose, onNotify, initialTab = 'tas
               <div className="prod-card-head">
                 <h4>📝 Listes ({activeList})</h4>
                 <div className="space-sat-pills">
-                  {['courses', 'todo', 'travail'].map((ln) => (
+                  {listNames.map((ln) => (
                     <button
                       key={ln}
                       className={`space-pill ${activeList === ln ? 'active' : ''}`}
@@ -207,6 +278,12 @@ export default function ProductivityPanel({ onClose, onNotify, initialTab = 'tas
                   ))}
                 </div>
               </div>
+
+              <form className="prod-inline-form" onSubmit={addList}>
+                <input type="text" placeholder="Nouvelle liste (ex. voyage)…" {...field('listName')} />
+                <button type="submit">+ Liste</button>
+                {!BASE_LISTS.includes(activeList) && <button type="button" className="prod-clear-btn" onClick={deleteList}>🗑 Supprimer cette liste</button>}
+              </form>
 
               <form className="prod-inline-form" onSubmit={handleAddTask}>
                 <input
@@ -257,6 +334,12 @@ export default function ProductivityPanel({ onClose, onNotify, initialTab = 'tas
                 </div>
               )}
 
+              <form className="prod-inline-form" onSubmit={addEvent}>
+                <input type="text" placeholder="Nouvel événement…" {...field('evTitle')} />
+                <input type="datetime-local" {...field('evStart')} />
+                <input type="text" placeholder="Lieu (facultatif)" {...field('evLoc')} />
+                <button type="submit">+ Ajouter</button>
+              </form>
               <div className="prod-items">
                 {(data.calendarEvents || []).map((ev) => (
                   <div key={ev.id} className="space-list-item">
@@ -285,6 +368,11 @@ export default function ProductivityPanel({ onClose, onNotify, initialTab = 'tas
               )}
 
               <h4 style={{ marginTop: '14px' }}>🧠 Mémoire à long terme</h4>
+              <form className="prod-inline-form" onSubmit={addMemory}>
+                <input type="text" placeholder="Sujet (ex. allergie)…" {...field('memKey')} />
+                <input type="text" placeholder="Ce que Jarvis doit retenir…" {...field('memValue')} />
+                <button type="submit">+ Retenir</button>
+              </form>
               <div className="prod-items">
                 {(data.memories || []).map((m, i) => (
                   <div key={`${m.key}-${i}`} className="space-list-item">
@@ -305,7 +393,39 @@ export default function ProductivityPanel({ onClose, onNotify, initialTab = 'tas
         {subTab === 'finance' && (
           <div className="prod-grid-2">
             <div className="space-card">
-              <h4>💶 Dépenses du mois ({totalExpenses.toFixed(2)} € / {data.budgets?.global || 1200} €)</h4>
+              <h4>💶 Dépenses de {monthLabel(month)} ({totalExpenses.toFixed(2)} € / {data.budgets?.global || 1200} €)</h4>
+              <div className="prod-month-nav">
+                <button type="button" className="space-pill" onClick={() => setMonth(shiftMonth(month, -1))}>◀</button>
+                <span>{monthLabel(month)}</span>
+                <button type="button" className="space-pill" disabled={month >= monthKey()} onClick={() => setMonth(shiftMonth(month, 1))}>▶</button>
+              </div>
+              <div className={`prod-bar ${summary.overGlobal ? 'over' : ''}`} title="Budget global">
+                <div style={{ width: `${Math.min(100, (totalExpenses / (data.budgets?.global || 1200)) * 100)}%` }} />
+              </div>
+              {summary.categories.map((c) => (
+                <div key={c.category} className="prod-cat-row">
+                  <span>{c.category}</span>
+                  <div className={`prod-bar small ${c.over ? 'over' : ''}`}>
+                    <div style={{ width: `${c.budget ? Math.min(100, (c.spent / c.budget) * 100) : 100}%` }} />
+                  </div>
+                  <span className="space-sub">{c.spent.toFixed(2)} €{c.budget ? ` / ${c.budget} €` : ''}{c.over ? ' ⚠️' : ''}</span>
+                  <input
+                    className="prod-budget-input"
+                    type="number"
+                    min="0"
+                    step="10"
+                    placeholder="budget"
+                    title={`Budget mensuel « ${c.category} » (vide = aucun)`}
+                    defaultValue={c.budget || ''}
+                    key={`${c.category}-${c.budget}`}
+                    onBlur={(e) => setBudget(c.category, e.target.value)}
+                  />
+                </div>
+              ))}
+              <div className="prod-cat-row">
+                <span>budget global</span>
+                <input className="prod-budget-input" type="number" min="0" step="50" defaultValue={data.budgets?.global || 1200} key={`g-${data.budgets?.global}`} onBlur={(e) => setBudget('global', e.target.value)} />
+              </div>
               <form className="prod-inline-form" onSubmit={handleAddExpense}>
                 <input
                   type="number"
@@ -332,7 +452,7 @@ export default function ProductivityPanel({ onClose, onNotify, initialTab = 'tas
               </form>
 
               <div className="prod-items">
-                {(data.expenses || []).map((ex) => (
+                {monthExpenses.map((ex) => (
                   <div key={ex.id} className="space-list-item">
                     <div>
                       <strong>{ex.label}</strong>
@@ -346,7 +466,7 @@ export default function ProductivityPanel({ onClose, onNotify, initialTab = 'tas
                     </span>
                   </div>
                 ))}
-                {(data.expenses || []).length === 0 && <div className="space-sub">Aucune dépense.</div>}
+                {monthExpenses.length === 0 && <div className="space-sub">Aucune dépense ce mois-ci.</div>}
               </div>
               {(data.expenses || []).length > 0 && (
                 <div className="prod-clear-row"><ClearBtn onClick={() => clearAll('expenses', 'toutes les dépenses')}>Effacer toutes les dépenses</ClearBtn></div>
@@ -355,6 +475,12 @@ export default function ProductivityPanel({ onClose, onNotify, initialTab = 'tas
 
             <div className="space-card">
               <h4>🔄 Abonnements récurrents ({totalSubs.toFixed(2)} €/mois)</h4>
+              <form className="prod-inline-form" onSubmit={addSubscription}>
+                <input type="text" placeholder="Abonnement…" {...field('subName')} />
+                <input type="number" step="0.01" placeholder="€/mois" style={{ maxWidth: '90px' }} {...field('subAmount')} />
+                <input type="number" min="1" max="31" placeholder="Jour" style={{ maxWidth: '70px' }} {...field('subDay')} />
+                <button type="submit">+ Ajouter</button>
+              </form>
               <div className="prod-items">
                 {(data.subscriptions || []).map((sub) => (
                   <div key={sub.id} className="space-list-item">
@@ -383,6 +509,10 @@ export default function ProductivityPanel({ onClose, onNotify, initialTab = 'tas
           <div className="prod-grid-2">
             <div className="space-card">
               <h4>🔥 Habitudes quotidiennes</h4>
+              <form className="prod-inline-form" onSubmit={addHabit}>
+                <input type="text" placeholder="Nouvelle habitude…" {...field('habitName')} />
+                <button type="submit">+ Ajouter</button>
+              </form>
               <div className="prod-items">
                 {(data.habits || []).map((h) => {
                   const done = (h.history || []).includes(todayStr);
@@ -427,6 +557,11 @@ export default function ProductivityPanel({ onClose, onNotify, initialTab = 'tas
 
             <div className="space-card">
               <h4>🎂 Anniversaires & 🍳 Recettes</h4>
+              <form className="prod-inline-form" onSubmit={addBirthday}>
+                <input type="text" placeholder="Prénom…" {...field('bdName')} />
+                <input type="date" {...field('bdDate')} />
+                <button type="submit">+ Ajouter</button>
+              </form>
               {(data.birthdays || []).map((b) => (
                 <div key={b.id} className="space-list-item">
                   <strong>🎂 {b.name}</strong>
