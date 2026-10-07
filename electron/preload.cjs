@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('jarvisHost', {
   spotifyAuthorize: (payload) => ipcRenderer.invoke('jarvis:spotify-authorize', payload),
   googleAuthorize: (payload) => ipcRenderer.invoke('jarvis:google-authorize', payload),
   skillRun: (payload) => ipcRenderer.invoke('jarvis:skill-run', payload),
+  browser: (payload) => ipcRenderer.invoke('jarvis:browser', payload),
   remoteStatus: () => ipcRenderer.invoke('jarvis:remote-status'),
   remoteEnable: (enabled) => ipcRenderer.invoke('jarvis:remote-enable', enabled),
   remoteNewKey: () => ipcRenderer.invoke('jarvis:remote-new-key'),

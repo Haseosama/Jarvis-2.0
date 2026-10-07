@@ -704,6 +704,19 @@ export const hostBridge = {
       };
     }
   },
+  // ── Navigateur piloté par Playwright (electron/browserControl.cjs) ──
+
+  async browser(payload = {}) {
+    if (!hasElectron() || typeof window.jarvisHost.browser !== 'function') {
+      return { ok: false, text: 'Le navigateur piloté n’existe que dans l’application de bureau Jarvis 2.0.' };
+    }
+    try {
+      return await window.jarvisHost.browser(payload);
+    } catch (e) {
+      return { ok: false, text: `Le navigateur n'a pas pu le faire : ${e.message || e}` };
+    }
+  },
+
   // ── Contrôle à distance depuis Jarvis Android (electron/remoteServer.cjs) ──
 
   async remote(action, arg) {

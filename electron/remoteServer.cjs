@@ -8,7 +8,8 @@
 //  - le jeton d'appareil redonne un jeton de session sans nouveau code (POST /api/device-login). Ici il est conservé sur
 //    le disque (empreinte seulement), donc le téléphone reste appairé après un redémarrage de Jarvis ;
 //  - un ordre : POST /api/command {"enc": base64(IV ‖ AES-256-CBC(texte))}, clé AES = SHA-256(code ‖ "JARVIS-DASHBOARD-v1") ;
-//  - les réponses de Jarvis repartent sur le WebSocket /ws?token= en {"type":"log","speaker":"jarvis","text":…}.
+//  - les réponses de Jarvis repartent sur le WebSocket /ws?token= en {"type":"log","speaker":"jarvis","text":…} ;
+//  - le navigateur Playwright du PC : POST /api/browser, même chiffrement, l'action en JSON ; la réponse revient tout de suite.
 // Le certificat est fabriqué ici une fois (aucune dépendance) ; le téléphone l'épingle à l'appairage.
 
 const https = require('https');
@@ -164,7 +165,7 @@ function wsParse(buf) {
 
 // ── Serveur ────────────────────────────────────────────────────────────────────
 
-function createRemoteServer({ dataDir, onCommand = () => {}, onEvent = () => {}, port = PORT, now = () => Date.now() } = {}) {
+function createRemoteServer({ dataDir, onCommand = () => {}, onEvent = () => {}, onBrowser = null, port = PORT, now = () => Date.now() } = {}) {
   const certDir = path.join(dataDir, 'remote');
   const devicesFile = path.join(certDir, 'devices.json');
   const pending = new Map(); // code → expiration
@@ -302,6 +303,21 @@ function createRemoteServer({ dataDir, onCommand = () => {}, onEvent = () => {},
       } else text = String(body.text || '');
       runCommand(text);
       return send(res, 200, { ok: true });
+    }
+    if (route === 'POST /api/browser') {
+      // Navigateur Playwright du PC (electron/browserControl.cjs) : {"enc": base64(IV ‖ AES(JSON de l'action))}, réponse en JSON.
+      const tok = bearer(req);
+      if (!tok) return send(res, 401, { error: 'Unauthorized' });
+      if (!onBrowser) return send(res, 501, { ok: false, text: 'Cette version de Jarvis 2.0 ne pilote pas de navigateur.' });
+      const body = await readJson(req);
+      let input = body;
+      if (body.enc) {
+        try { input = JSON.parse(decryptCommand(tokens.get(tok), body.enc)); } catch { return send(res, 400, { error: 'Decryption failed' }); }
+      }
+      if (!input || typeof input !== 'object' || Array.isArray(input)) return send(res, 400, { error: 'Bad request' });
+      onEvent({ type: 'browser', action: String(input.action || 'read') });
+      const result = await onBrowser(input);
+      return send(res, 200, result || { ok: false, text: 'Pas de réponse du navigateur.' });
     }
     if (route === 'POST /api/wake') {
       if (!bearer(req)) return send(res, 401, { error: 'Unauthorized' });
