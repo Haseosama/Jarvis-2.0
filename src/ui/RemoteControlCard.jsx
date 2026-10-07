@@ -23,6 +23,8 @@ export default function RemoteControlCard() {
         refresh();
       } else if (event?.type === 'command') {
         setMessage(`Ordre reçu du téléphone : « ${String(event.text).slice(0, 80)} »`);
+      } else if (event?.type === 'browser') {
+        setMessage(`Navigateur piloté depuis le téléphone (${String(event.action).slice(0, 20)}).`);
       }
     });
     const tick = setInterval(() => setNow(Date.now()), 1000);

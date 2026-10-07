@@ -25,6 +25,7 @@ let spotifyAuthTimer = null;
 let googleAuthServer = null;
 let googleAuthTimer = null;
 let remoteServer = null;
+let browserControl = null;
 let remoteCollect = null;
 
 const MIME_MAP = {
@@ -234,6 +235,17 @@ async function createWindow() {
   });
 }
 
+// ── Navigateur piloté par Playwright (electron/browserControl.cjs) ──────────────
+
+function getBrowserControl() {
+  if (browserControl) return browserControl;
+  const { createBrowserControl } = require('./browserControl.cjs');
+  browserControl = createBrowserControl({ profileDir: path.join(app.getPath('userData'), 'navigateur') });
+  return browserControl;
+}
+
+ipcMain.handle('jarvis:browser', (_e, payload) => getBrowserControl().run(payload || {}));
+
 // ── Contrôle à distance depuis Jarvis Android (electron/remoteServer.cjs) ──────
 
 function getRemoteServer() {
@@ -247,6 +259,7 @@ function getRemoteServer() {
     onEvent: (event) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('jarvis:remote-event', event);
     },
+    onBrowser: (input) => getBrowserControl().run(input),
   });
   remoteCollect = createReplyCollector((msg) => remoteServer.broadcast(msg));
   return remoteServer;
@@ -311,6 +324,9 @@ app.on('will-quit', () => {
   } catch {}
   try {
     remoteServer?.stop();
+  } catch {}
+  try {
+    browserControl?.close();
   } catch {}
 });
 

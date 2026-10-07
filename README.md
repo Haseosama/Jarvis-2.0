@@ -1,6 +1,6 @@
 # JARVIS 2.0 — Édition PC Autonome (Sans Backend)
 
-**Version actuelle : 2.0.32** — la release GitHub est étiquetée à partir de `package.json`. Incrémenter cette version avant toute publication.
+**Version actuelle : 2.0.33** — la release GitHub est étiquetée à partir de `package.json`. Incrémenter cette version avant toute publication.
 
 Adaptation complète sur PC (Windows / Desktop autonome) de **[Jarvis-Android v0.9.53](https://github.com/Haseosama/Jarvis-Android)**, conçue pour fonctionner en tant qu'exécutable `.exe` autonome sans aucun serveur backend externe.
 
@@ -30,6 +30,7 @@ Adaptation complète sur PC (Windows / Desktop autonome) de **[Jarvis-Android v0
 - **Vision PC** (`read_screen`, `camera_look`) : capture d'écran du bureau PC et flux Webcam en direct.
 - **Messagerie PC** (`send_message`) : WhatsApp Web/Desktop et client mail PC (`mailto:`).
 - **📱 Contrôle depuis le téléphone (2.0.32)** : Jarvis Android pilote ce PC par la voix (« sur le PC, ouvre Chrome », « mets le PC en veille »). Activer dans 🖥️ Poste de Contrôle PC → « Appairer un téléphone », puis scanner le QR code dans l’app Android (Réglages > Jarvis PC) ou taper l’adresse et le code à 6 caractères (valable 10 minutes, une seule fois). L’ordre est traité comme un message tapé dans Jarvis 2.0, qui répond aussi sur le téléphone. Serveur HTTPS local sur le port 8000 (`electron/remoteServer.cjs`, sans dépendance) avec un certificat fabriqué une fois sur ce PC, que le téléphone épingle ; ordres chiffrés en AES-256 ; le téléphone reste appairé après un redémarrage (seule l’empreinte de son jeton est gardée), « Oublier les téléphones » les révoque tous. Même protocole que le tableau de bord de Mark-LIV. Au premier démarrage, Windows demande d’autoriser Jarvis 2.0 sur les réseaux privés : accepter.
+- **🌐 Navigateur piloté par Playwright (2.0.33)** : outil `navigateur` : Jarvis ouvre un vrai navigateur sur ce PC (Edge, sinon Chrome, déjà installés ; fenêtre visible ; profil à part dans les données de Jarvis qui garde les connexions), lit la page avec ses éléments numérotés, clique, remplit les formulaires, appuie sur des touches, fait défiler, revient en arrière, change d’onglet et fait une capture. Utilisable par la voix sur le PC et depuis Jarvis Android appairé (`POST /api/browser`, même chiffrement que les ordres). `electron/browserControl.cjs`, paquet `playwright-core` (aucun navigateur téléchargé ; `JARVIS_BROWSER` = chemin d’un autre exécutable Chromium).
 - *Note : les fonctions strictement téléphoniques (Android Auto, Retrouver le téléphone, SOS) ont été retirées.*
 
 ### 4. 🌍 Espace, Voûte Céleste & Carte du Monde Interactive
