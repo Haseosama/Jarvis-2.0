@@ -128,12 +128,16 @@ function fooocusBody(body) {
 const NONE_FOUND = 'Aucun générateur d’images trouvé sur le PC. Lancez Fooocus (avec Fooocus-API), ComfyUI, ou Stable Diffusion '
   + 'WebUI Forge avec l’option --api, puis réessayez.';
 
+const NONE_FOUND_INSTALL = 'Aucun générateur d’images sur le PC. Jarvis peut installer ComfyUI lui-même (environ 9 Go à '
+  + 'télécharger) : demandez « installe le générateur d’images ».';
+
 function createImageGen({
   baseUrl = () => process.env.JARVIS_SD_URL || '',
   comfyModel = () => process.env.JARVIS_COMFY_MODEL || '',
   fetchImpl = globalThis.fetch,
   timeoutMs = TIMEOUT_MS,
   pollMs = 1000,
+  installer = null, // electron/imageInstall.cjs : ComfyUI installé et lancé par Jarvis
 } = {}) {
   const value = (v) => String((typeof v === 'function' ? v() : v) || '').trim();
   let found = null; // { kind, url } trouvé la dernière fois
@@ -166,7 +170,18 @@ function createImageGen({
       const hit = await probe(c.url, c.kind);
       if (hit) return hit;
     }
+    // Rien ne tourne : le ComfyUI que Jarvis a installé démarre à la demande.
+    if (installer && installer.installed() && (await installer.ensureRunning())) return probe(CANDIDATES[1].url, 'comfy');
     return null;
+  }
+
+  function installState() {
+    if (!installer) return { ok: false, text: 'Cette version de Jarvis 2.0 n’installe pas de générateur d’images.' };
+    const s = installer.status();
+    if (s.installed) return { ok: true, text: 'Le générateur d’images (ComfyUI) est installé sur le PC.' };
+    if (s.installing) return { ok: true, text: `Installation en cours : ${s.text}` };
+    if (s.step === 'error') return { ok: false, text: `L’installation a échoué : ${s.text}` };
+    return { ok: false, text: 'Aucun générateur d’images installé sur le PC.' };
   }
 
   async function forge(url, body) {
@@ -225,6 +240,13 @@ function createImageGen({
   const NAMES = { forge: 'Forge', comfy: 'ComfyUI', fooocus: 'Fooocus' };
 
   async function run(input = {}) {
+    const action = String(input.action || '').trim().toLowerCase();
+    if (action === 'install') {
+      if (!installer) return installState();
+      const r = installer.install();
+      return { ok: r.ok, text: r.text };
+    }
+    if (action === 'status') return installState();
     const adult = input.adult === true;
     const why = refusal(input.prompt, adult);
     if (why) return { ok: false, text: why };
@@ -232,7 +254,11 @@ function createImageGen({
     const where = await locate();
     if (!where) {
       found = null;
-      return { ok: false, text: value(baseUrl) ? `Aucun générateur d’images ne répond à ${value(baseUrl)}.` : NONE_FOUND };
+      if (value(baseUrl)) return { ok: false, text: `Aucun générateur d’images ne répond à ${value(baseUrl)}.` };
+      const st = installer ? installer.status() : null;
+      if (st?.installing) return { ok: false, text: `Le générateur d’images s’installe encore sur le PC (${st.text}).` };
+      if (st?.installed) return { ok: false, text: 'ComfyUI est installé sur le PC mais n’a pas démarré.' };
+      return { ok: false, text: installer ? NONE_FOUND_INSTALL : NONE_FOUND };
     }
     found = where;
     let out;

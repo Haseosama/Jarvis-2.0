@@ -87,7 +87,7 @@ jobs:
           ## 🚀 Jarvis $version — Édition PC Autonome (Sans Backend)
 
           ### Nouveautés de cette version
-          - Images pour Jarvis Android : le téléphone appairé peut demander une image ; Jarvis la fait créer par Fooocus (Fooocus-API), ComfyUI ou Stable Diffusion WebUI Forge (--api) installés sur ce PC, trouvés tout seuls. Contenu adulte seulement si le téléphone l’a activé ; aucune image d’enfant ou de mineur.
+          - Images pour Jarvis Android : le téléphone appairé peut demander une image ; Jarvis la fait créer par Fooocus (Fooocus-API), ComfyUI ou Stable Diffusion WebUI Forge (--api) installés sur ce PC, trouvés tout seuls ; sans rien d’installé, Jarvis installe lui-même ComfyUI et un modèle (environ 9 Go, bouton dans Contrôle depuis le téléphone). Contenu adulte seulement si le téléphone l’a activé ; aucune image d’enfant ou de mineur.
 
           Adaptation complète sur PC (Windows x64) de **Jarvis-Android v0.9.53**, fonctionnant de manière 100% autonome sans serveur backend externe.
 

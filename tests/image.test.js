@@ -168,3 +168,72 @@ function call(port, method, pathName, { body, token } = {}) {
     req.end();
   });
 }
+
+const { createImageInstaller, pickGpu } = require('../electron/imageInstall.cjs');
+const { EventEmitter } = require('node:events');
+
+describe('images : ComfyUI installé par Jarvis', () => {
+  it('choisit la variante selon la carte graphique', () => {
+    assert.equal(pickGpu(['Intel(R) UHD Graphics 770', 'NVIDIA GeForce RTX 4070']), 'nvidia');
+    assert.equal(pickGpu(['AMD Radeon RX 7800 XT']), 'amd');
+    assert.equal(pickGpu(['Intel(R) Arc(TM) A770 Graphics']), 'intel');
+    assert.equal(pickGpu(['Intel(R) UHD Graphics 620']), null);
+    assert.equal(pickGpu([]), null);
+  });
+
+  it('télécharge 7zr, ComfyUI et le modèle, décompresse, puis lance ComfyUI à la demande', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jr-img-'));
+    const got = [];
+    const spawned = [];
+    let running = false;
+    const fetchImpl = async (url) => {
+      got.push(url);
+      const bytes = Buffer.from(`contenu de ${url}`);
+      return { ok: true, status: 200, headers: { get: () => String(bytes.length) }, body: (async function* () { yield bytes; })() };
+    };
+    const spawnImpl = (cmd, args, opts) => {
+      spawned.push({ cmd: path.basename(cmd), args, cwd: opts.cwd });
+      const p = new EventEmitter();
+      p.kill = () => {};
+      if (path.basename(cmd) === '7zr.exe') {
+        const out = args.find((a) => a.startsWith('-o')).slice(2);
+        const base = path.join(out, 'ComfyUI_windows_portable');
+        fs.mkdirSync(path.join(base, 'python_embeded'), { recursive: true });
+        fs.mkdirSync(path.join(base, 'ComfyUI'), { recursive: true });
+        fs.writeFileSync(path.join(base, 'python_embeded', 'python.exe'), '');
+        fs.writeFileSync(path.join(base, 'ComfyUI', 'main.py'), '');
+        setImmediate(() => p.emit('exit', 0));
+      } else {
+        running = true;
+      }
+      return p;
+    };
+    const inst = createImageInstaller({
+      dataDir, fetchImpl, spawnImpl, platform: 'win32', gpus: async () => ['NVIDIA GeForce RTX 3060'], isUp: async () => running,
+    });
+    assert.equal(inst.status().installed, false);
+    assert.match(inst.install().text, /environ 9 Go/);
+    while (inst.status().installing) await new Promise((r) => setTimeout(r, 5));
+    assert.equal(inst.status().step, 'done', inst.status().text);
+    assert.equal(inst.installed(), true);
+    assert.deepEqual(got.map((u) => u.split('/').pop()), ['7zr.exe', 'ComfyUI_windows_portable_nvidia.7z', 'Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors']);
+    assert.equal(fs.existsSync(path.join(dataDir, 'images-ia', 'ComfyUI_windows_portable_nvidia.7z')), false);
+
+    assert.equal(await inst.ensureRunning(1000), true);
+    const comfy = spawned.find((s) => s.cmd === 'python.exe');
+    assert.ok(comfy.args.includes('--listen') && comfy.args.includes('127.0.0.1') && comfy.args.includes('8188'));
+    assert.match(inst.install().text, /déjà installé/);
+  });
+
+  it('refuse sans carte graphique utilisable, et le dit au téléphone', async () => {
+    const inst = createImageInstaller({
+      dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'jr-img-')), platform: 'win32', gpus: async () => ['Intel(R) UHD Graphics 620'],
+      fetchImpl: async () => { throw new Error('pas de réseau attendu'); },
+    });
+    const gen = createImageGen({ baseUrl: '', installer: inst, fetchImpl: fakeFetch({}) });
+    assert.match((await gen.run({ prompt: 'un chat' })).text, /installe le générateur d’images/);
+    assert.match((await gen.run({ action: 'install' })).text, /Installation lancée/);
+    while (inst.status().installing) await new Promise((r) => setTimeout(r, 5));
+    assert.match((await gen.run({ action: 'status' })).text, /échoué.*carte graphique/);
+  });
+});
