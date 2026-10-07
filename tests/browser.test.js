@@ -143,7 +143,7 @@ describe('navigateur : une vraie page', { skip: exe ? false : 'aucun navigateur 
 
     const missing = await ctl.run({ action: 'click', target: 'Payer maintenant' });
     assert.equal(missing.ok, false);
-    assert.match(missing.text, /Rien trouvé/);
+    assert.match(missing.text, /^Rien trouvé/);
 
     assert.match((await ctl.run({ action: 'tabs' })).text, /\[1\] Boutique/);
     assert.equal((await ctl.run({ action: 'close' })).ok, true);

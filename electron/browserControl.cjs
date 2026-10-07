@@ -155,6 +155,12 @@ function launchCandidates(env = process.env) {
   return list;
 }
 
+function lookFailed(message) {
+  const e = new Error(message);
+  e.code = 'NOT_FOUND';
+  return e;
+}
+
 function createBrowserControl({ profileDir, loadPlaywright = () => require('playwright-core'), headless = false, env = process.env } = {}) {
   let context = null;
   let page = null;
@@ -198,7 +204,7 @@ function createBrowserControl({ profileDir, loadPlaywright = () => require('play
     if (target.ref !== undefined) {
       const loc = p.locator(`[data-jarvis-ref="${target.ref}"]`);
       if (await loc.count()) return loc.first();
-      throw new Error(`L'élément ${target.ref} n'existe plus : relisez la page.`);
+      throw lookFailed(`L'élément ${target.ref} n'est plus sur la page : relisez-la.`);
     }
     if (target.css) return p.locator(target.css).first();
     const name = target.text;
@@ -212,7 +218,7 @@ function createBrowserControl({ profileDir, loadPlaywright = () => require('play
         if (await visible.count()) return visible.first();
       } catch {}
     }
-    throw new Error(`Rien trouvé sur la page pour « ${name} » : relisez la page et donnez le numéro de l'élément.`);
+    throw lookFailed(`Rien trouvé sur la page pour « ${name} » : relisez la page et donnez le numéro de l'élément.`);
   }
 
   async function settle(p) {
@@ -310,6 +316,7 @@ function createBrowserControl({ profileDir, loadPlaywright = () => require('play
       }
     } catch (err) {
       const msg = String(err?.message || err).split('\n')[0];
+      if (err?.code === 'NOT_FOUND') return { ok: false, text: msg };
       if (err?.code === 'NO_BROWSER') return { ok: false, text: `${msg}. Installez Microsoft Edge ou Google Chrome sur le PC.` };
       if (/Cannot find module 'playwright-core'/.test(msg)) return { ok: false, text: 'Playwright n’est pas installé avec Jarvis 2.0 (npm install).' };
       return { ok: false, text: `Le navigateur n'a pas pu le faire : ${msg}` };
