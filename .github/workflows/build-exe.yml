@@ -87,15 +87,7 @@ jobs:
           ## 🚀 Jarvis $version — Édition PC Autonome (Sans Backend)
 
           ### Nouveautés de cette version
-          - Bouche d’avatar retravaillée : cavité buccale animée, rangée de dents, langue subtile, contour des lèvres mieux défini et fermeture labiale plus progressive.
-          - Avatar sans cheveux : suppression des résidus de peinture capillaire sur le crâne, en conservant les détails du visage.
-          - Voûte céleste : position géographique actuelle demandée à l’ouverture et centrage local de la carte, avec commande pour actualiser la position.
-          - Avatar 3D : surfaces et mèches capillaires supprimées (y compris fibres optiques et peau 3D); points bleus isolés retirés des hologrammes bleu/or/fibres; iris du Classique naturalisé avec la palette de Léa et ligne des yeux recentrée.
-          - Classique affiné après retour visuel : nez d’origine conservé, joues moins rondes, angle de mâchoire plus net et menton mieux défini; couleurs inchangées.
-          - Avatar : le modèle Haseo est retiré; nouveau créateur de personnage pour le visage Classique (taille du visage, mâchoire, menton, yeux, nez, bouche) avec aperçu en direct, préréglages, aléatoire et looks enregistrables. Les couleurs et circuits restent inchangés.
-          - Miniature PiP déplaçable dans toute la fenêtre, avec position mémorisée.
-          - Intégration Brahma-Ai-Evo : Spotify (bibliothèque, albums, playlists, tops), Google Workspace (Gmail, Agenda, Drive via OAuth), domotique Tuya Cloud + Home Assistant, géospatial (itinéraires OSRM, lieux proches), assembleur de circuits, documents Office/PDF (PDF, DOCX, XLSX, PPTX, CSV), globe 3D temps réel.
-          - Skill Forge / Crucible : compétences générées par Gemini, testées dans un bac à sable isolé et activées uniquement après approbation dans l’onglet Compétences. Auto-Heal : diagnostic des erreurs d’outils et correctifs de compétences à approuver.
+          - Images pour Jarvis Android : le téléphone appairé peut demander une image ; Jarvis la fait créer par Fooocus (Fooocus-API), ComfyUI ou Stable Diffusion WebUI Forge (--api) installés sur ce PC, trouvés tout seuls. Contenu adulte seulement si le téléphone l’a activé ; aucune image d’enfant ou de mineur.
 
           Adaptation complète sur PC (Windows x64) de **Jarvis-Android v0.9.53**, fonctionnant de manière 100% autonome sans serveur backend externe.
 

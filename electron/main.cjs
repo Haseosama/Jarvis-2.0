@@ -26,6 +26,7 @@ let googleAuthServer = null;
 let googleAuthTimer = null;
 let remoteServer = null;
 let browserControl = null;
+let imageGen = null;
 let remoteCollect = null;
 
 const MIME_MAP = {
@@ -246,6 +247,18 @@ function getBrowserControl() {
 
 ipcMain.handle('jarvis:browser', (_e, payload) => getBrowserControl().run(payload || {}));
 
+// ── Images créées par Fooocus, ComfyUI ou Forge sur ce PC (electron/imageGen.cjs), pour Jarvis Android ──
+
+function getImageGen() {
+  if (imageGen) return imageGen;
+  const { createImageGen } = require('./imageGen.cjs');
+  imageGen = createImageGen({
+    baseUrl: () => process.env.JARVIS_SD_URL || readStore().imageServerUrl || '',
+    comfyModel: () => process.env.JARVIS_COMFY_MODEL || readStore().comfyModel || '',
+  });
+  return imageGen;
+}
+
 // ── Contrôle à distance depuis Jarvis Android (electron/remoteServer.cjs) ──────
 
 function getRemoteServer() {
@@ -260,6 +273,7 @@ function getRemoteServer() {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('jarvis:remote-event', event);
     },
     onBrowser: (input) => getBrowserControl().run(input),
+    onImage: (input) => getImageGen().run(input),
   });
   remoteCollect = createReplyCollector((msg) => remoteServer.broadcast(msg));
   return remoteServer;

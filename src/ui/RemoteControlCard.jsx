@@ -25,6 +25,8 @@ export default function RemoteControlCard() {
         setMessage(`Ordre reçu du téléphone : « ${String(event.text).slice(0, 80)} »`);
       } else if (event?.type === 'browser') {
         setMessage(`Navigateur piloté depuis le téléphone (${String(event.action).slice(0, 20)}).`);
+      } else if (event?.type === 'image') {
+        setMessage('Image demandée depuis le téléphone.');
       }
     });
     const tick = setInterval(() => setNow(Date.now()), 1000);
