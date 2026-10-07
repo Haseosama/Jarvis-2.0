@@ -704,4 +704,36 @@ export const hostBridge = {
       };
     }
   },
+  // ── Contrôle à distance depuis Jarvis Android (electron/remoteServer.cjs) ──
+
+  async remote(action, arg) {
+    const host = hasElectron() ? window.jarvisHost : null;
+    const fn = host && { status: host.remoteStatus, enable: host.remoteEnable, newKey: host.remoteNewKey, revoke: host.remoteRevoke }[action];
+    if (typeof fn !== 'function') return { ok: false, unavailable: true, error: 'Disponible seulement dans l’application de bureau Jarvis 2.0.' };
+    try {
+      return await fn(arg);
+    } catch (e) {
+      return { ok: false, error: e.message || String(e) };
+    }
+  },
+
+  remoteSay(msg) {
+    try {
+      if (hasElectron() && typeof window.jarvisHost.remoteSay === 'function') {
+        window.jarvisHost.remoteSay({ id: msg.id, role: msg.role, text: msg.text, append: Boolean(msg.append) });
+      }
+    } catch {
+      // ignore
+    }
+  },
+
+  onRemoteCommand(cb) {
+    if (typeof cb !== 'function' || !hasElectron() || typeof window.jarvisHost.onRemoteCommand !== 'function') return () => {};
+    return window.jarvisHost.onRemoteCommand(cb);
+  },
+
+  onRemoteEvent(cb) {
+    if (typeof cb !== 'function' || !hasElectron() || typeof window.jarvisHost.onRemoteEvent !== 'function') return () => {};
+    return window.jarvisHost.onRemoteEvent(cb);
+  },
 };

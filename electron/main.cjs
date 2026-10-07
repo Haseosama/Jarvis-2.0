@@ -24,6 +24,8 @@ let spotifyAuthServer = null;
 let spotifyAuthTimer = null;
 let googleAuthServer = null;
 let googleAuthTimer = null;
+let remoteServer = null;
+let remoteCollect = null;
 
 const MIME_MAP = {
   '.html': 'text/html; charset=utf-8',
@@ -232,8 +234,62 @@ async function createWindow() {
   });
 }
 
+// ── Contrôle à distance depuis Jarvis Android (electron/remoteServer.cjs) ──────
+
+function getRemoteServer() {
+  if (remoteServer) return remoteServer;
+  const { createRemoteServer, createReplyCollector } = require('./remoteServer.cjs');
+  remoteServer = createRemoteServer({
+    dataDir: app.getPath('userData'),
+    onCommand: (text) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('jarvis:remote-command', text);
+    },
+    onEvent: (event) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('jarvis:remote-event', event);
+    },
+  });
+  remoteCollect = createReplyCollector((msg) => remoteServer.broadcast(msg));
+  return remoteServer;
+}
+
+async function setRemoteEnabled(enabled) {
+  const store = readStore();
+  store.remoteEnabled = Boolean(enabled);
+  writeStore(store);
+  const srv = getRemoteServer();
+  if (!enabled) {
+    await srv.stop();
+    return { ok: true, ...srv.info() };
+  }
+  try {
+    return { ok: true, ...(await srv.start()) };
+  } catch (err) {
+    const busy = err && err.code === 'EADDRINUSE';
+    return { ok: false, error: busy ? 'Le port 8000 est déjà utilisé par un autre programme.' : String(err.message || err), ...srv.info() };
+  }
+}
+
+ipcMain.handle('jarvis:remote-status', () => ({ enabled: Boolean(readStore().remoteEnabled), ...getRemoteServer().info() }));
+ipcMain.handle('jarvis:remote-enable', (_e, enabled) => setRemoteEnabled(enabled));
+ipcMain.handle('jarvis:remote-new-key', async () => {
+  const srv = getRemoteServer();
+  if (!srv.info().running) {
+    const started = await setRemoteEnabled(true);
+    if (!started.ok) return started;
+  }
+  return { ok: true, ...srv.newKey() };
+});
+ipcMain.handle('jarvis:remote-revoke', () => {
+  getRemoteServer().revokeAll();
+  return { ok: true };
+});
+ipcMain.on('jarvis:remote-say', (_e, msg) => {
+  if (remoteServer && remoteCollect) remoteCollect(msg);
+});
+
 app.whenReady().then(() => {
   createWindow();
+  if (readStore().remoteEnabled) setRemoteEnabled(true).catch(() => {});
 
   // Register global Push-to-Talk shortcut (Ctrl+Space)
   try {
@@ -252,6 +308,9 @@ app.whenReady().then(() => {
 app.on('will-quit', () => {
   try {
     globalShortcut.unregisterAll();
+  } catch {}
+  try {
+    remoteServer?.stop();
   } catch {}
 });
 

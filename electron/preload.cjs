@@ -23,6 +23,21 @@ contextBridge.exposeInMainWorld('jarvisHost', {
   spotifyAuthorize: (payload) => ipcRenderer.invoke('jarvis:spotify-authorize', payload),
   googleAuthorize: (payload) => ipcRenderer.invoke('jarvis:google-authorize', payload),
   skillRun: (payload) => ipcRenderer.invoke('jarvis:skill-run', payload),
+  remoteStatus: () => ipcRenderer.invoke('jarvis:remote-status'),
+  remoteEnable: (enabled) => ipcRenderer.invoke('jarvis:remote-enable', enabled),
+  remoteNewKey: () => ipcRenderer.invoke('jarvis:remote-new-key'),
+  remoteRevoke: () => ipcRenderer.invoke('jarvis:remote-revoke'),
+  remoteSay: (msg) => ipcRenderer.send('jarvis:remote-say', msg),
+  onRemoteCommand: (cb) => {
+    const handler = (_e, text) => cb(text);
+    ipcRenderer.on('jarvis:remote-command', handler);
+    return () => ipcRenderer.removeListener('jarvis:remote-command', handler);
+  },
+  onRemoteEvent: (cb) => {
+    const handler = (_e, event) => cb(event);
+    ipcRenderer.on('jarvis:remote-event', handler);
+    return () => ipcRenderer.removeListener('jarvis:remote-event', handler);
+  },
   onHotkeyPtt: (cb) => {
     const handler = () => cb();
     ipcRenderer.on('jarvis:hotkey-ptt', handler);

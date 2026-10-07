@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { hostBridge } from '../core/hostBridge.js';
+import RemoteControlCard from './RemoteControlCard.jsx';
 
 const QUICK_APPS = [
   { name: 'chrome', label: '🌐 Navigateur' },
@@ -180,6 +181,7 @@ export default function PCControlPanel({ onClose, onSendVisionFrame }) {
       </div>
 
       <div className="prod-body">
+        <RemoteControlCard />
         <div className="prod-grid-2">
           {/* Column 1: Telemetry, Power, Audio, Apps, Folders & Windows */}
           <div className="space-card">

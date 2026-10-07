@@ -285,6 +285,7 @@ export default function App() {
         if (txt) setStatusText(txt);
       },
       onMessage: (msg) => {
+        if (msg.role === 'assistant') hostBridge.remoteSay(msg);
         setMessages((prev) => {
           if (msg.append && prev.length > 0) {
             const idx = prev.findIndex((m) => m.id === msg.id);
@@ -315,6 +316,11 @@ export default function App() {
       }
     });
 
+    // Ordres envoyés par Jarvis Android (Contrôle à distance) : traités comme un message tapé ici.
+    const unsubRemote = hostBridge.onRemoteCommand((text) => {
+      engineRef.current?.sendUserMessage(text, { speakReply: true });
+    });
+
     const unsubPtt = hostBridge.onPushToTalk(() => {
       if (engineRef.current?.micActive || engineRef.current?.state === 'LISTENING') {
         engineRef.current.stopLiveSession();
@@ -326,6 +332,7 @@ export default function App() {
     return () => {
       unsub();
       unsubPtt?.();
+      unsubRemote?.();
       engine.stopLiveSession();
       engine._closeLiveSocketOnly?.();
     };
