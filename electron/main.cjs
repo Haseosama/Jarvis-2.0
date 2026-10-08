@@ -290,6 +290,8 @@ ipcMain.handle('jarvis:imagegen-run', async (_e, input = {}) => {
     const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
     const file = path.join(dir, `jarvis-${stamp}${res.seed != null ? `-${res.seed}` : ''}.png`);
     fs.writeFileSync(file, Buffer.from(res.png, 'base64'));
+    // Studio d'images (inline) : l'image est montrée dans la fenêtre, pas ouverte à part.
+    if (input.inline === true) return { ok: true, text: `${res.text} Enregistrée : ${file}`, path: file, seed: res.seed, dataUri: `data:image/png;base64,${res.png}` };
     shell.openPath(file).catch(() => {});
     return { ok: true, text: `${res.text} Enregistrée et ouverte : ${file}`, path: file, seed: res.seed };
   } catch (err) {

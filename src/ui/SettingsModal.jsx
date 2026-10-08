@@ -1,3 +1,4 @@
+import { toggleAdultImages } from './adultImages.js';
 import React, { useEffect, useState } from 'react';
 import {
   configStore,
@@ -544,12 +545,7 @@ export default function SettingsModal({ onClose, onTestVoice, onOpenCreator }) {
                 <input
                   type="checkbox"
                   checked={cfg.imageAdult === true}
-                  onChange={(e) => {
-                    if (!e.target.checked) return update({ imageAdult: false });
-                    if (window.confirm('Autoriser les images pour adultes (18 ans et plus) ?\n\nRéservé aux adultes, pour des personnages fictifs adultes : ne créez pas d’images de personnes réelles. Jarvis refuse toujours toute demande d’enfant ou de mineur.')) {
-                      update({ imageAdult: true });
-                    }
-                  }}
+                  onChange={(e) => toggleAdultImages(e.target.checked, update)}
                 />
                 <span>
                   Autoriser le contenu adulte (18+)

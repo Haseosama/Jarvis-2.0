@@ -419,6 +419,32 @@ describe('images : contenu adulte sur le PC', () => {
     assert.equal((await gen.run({ prompt: 'portrait artistique nu', adult: false, source: 'pc' })).ok, false);
     const settings = fs.readFileSync(new URL('../src/ui/SettingsModal.jsx', import.meta.url), 'utf8');
     assert.match(settings, /imageAdult/);
-    assert.match(settings, /window\.confirm\('Autoriser les images pour adultes/);
+    assert.match(settings, /toggleAdultImages\(e\.target\.checked, update\)/);
+    assert.match(fs.readFileSync(new URL('../src/ui/adultImages.js', import.meta.url), 'utf8'), /Autoriser les images pour adultes/);
+  });
+});
+
+describe('images : Studio d’images (sans assistant)', () => {
+  it('a un onglet Images qui envoie la description directement au générateur, avec le réglage adulte partagé', async () => {
+    const panel = fs.readFileSync(new URL('../src/ui/ModelStudioPanel.jsx', import.meta.url), 'utf8');
+    assert.match(panel, /id: 'images'/);
+    assert.match(panel, /<ImageStudio \/>/);
+    const studio = fs.readFileSync(new URL('../src/ui/ImageStudio.jsx', import.meta.url), 'utf8');
+    assert.match(studio, /hostBridge\.imageGen\('run'/);
+    assert.match(studio, /inline: true/);
+    assert.match(studio, /toggleAdultImages/);
+    const main = fs.readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
+    assert.match(main, /input\.inline === true/);
+    const { toggleAdultImages } = await import('../src/ui/adultImages.js');
+    const seen = [];
+    assert.equal(toggleAdultImages(true, (p) => seen.push(p), () => false), false);
+    assert.equal(toggleAdultImages(true, (p) => seen.push(p), () => true), true);
+    assert.equal(toggleAdultImages(false, (p) => seen.push(p)), false);
+    assert.deepEqual(seen, [{ imageAdult: true }, { imageAdult: false }]);
+  });
+  it('dit au modèle que l’outil applique les règles, sans lui demander d’ignorer le refus des mineurs', () => {
+    const eng = fs.readFileSync(new URL('../src/core/JarvisEngine.js', import.meta.url), 'utf8');
+    assert.match(eng, /generate_image : c'est lui qui applique les règles/);
+    assert.match(eng, /aucune image d'enfant ni de mineur, que tu refuses toujours/);
   });
 });
