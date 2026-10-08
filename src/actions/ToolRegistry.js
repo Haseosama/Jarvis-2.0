@@ -767,6 +767,34 @@ export class ToolRegistry {
       },
     });
 
+    // 17d. Vidéos créées sur le PC (ComfyUI + LTX-Video, module à installer dans Studio IA › Vidéo)
+    this.register({
+      name: 'generate_video',
+      description:
+        'Créer un court clip vidéo (1 à 4 secondes, sans son) à partir d’une description avec ComfyUI sur le PC (module vidéo à installer dans Studio IA › Vidéo, environ 11 Go). '
+        + 'Décrire le mouvement en anglais, en une ou deux phrases précises. Le clip est enregistré dans Vidéos\\Jarvis et ouvert. '
+        + 'Le contenu adulte (personnages fictifs adultes) n’est possible que si l’utilisateur l’a autorisé dans les Réglages ; aucun mineur, jamais. Ne pas essayer de contourner un refus.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          action: { type: 'STRING', description: 'create (défaut) ou install (installer le module vidéo).' },
+          prompt: { type: 'STRING', description: 'Description de la scène et du mouvement.' },
+          seconds: { type: 'NUMBER', description: 'Durée de 1 à 4 secondes (défaut 2).' },
+          seed: { type: 'NUMBER', description: 'Graine (facultatif).' },
+        },
+      },
+      run: async (args) => {
+        if (String(args?.action || '').toLowerCase() === 'install') {
+          const r = await hostBridge.videoGen('install');
+          if (r?.unavailable) return 'La vidéo n’est disponible que dans l’application Windows.';
+          return String(r?.text || 'Installation du module vidéo lancée.');
+        }
+        const res = await hostBridge.videoGen('run', { prompt: args?.prompt, seconds: args?.seconds, seed: args?.seed });
+        if (res?.unavailable) return 'La vidéo n’est disponible que dans l’application Windows.';
+        return String(res?.text || 'Pas de réponse du générateur de vidéo.');
+      },
+    });
+
     // 18. Radio Tool
     this.register({
       name: 'radio',

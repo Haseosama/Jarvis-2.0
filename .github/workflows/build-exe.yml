@@ -88,6 +88,7 @@ jobs:
 
           ### Nouveautés de cette version
           - Accès à distance pour Jarvis Android : le téléphone pilote ce PC de partout (4G, autre Wi-Fi) par Tailscale, réseau privé chiffré et gratuit, sans port à ouvrir ; le Wi-Fi local est fermé (bouton « Passer en Wi-Fi local » pour l’ancien fonctionnement). Installez Tailscale sur le PC et le téléphone avec le même compte, puis appairez de nouveau le téléphone.
+          - Vidéo sur le PC : onglet Studio IA › Vidéo, commande /video et outil generate_video. Clips de 1 à 4 s depuis le texte ou depuis une image créée par Jarvis (ComfyUI + LTX-Video 2B distillé, module d’environ 11 Go à installer depuis l’onglet, pensé pour une carte NVIDIA de 6 à 8 Go). Même réglage 18+ que les images, jamais de mineur.
           - Images de meilleure qualité : sampler DPM++ 2M SDE Karras, base anti-défauts (mains, anatomie, flou), styles Photo/Anime/Brut, passe HD facultative, choix du modèle, graine fixe, plusieurs images et variations dans Studio IA › Images. Les demandes de mineurs restent toujours refusées.
           - Commande /image dans le chat : « /image description » envoie la demande directement au générateur d’images du PC, sans passer par l’assistant (réglage 18+ de l’utilisateur ; aucune image de mineur).
           - Studio IA › Images : créez vos images vous-même (description, format, étapes) directement avec ComfyUI, Forge ou Fooocus, sans passer par l’assistant ; case 18+ partagée avec les Réglages, installation de ComfyUI depuis l’onglet.

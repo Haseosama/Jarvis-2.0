@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('jarvisHost', {
   imageGenStatus: () => ipcRenderer.invoke('jarvis:imagegen-status'),
   imageGenInstall: () => ipcRenderer.invoke('jarvis:imagegen-install'),
   imageGenModels: () => ipcRenderer.invoke('jarvis:imagegen-models'),
+  videoGenInstall: () => ipcRenderer.invoke('jarvis:video-install'),
+  videoGenRun: (payload) => ipcRenderer.invoke('jarvis:video-run', payload),
   imageGenRun: (payload) => ipcRenderer.invoke('jarvis:imagegen-run', payload),
   remoteStatus: () => ipcRenderer.invoke('jarvis:remote-status'),
   remoteEnable: (enabled) => ipcRenderer.invoke('jarvis:remote-enable', enabled),

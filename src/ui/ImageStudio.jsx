@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { configStore } from '../core/ConfigStore.js';
 import { hostBridge } from '../core/hostBridge.js';
 import { toggleAdultImages } from './adultImages.js';
+import { addStudioImage, selectStudioImage } from './studioShared.js';
 
 const SIZES = [
   { id: 'portrait', label: 'Portrait 832×1216', width: 832, height: 1216 },
@@ -17,7 +18,7 @@ const STYLES = [
 ];
 
 /** Création d'images à la main : la description part directement au générateur du PC (ComfyUI, Forge ou Fooocus), sans passer par un assistant. */
-export default function ImageStudio() {
+export default function ImageStudio({ onAnimate } = {}) {
   const [cfg, setCfg] = useState(configStore.get());
   const [prompt, setPrompt] = useState('');
   const [negative, setNegative] = useState('');
@@ -79,7 +80,11 @@ export default function ImageStudio() {
       if (res?.unavailable) { setMessage('Le générateur d’images n’est disponible que dans l’application Windows.'); break; }
       if (!res?.ok) { setMessage(`⚠️ ${res?.text || 'Échec de la création.'}`); break; }
       setMessage(`✅ ${res.text}`);
-      if (res.dataUri) setImages((list) => [{ src: res.dataUri, path: res.path, seed: res.seed, prompt: text }, ...list].slice(0, 12));
+      if (res.dataUri) {
+        const made = { src: res.dataUri, path: res.path, seed: res.seed, prompt: text };
+        setImages((list) => [made, ...list].slice(0, 12));
+        addStudioImage(made);
+      }
     }
     setBusy(false);
     refreshModels();
@@ -131,6 +136,7 @@ export default function ImageStudio() {
             <figcaption className="space-sub">{img.prompt.slice(0, 80)}{img.seed != null ? ` · graine ${img.seed}` : ''}<br />{img.path}</figcaption>
             <div className="llm-row">
               <button type="button" className="space-pill" disabled={busy} onClick={() => create(null, { prompt: img.prompt, count: 1, seed: -1 })}>🔁 Variation</button>
+              {onAnimate && <button type="button" className="space-pill" disabled={busy} onClick={() => { selectStudioImage(img.path); onAnimate(); }}>🎬 Animer</button>}
               {img.seed != null && <button type="button" className="space-pill" disabled={busy} onClick={() => { setPrompt(img.prompt); setSeed(String(img.seed)); }}>📌 Garder la graine</button>}
             </div>
           </figure>

@@ -1547,3 +1547,4 @@ html, body, #root {
 .llm-image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 .llm-image-card { margin: 0; padding: 8px; border: 1px solid var(--border-cyan); border-radius: 10px; background: rgba(12, 26, 44, 0.7); }
 .llm-image-card img { width: 100%; border-radius: 6px; display: block; margin-bottom: 6px; }
+.llm-image-card video { width: 100%; border-radius: 6px; display: block; margin-bottom: 6px; background: #000; }

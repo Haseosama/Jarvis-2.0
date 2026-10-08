@@ -7,6 +7,9 @@
 //  - ComfyUI portable pour Windows (Python embarqué compris, github.com/Comfy-Org/ComfyUI, dernière version) dans sa variante
 //    NVIDIA, AMD ou Intel selon la carte graphique ;
 //  - le modèle Juggernaut XL v9 (RunDiffusion, Hugging Face, licence CreativeML OpenRAIL-M) dans models/checkpoints.
+// Module vidéo (facultatif, installé à part) : LTX-Video 2B distillé 0.9.6 (Lightricks, Hugging Face, licence LTX-Video Open
+// Weights) dans models/checkpoints et l'encodeur de texte T5-XXL fp8 (comfyanonymous/flux_text_encoders, Apache-2.0) dans
+// models/text_encoders, environ 11 Go ; les nœuds LTXV sont intégrés à ComfyUI, rien d'autre à installer.
 // Ensuite Jarvis lance ComfyUI en arrière-plan (fenêtre cachée, 127.0.0.1:8188 seulement) quand une image est demandée, et
 // l'arrête en quittant.
 
@@ -18,6 +21,11 @@ const SEVEN_ZR_URL = 'https://www.7-zip.org/a/7zr.exe';
 const COMFY_URL = (gpu) => `https://github.com/Comfy-Org/ComfyUI/releases/latest/download/ComfyUI_windows_portable_${gpu}.7z`;
 const MODEL_FILE = 'Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors';
 const MODEL_URL = `https://huggingface.co/RunDiffusion/Juggernaut-XL-v9/resolve/main/${MODEL_FILE}`;
+const VIDEO_MODEL_FILE = 'ltxv-2b-0.9.6-distilled-04-25.safetensors';
+const VIDEO_MODEL_URL = `https://huggingface.co/Lightricks/LTX-Video/resolve/main/${VIDEO_MODEL_FILE}`;
+const TEXT_ENCODER_FILE = 't5xxl_fp8_e4m3fn.safetensors';
+const TEXT_ENCODER_URL = `https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/${TEXT_ENCODER_FILE}`;
+const NEEDED_VIDEO_BYTES = 14e9; // 6,3 Go + 4,9 Go, avec de la marge pour les fichiers de travail
 const COMFY_PORT = 8188;
 const START_TIMEOUT_MS = 180_000;
 const NEEDED_BYTES = 12e9; // archive (2 Go) + ComfyUI décompressé (~5 Go) + modèle (7 Go), l'archive étant effacée ensuite
@@ -85,6 +93,8 @@ function createImageInstaller({
       python: path.join(comfyDir, 'python_embeded', 'python.exe'),
       mainPy: path.join(comfyDir, 'ComfyUI', 'main.py'),
       modelPath: path.join(comfyDir, 'ComfyUI', 'models', 'checkpoints', MODEL_FILE),
+      videoModelPath: path.join(comfyDir, 'ComfyUI', 'models', 'checkpoints', VIDEO_MODEL_FILE),
+      textEncoderPath: path.join(comfyDir, 'ComfyUI', 'models', 'text_encoders', TEXT_ENCODER_FILE),
     };
   };
   let state = { step: 'idle', text: '', percent: 0 };
@@ -117,8 +127,13 @@ function createImageInstaller({
     return fs.existsSync(p.python) && fs.existsSync(p.mainPy) && fs.existsSync(p.modelPath);
   };
 
+  const videoInstalled = () => {
+    const p = pathsNow();
+    return fs.existsSync(p.videoModelPath) && fs.existsSync(p.textEncoderPath);
+  };
+
   function status() {
-    return { installed: installed(), running: Boolean(child), installing: Boolean(installing), ...state };
+    return { installed: installed(), videoInstalled: videoInstalled(), running: Boolean(child), installing: Boolean(installing), ...state };
   }
 
   async function download(url, dest, label) {
@@ -197,6 +212,38 @@ function createImageInstaller({
     state = { step: 'done', text: 'Générateur d’images installé.', percent: 100 };
   }
 
+  async function doInstallVideo() {
+    if (platform !== 'win32') throw new Error('L’installation automatique du module vidéo ne marche que sur Windows.');
+    if (!installed()) throw new Error('Installez d’abord le générateur d’images (ComfyUI) : le module vidéo s’y ajoute.');
+    const free = freeBytes ? freeBytes() : freeSpace();
+    if (free !== null && free < NEEDED_VIDEO_BYTES && !videoInstalled()) {
+      throw new Error(`Pas assez de place sur le disque : il faut environ 14 Go libres pour le module vidéo, il en reste ${(free / 1e9).toFixed(1)}.`);
+    }
+    const p = pathsNow();
+    if (!fs.existsSync(p.textEncoderPath)) {
+      fs.mkdirSync(path.dirname(p.textEncoderPath), { recursive: true });
+      await download(TEXT_ENCODER_URL, p.textEncoderPath, 'Encodeur de texte T5 (environ 4,9 Go)');
+    }
+    if (!fs.existsSync(p.videoModelPath)) {
+      fs.mkdirSync(path.dirname(p.videoModelPath), { recursive: true });
+      await download(VIDEO_MODEL_URL, p.videoModelPath, 'Modèle vidéo LTX-Video (environ 6,3 Go)');
+    }
+    state = { step: 'done', text: 'Module vidéo installé.', percent: 100 };
+  }
+
+  /** Installe le module vidéo (une seule installation à la fois, images ou vidéo). */
+  function installVideo() {
+    if (videoInstalled()) return { ...status(), ok: true, text: 'Le module vidéo est déjà installé.' };
+    if (!installed() && !installing) return { ...status(), ok: false, text: 'Installez d’abord le générateur d’images (ComfyUI) : le module vidéo s’y ajoute.' };
+    if (!installing) {
+      state = { step: 'start', text: 'Installation du module vidéo…', percent: 0 };
+      installing = doInstallVideo()
+        .catch((err) => { state = { step: 'error', text: String(err.message || err), percent: 0 }; })
+        .finally(() => { installing = null; });
+    }
+    return { ...status(), ok: true, text: 'Installation lancée : modèle vidéo et encodeur de texte, environ 11 Go à télécharger.' };
+  }
+
   /** Lance l'installation (une seule à la fois) et rend tout de suite où elle en est. */
   function install() {
     if (installed()) return { ...status(), ok: true, text: 'Le générateur d’images est déjà installé.' };
@@ -242,7 +289,7 @@ function createImageInstaller({
     }
   }
 
-  return { install, status, ensureRunning, stop, installed, paths: pathsNow, startProblem: () => startProblem, logPath };
+  return { install, installVideo, videoInstalled, status, ensureRunning, stop, installed, paths: pathsNow, startProblem: () => startProblem, logPath };
 }
 
-module.exports = { createImageInstaller, diagnose, pickGpu, listGpus, COMFY_URL, MODEL_URL, SEVEN_ZR_URL, COMFY_PORT };
+module.exports = { createImageInstaller, diagnose, pickGpu, listGpus, COMFY_URL, MODEL_URL, VIDEO_MODEL_URL, TEXT_ENCODER_URL, VIDEO_MODEL_FILE, TEXT_ENCODER_FILE, SEVEN_ZR_URL, COMFY_PORT };

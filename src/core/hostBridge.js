@@ -730,6 +730,18 @@ export const hostBridge = {
     }
   },
 
+  /** Vidéo : `run` (créer un clip) ou `install` (module vidéo, environ 11 Go). */
+  async videoGen(action, payload) {
+    const host = hasElectron() ? window.jarvisHost : null;
+    const fn = host && { run: host.videoGenRun, install: host.videoGenInstall }[action];
+    if (typeof fn !== 'function') return { unavailable: true };
+    try {
+      return await fn(payload);
+    } catch (e) {
+      return { ok: false, step: 'error', text: e.message || String(e) };
+    }
+  },
+
   // ── Contrôle à distance depuis Jarvis Android (electron/remoteServer.cjs) ──
 
   async remote(action, arg) {

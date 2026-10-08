@@ -301,6 +301,46 @@ ipcMain.handle('jarvis:imagegen-run', async (_e, input = {}) => {
   }
 });
 
+// Vidéo (ComfyUI + LTX-Video, electron/imageGen.cjs) : même réglage 18+ que les images, lu ici et jamais dans les arguments.
+// L'image à animer doit être un PNG déjà créé par Jarvis (dossier Images\\Jarvis) : on n'anime pas une photo quelconque.
+ipcMain.handle('jarvis:video-install', () => getImageInstaller().installVideo());
+ipcMain.handle('jarvis:video-run', async (_e, input = {}) => {
+  const safe = {
+    action: 'video',
+    prompt: String(input.prompt || ''),
+    negative: String(input.negative || ''),
+    seconds: input.seconds, width: input.width, height: input.height, seed: input.seed,
+    adult: readStore().config_v1?.imageAdult === true,
+    source: 'pc',
+  };
+  if (input.imagePath) {
+    try {
+      const dir = path.resolve(app.getPath('pictures'), 'Jarvis');
+      const file = path.resolve(String(input.imagePath));
+      if (path.dirname(file) !== dir || path.extname(file).toLowerCase() !== '.png') {
+        return { ok: false, text: 'Seules les images créées par Jarvis (dossier Images\\Jarvis, en PNG) peuvent être animées.' };
+      }
+      safe.image = fs.readFileSync(file).toString('base64');
+    } catch {
+      return { ok: false, text: 'Impossible de lire l’image à animer.' };
+    }
+  }
+  const res = await getImageGen().run(safe);
+  if (!res.ok || !res.video) return { ok: false, text: res.text };
+  try {
+    const dir = path.join(app.getPath('videos'), 'Jarvis');
+    fs.mkdirSync(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+    const file = path.join(dir, `jarvis-${stamp}${res.seed != null ? `-${res.seed}` : ''}.${res.ext || 'webm'}`);
+    fs.writeFileSync(file, Buffer.from(res.video, 'base64'));
+    if (input.inline === true) return { ok: true, text: `${res.text} Enregistrée : ${file}`, path: file, seed: res.seed, dataUri: `data:video/${res.ext === 'mp4' ? 'mp4' : 'webm'};base64,${res.video}` };
+    shell.openPath(file).catch(() => {});
+    return { ok: true, text: `${res.text} Enregistrée et ouverte : ${file}`, path: file, seed: res.seed };
+  } catch (err) {
+    return { ok: false, text: `${res.text} Mais l’enregistrement a échoué : ${err.message || err}` };
+  }
+});
+
 // ── Contrôle à distance depuis Jarvis Android (electron/remoteServer.cjs) ──────
 
 function getRemoteServer() {

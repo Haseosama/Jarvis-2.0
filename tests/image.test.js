@@ -8,7 +8,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { createImageGen, refusal, txt2imgBody, comfyWorkflow, fooocusBody } = require('../electron/imageGen.cjs');
+const { createImageGen, refusal, txt2imgBody, comfyWorkflow, fooocusBody, videoBody, videoWorkflow } = require('../electron/imageGen.cjs');
 const { createRemoteServer, encryptCommand } = require('../electron/remoteServer.cjs');
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]).toString('base64');
@@ -17,7 +17,7 @@ const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]).toString('base64');
 function fakeFetch(routes, calls = []) {
   return async (url, init = {}) => {
     const key = `${init.method || 'GET'} ${url.split('?')[0]}`;
-    calls.push({ key, body: init.body ? JSON.parse(init.body) : null, url });
+    calls.push({ key, body: typeof init.body === 'string' ? JSON.parse(init.body) : (init.body ? { form: true } : null), url });
     const handler = routes[key];
     if (!handler) throw new TypeError('fetch failed');
     const r = await handler(init);
@@ -428,7 +428,7 @@ describe('images : Studio d’images (sans assistant)', () => {
   it('a un onglet Images qui envoie la description directement au générateur, avec le réglage adulte partagé', async () => {
     const panel = fs.readFileSync(new URL('../src/ui/ModelStudioPanel.jsx', import.meta.url), 'utf8');
     assert.match(panel, /id: 'images'/);
-    assert.match(panel, /<ImageStudio \/>/);
+    assert.match(panel, /<ImageStudio onAnimate/);
     const studio = fs.readFileSync(new URL('../src/ui/ImageStudio.jsx', import.meta.url), 'utf8');
     assert.match(studio, /hostBridge\.imageGen\('run'/);
     assert.match(studio, /inline: true/);
@@ -527,5 +527,107 @@ describe('images : qualité (styles, HD, modèle)', () => {
     assert.match(studio, /hostBridge\.imageGen\('models'\)/);
     const main = fs.readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
     assert.match(main, /jarvis:imagegen-models/);
+  });
+});
+
+describe('vidéo : ComfyUI + LTX-Video', () => {
+  const routes = (extra = {}, calls) => ({
+    'GET http://127.0.0.1:8188/system_stats': () => ({ json: {} }),
+    'GET http://127.0.0.1:8188/models/checkpoints': () => ({ json: ['x.safetensors', 'ltxv-2b-0.9.6-distilled-04-25.safetensors'] }),
+    'GET http://127.0.0.1:8188/object_info/CLIPLoader': () => ({ json: { CLIPLoader: { input: { required: { clip_name: [['t5xxl_fp8_e4m3fn.safetensors']] } } } } }),
+    'POST http://127.0.0.1:8188/prompt': () => ({ json: { prompt_id: 'v1' } }),
+    'GET http://127.0.0.1:8188/history/v1': () => ({ json: { v1: { status: { status_str: 'success' }, outputs: { 13: { images: [{ filename: 'clip_00001_.webm', subfolder: 'jarvis', type: 'output' }], animated: [true] } } } } }),
+    'GET http://127.0.0.1:8188/view': () => ({ bytes: Buffer.from('WEBM') }),
+    ...extra,
+  });
+
+  it('calcule la taille et le nombre d’images (8 n + 1), et garde le refus des mineurs', () => {
+    const b = videoBody({ prompt: 'x', seconds: 2, width: 500, height: 5000 });
+    assert.deepEqual([b.length, b.width, b.height, b.seconds, b.steps], [49, 512, 1024, 2, 8]);
+    assert.equal(videoBody({ prompt: 'x', seconds: 99 }).length, 97);
+    assert.equal(videoBody({ prompt: 'x', seconds: 1 }).length, 25);
+    assert.match(videoBody({ prompt: 'x', adult: true }).negative_prompt, /underage/);
+    assert.doesNotMatch(videoBody({ prompt: 'x', adult: true }).negative_prompt, /nsfw/);
+  });
+
+  it('graphe texte → vidéo et image → vidéo', () => {
+    const t = videoWorkflow(videoBody({ prompt: 'vague', seed: 5 })).graph;
+    assert.equal(t[7].class_type, 'EmptyLTXVLatentVideo');
+    assert.equal(t[2].inputs.type, 'ltxv');
+    assert.equal(t[11].inputs.cfg, 1);
+    assert.equal(t[11].inputs.noise_seed, 5);
+    assert.equal(t[13].class_type, 'SaveWEBM');
+    const i = videoWorkflow(videoBody({ prompt: 'elle sourit' }), 'a.png').graph;
+    assert.equal(i[5].inputs.image, 'a.png');
+    assert.equal(i[7].class_type, 'LTXVImgToVideo');
+    assert.deepEqual(i[8].inputs.positive, ['7', 0]);
+    assert.deepEqual(i[11].inputs.latent_image, ['7', 2]);
+  });
+
+  it('crée un clip depuis une image : envoi de l’image, graphe, lecture du fichier', async () => {
+    const calls = [];
+    const gen = createImageGen({
+      baseUrl: '', pollMs: 1,
+      fetchImpl: fakeFetch(routes({ 'POST http://127.0.0.1:8188/upload/image': () => ({ json: { name: 'up.png', subfolder: '', type: 'input' } }) }), calls),
+    });
+    const r = await gen.run({ action: 'video', prompt: 'she smiles', image: PNG, seconds: 1, adult: true });
+    assert.equal(r.ok, true, r.text);
+    assert.equal(Buffer.from(r.video, 'base64').toString(), 'WEBM');
+    assert.equal(r.ext, 'webm');
+    assert.ok(calls.some((c) => c.key.endsWith('/upload/image')));
+    const graph = calls.find((c) => c.key.endsWith('/prompt')).body.prompt;
+    assert.equal(graph[5].inputs.image, 'up.png');
+    assert.equal(graph[7].inputs.length, 25);
+    assert.match(calls.find((c) => c.key.endsWith('/view')).url, /filename=clip_00001_\.webm.*subfolder=jarvis.*type=output/);
+  });
+
+  it('refuse les mineurs, le contenu adulte non activé, et dit quand le module vidéo manque', async () => {
+    const gen = createImageGen({ baseUrl: '', pollMs: 1, fetchImpl: fakeFetch(routes()) });
+    assert.match((await gen.run({ action: 'video', prompt: 'a teenage girl dancing', adult: true })).text, /enfant ni de mineur/);
+    assert.match((await gen.run({ action: 'video', prompt: 'a nude woman', adult: false, source: 'pc' })).text, /contenu adulte est désactivé/);
+    const bare = createImageGen({
+      baseUrl: '', pollMs: 1,
+      fetchImpl: fakeFetch(routes({ 'GET http://127.0.0.1:8188/models/checkpoints': () => ({ json: ['x.safetensors'] }) })),
+    });
+    assert.match((await bare.run({ action: 'video', prompt: 'a wave' })).text, /module vidéo n’est pas installé/);
+  });
+
+  it('l’installateur sait installer le module vidéo, et les liens sont ceux de Hugging Face', () => {
+    const inst = fs.readFileSync(new URL('../electron/imageInstall.cjs', import.meta.url), 'utf8');
+    assert.match(inst, /Lightricks\/LTX-Video\/resolve\/main/);
+    assert.match(inst, /comfyanonymous\/flux_text_encoders\/resolve\/main/);
+    const { createImageInstaller } = require('../electron/imageInstall.cjs');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jv-'));
+    const i = createImageInstaller({ dataDir: dir, platform: 'win32', fetchImpl: async () => { throw new Error('non'); } });
+    assert.equal(i.videoInstalled(), false);
+    assert.equal(i.status().videoInstalled, false);
+    assert.match(i.installVideo().text, /Installez d’abord le générateur d’images/);
+  });
+
+  it('IPC : n’anime que les PNG du dossier Images\\Jarvis, réglage 18+ lu dans le store ; UI et outil présents', () => {
+    const main = fs.readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
+    const block = main.slice(main.indexOf("ipcMain.handle('jarvis:video-run'"), main.indexOf('// ── Contrôle à distance'));
+    assert.match(block, /readStore\(\)\.config_v1\?\.imageAdult === true/);
+    assert.match(block, /path\.dirname\(file\) !== dir/);
+    assert.doesNotMatch(block, /input\.adult/);
+    const panel = fs.readFileSync(new URL('../src/ui/ModelStudioPanel.jsx', import.meta.url), 'utf8');
+    assert.match(panel, /id: 'video'/);
+    assert.match(fs.readFileSync(new URL('../src/ui/VideoStudio.jsx', import.meta.url), 'utf8'), /hostBridge\.videoGen\('run'/);
+    assert.match(fs.readFileSync(new URL('../src/actions/ToolRegistry.js', import.meta.url), 'utf8'), /name: 'generate_video'/);
+  });
+
+  it('la commande /video envoie la description à l’outil sans passer par un modèle', async () => {
+    const { JarvisEngine } = await import('../src/core/JarvisEngine.js');
+    const engine = Object.create(JarvisEngine.prototype);
+    const ran = []; const out = [];
+    engine.cb = {}; engine.stopSpeaking = () => {}; engine._setState = () => {};
+    engine._tryExternalBrain = async () => { throw new Error('ne doit pas être appelé'); };
+    engine._deliverAssistantReply = (t) => out.push(t);
+    engine.tools = { execute: async (n, a) => { ran.push([n, a]); return 'Clip créé.'; } };
+    await engine.sendUserMessage('/video une vague');
+    await engine.sendUserMessage('/video');
+    assert.deepEqual(ran, [['generate_video', { prompt: 'une vague' }]]);
+    assert.equal(out[0], 'Clip créé.');
+    assert.match(out[1], /Écrivez la description/);
   });
 });

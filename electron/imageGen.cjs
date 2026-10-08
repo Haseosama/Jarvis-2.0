@@ -152,6 +152,72 @@ function comfyWorkflow(body, ckpt) {
   return graph;
 }
 
+// ── Vidéo (ComfyUI seulement) : LTX-Video 2B distillé, nœuds intégrés à ComfyUI ────────────────────────────────────────────
+const VIDEO_MODEL = 'ltxv-2b-0.9.6-distilled-04-25.safetensors';
+const TEXT_ENCODER = 't5xxl_fp8_e4m3fn.safetensors';
+const VIDEO_FPS = 24;
+const VIDEO_TIMEOUT_MS = 25 * 60_000; // un clip prend plusieurs minutes sur une carte de 6 à 8 Go
+const VIDEO_NEGATIVE = 'worst quality, inconsistent motion, blurry, jittery, distorted, watermark, text';
+
+/** Les paramètres d'un clip. Taille multiple de 32 (256 à 1024), durée 1 à 4 s, nombre d'images = 8 n + 1. */
+function videoBody(input = {}) {
+  const adult = input.adult === true;
+  const side = (v, d) => Math.round(clampInt(v, 256, 1024, d) / 32) * 32;
+  const seconds = Math.min(4, Math.max(1, Number(input.seconds) || 2));
+  return {
+    prompt: String(input.prompt || '').trim().slice(0, MAX_PROMPT),
+    negative_prompt: [String(input.negative || '').trim().slice(0, 600), ALWAYS_NEGATIVE, VIDEO_NEGATIVE, adult ? '' : SAFE_NEGATIVE]
+      .filter(Boolean).join(', '),
+    width: side(input.width, 512),
+    height: side(input.height, 768),
+    length: Math.round((seconds * VIDEO_FPS) / 8) * 8 + 1,
+    seconds,
+    steps: clampInt(input.steps, 4, 20, 8),
+    seed: clampInt(input.seed, -1, 2 ** 31 - 1, -1),
+  };
+}
+
+/** Le graphe ComfyUI d'un clip : depuis une image (`imageName` dans input/) ou depuis le texte seul. */
+function videoWorkflow(body, imageName = '') {
+  const seed = body.seed >= 0 ? body.seed : Math.floor(Math.random() * 2 ** 31);
+  const g = {
+    1: { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: VIDEO_MODEL } },
+    2: { class_type: 'CLIPLoader', inputs: { clip_name: TEXT_ENCODER, type: 'ltxv' } },
+    3: { class_type: 'CLIPTextEncode', inputs: { text: body.prompt, clip: ['2', 0] } },
+    4: { class_type: 'CLIPTextEncode', inputs: { text: body.negative_prompt, clip: ['2', 0] } },
+  };
+  let positive = ['3', 0];
+  let negative = ['4', 0];
+  let latent;
+  if (imageName) {
+    g[5] = { class_type: 'LoadImage', inputs: { image: imageName } };
+    // LTX apprend sur des vidéos compressées : une image trop nette reste figée, d'où ce léger prétraitement.
+    g[6] = { class_type: 'LTXVPreprocess', inputs: { image: ['5', 0], img_compression: 35 } };
+    g[7] = {
+      class_type: 'LTXVImgToVideo',
+      inputs: { positive, negative, vae: ['1', 2], image: ['6', 0], width: body.width, height: body.height, length: body.length, batch_size: 1, strength: 1 },
+    };
+    positive = ['7', 0]; negative = ['7', 1]; latent = ['7', 2];
+  } else {
+    g[7] = { class_type: 'EmptyLTXVLatentVideo', inputs: { width: body.width, height: body.height, length: body.length, batch_size: 1 } };
+    latent = ['7', 0];
+  }
+  g[8] = { class_type: 'LTXVConditioning', inputs: { positive, negative, frame_rate: VIDEO_FPS } };
+  g[9] = { class_type: 'LTXVScheduler', inputs: { steps: body.steps, max_shift: 2.05, base_shift: 0.95, stretch: true, terminal: 0.1, latent } };
+  g[10] = { class_type: 'KSamplerSelect', inputs: { sampler_name: 'euler' } };
+  g[11] = {
+    class_type: 'SamplerCustom',
+    inputs: {
+      model: ['1', 0], add_noise: true, noise_seed: seed, cfg: 1, positive: ['8', 0], negative: ['8', 1],
+      sampler: ['10', 0], sigmas: ['9', 0], latent_image: latent,
+    },
+  };
+  // Décodage par morceaux : le décodage d'un coup dépasse la mémoire d'une carte de 8 Go.
+  g[12] = { class_type: 'VAEDecodeTiled', inputs: { samples: ['11', 0], vae: ['1', 2], tile_size: 512, overlap: 64, temporal_size: 64, temporal_overlap: 8 } };
+  g[13] = { class_type: 'SaveWEBM', inputs: { images: ['12', 0], filename_prefix: 'jarvis/clip', codec: 'vp9', fps: VIDEO_FPS, crf: 28 } };
+  return { graph: g, seed };
+}
+
 /** Le corps envoyé à Fooocus-API (/v1/generation/text-to-image), réponse synchrone en base64. */
 const FOOOCUS_SIZES = [[704, 1408], [768, 1344], [832, 1216], [896, 1152], [1024, 1024], [1152, 896], [1216, 832], [1344, 768]];
 
@@ -176,6 +242,7 @@ const NONE_FOUND_INSTALL = 'Aucun générateur d’images sur le PC. Jarvis peut
   + 'télécharger) : demandez « installe le générateur d’images ».';
 
 function createImageGen({
+  videoTimeoutMs = VIDEO_TIMEOUT_MS,
   baseUrl = () => process.env.JARVIS_SD_URL || '',
   comfyModel = () => process.env.JARVIS_COMFY_MODEL || '',
   fetchImpl = globalThis.fetch,
@@ -266,6 +333,105 @@ function createImageGen({
     return [];
   }
 
+  /** Les valeurs permises d'une entrée de nœud ComfyUI (ex. CLIPLoader.clip_name), selon les deux formes de /object_info. */
+  async function comfyChoices(url, node, field) {
+    const info = await (await call(`${url}/object_info/${node}`, {}, 10_000)).json();
+    const spec = info?.[node]?.input?.required?.[field];
+    if (Array.isArray(spec?.[0])) return spec[0].map(String);
+    if (Array.isArray(spec?.[1]?.options)) return spec[1].options.map(String);
+    return [];
+  }
+
+  /** Met un graphe en file, attend son résultat (délai `ms`) et rend le premier fichier produit. */
+  async function comfyRun(url, graph, ms) {
+    const queued = await call(`${url}/prompt`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: graph, client_id: 'jarvis' }),
+    });
+    if (!queued.ok) {
+      const why = await comfyProblem(queued);
+      return { error: `ComfyUI a refusé la demande (code ${queued.status})${why ? ` : ${why}` : ''}.` };
+    }
+    const id = (await queued.json()).prompt_id;
+    const deadline = Date.now() + ms;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, pollMs));
+      const hist = await (await call(`${url}/history/${encodeURIComponent(id)}`, {}, 10_000)).json();
+      const entry = hist && hist[id];
+      if (!entry) continue;
+      if (entry.status?.status_str === 'error') {
+        const msg = (entry.status.messages || []).find((m) => m?.[0] === 'execution_error')?.[1];
+        const why = msg?.exception_message ? String(msg.exception_message).trim().slice(0, 200) : '';
+        return { error: `ComfyUI a échoué${why ? ` : ${why}` : ''}.` };
+      }
+      const file = Object.values(entry.outputs || {}).flatMap((o) => o.images || o.gifs || [])[0];
+      if (!file) {
+        if (entry.status?.completed) return { error: 'ComfyUI a fini sans rien produire.' };
+        continue;
+      }
+      const q = new URLSearchParams({ filename: file.filename, subfolder: file.subfolder || '', type: file.type || 'output' });
+      const res = await call(`${url}/view?${q}`, {}, 120_000);
+      if (!res.ok) return { error: 'ComfyUI n’a pas rendu le fichier.' };
+      return { data: Buffer.from(await res.arrayBuffer()).toString('base64'), filename: file.filename };
+    }
+    try {
+      await call(`${url}/queue`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ delete: [id] }) }, 5000);
+      await call(`${url}/interrupt`, { method: 'POST' }, 5000);
+    } catch { /* ComfyUI ne répond plus : rien à arrêter */ }
+    return { error: 'timeout' };
+  }
+
+  /** Un clip : texte → vidéo, ou image → vidéo si `input.image` (PNG en base64) est fourni. */
+  async function video(input) {
+    const adult = input.adult === true;
+    const why = refusal(input.prompt, adult, input.source === 'pc' ? 'pc' : 'phone');
+    if (why) return { ok: false, text: why };
+    const body = videoBody({ ...input, adult });
+    let where = await locate();
+    if (where && where.kind !== 'comfy' && !value(baseUrl)) {
+      // Forge ou Fooocus a répondu en premier : la vidéo n'a besoin que de ComfyUI, on le cherche à part.
+      for (const c of CANDIDATES.filter((x) => x.kind === 'comfy')) {
+        const hit = await probe(c.url, 'comfy');
+        if (hit) { where = hit; break; }
+      }
+    }
+    if (!where) return { ok: false, text: 'Aucun ComfyUI ne répond : lancez-le ou installez le générateur d’images (Studio IA › Images).' };
+    if (where.kind !== 'comfy') return { ok: false, text: 'La vidéo demande ComfyUI (Forge et Fooocus ne la font pas).' };
+    found = where;
+    const url = where.url;
+    let out;
+    try {
+      const [ckpts, encoders] = await Promise.all([comfyModels(url), comfyChoices(url, 'CLIPLoader', 'clip_name')]);
+      if (!ckpts.includes(VIDEO_MODEL) || !encoders.includes(TEXT_ENCODER)) {
+        return { ok: false, text: 'Le module vidéo n’est pas installé : installez-le dans Studio IA › Vidéo (environ 11 Go).' };
+      }
+      let imageName = '';
+      if (input.image) {
+        const form = new FormData();
+        form.append('image', new Blob([Buffer.from(String(input.image).replace(/^data:image\/\w+;base64,/, ''), 'base64')], { type: 'image/png' }), `jarvis-${Date.now()}.png`);
+        form.append('type', 'input');
+        form.append('overwrite', 'true');
+        const up = await call(`${url}/upload/image`, { method: 'POST', body: form }, 60_000);
+        if (!up.ok) return { ok: false, text: `ComfyUI a refusé l’image à animer (code ${up.status}).` };
+        imageName = (await up.json()).name || '';
+        if (!imageName) return { ok: false, text: 'ComfyUI n’a pas gardé l’image à animer.' };
+      }
+      const { graph, seed } = videoWorkflow(body, imageName);
+      out = await comfyRun(url, graph, videoTimeoutMs);
+      out.seed = seed;
+    } catch (err) {
+      out = { error: err && (err.name === 'TimeoutError' || err.name === 'AbortError') ? 'timeout' : 'ComfyUI ne répond plus.' };
+    }
+    if (out.error === 'timeout') return { ok: false, text: 'La vidéo n’a pas fini à temps. Essayez une durée plus courte (1 s) ou une taille plus petite.' };
+    if (out.error) return { ok: false, text: out.error };
+    return {
+      ok: true,
+      text: `Vidéo créée avec ComfyUI (${body.width}×${body.height}, ${body.seconds} s, graine ${out.seed}).`,
+      video: out.data,
+      ext: /\.(\w+)$/.exec(out.filename || '')?.[1] || 'webm',
+      seed: out.seed,
+    };
+  }
+
   async function comfy(url, body) {
     let ckpt = body.model || value(comfyModel);
     if (body.model) {
@@ -336,6 +502,7 @@ function createImageGen({
       return { ok: r.ok, text: r.text };
     }
     if (action === 'status') return installState();
+    if (action === 'video') return video(input);
     if (action === 'models') {
       // Les modèles du générateur déjà lancé (on n'en démarre pas un pour ça).
       const here = await locate(false);
@@ -391,4 +558,4 @@ function createImageGen({
   return { run, locate };
 }
 
-module.exports = { createImageGen, refusal, STYLES, txt2imgBody, comfyWorkflow, fooocusBody, CANDIDATES };
+module.exports = { createImageGen, refusal, STYLES, videoBody, videoWorkflow, VIDEO_MODEL, TEXT_ENCODER, txt2imgBody, comfyWorkflow, fooocusBody, CANDIDATES };

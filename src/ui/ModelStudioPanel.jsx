@@ -4,11 +4,13 @@ import ModelCompare from './ModelCompare.jsx';
 import ProviderSettings from './ProviderSettings.jsx';
 import BrainSettings from './BrainSettings.jsx';
 import ImageStudio from './ImageStudio.jsx';
+import VideoStudio from './VideoStudio.jsx';
 
 const TABS = [
   { id: 'code', label: '💻 Studio de code' },
   { id: 'compare', label: '⚔️ Comparateur' },
   { id: 'images', label: '🎨 Images' },
+  { id: 'video', label: '🎬 Vidéo' },
   { id: 'brain', label: '🧠 Cerveau' },
   { id: 'providers', label: '🔑 Fournisseurs' },
 ];
@@ -31,7 +33,8 @@ export default function ModelStudioPanel({ tab = 'code', seed = '', onClose }) {
       <div className="llm-body">
         {active === 'code' && <CodeStudio seed={seed} />}
         {active === 'compare' && <ModelCompare seed={seed} />}
-        {active === 'images' && <ImageStudio />}
+        {active === 'images' && <ImageStudio onAnimate={() => setActive('video')} />}
+        {active === 'video' && <VideoStudio />}
         {active === 'brain' && <BrainSettings />}
         {active === 'providers' && <ProviderSettings />}
       </div>
