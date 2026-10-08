@@ -748,7 +748,10 @@ export class ToolRegistry {
           negative: { type: 'STRING', description: 'Ce qu’il ne faut pas voir (facultatif).' },
           width: { type: 'NUMBER', description: 'Largeur en pixels, 512 à 1536 (défaut 832).' },
           height: { type: 'NUMBER', description: 'Hauteur en pixels, 512 à 1536 (défaut 1216).' },
-          steps: { type: 'NUMBER', description: 'Étapes de calcul, 10 à 50 (défaut 25).' },
+          steps: { type: 'NUMBER', description: 'Étapes de calcul, 10 à 50 (défaut 30).' },
+          style: { type: 'STRING', description: 'photo (réaliste), anime, auto (défaut) ou raw (description telle quelle).' },
+          hd: { type: 'BOOLEAN', description: 'true = seconde passe HD (plus de détails, bien plus long).' },
+          seed: { type: 'NUMBER', description: 'Graine pour refaire la même image (facultatif).' },
         },
       },
       run: async (args) => {

@@ -721,7 +721,7 @@ export const hostBridge = {
 
   async imageGen(action, payload) {
     const host = hasElectron() ? window.jarvisHost : null;
-    const fn = host && { status: host.imageGenStatus, install: host.imageGenInstall, run: host.imageGenRun }[action];
+    const fn = host && { status: host.imageGenStatus, install: host.imageGenInstall, run: host.imageGenRun, models: host.imageGenModels }[action];
     if (typeof fn !== 'function') return { unavailable: true };
     try {
       return await fn(payload);

@@ -274,11 +274,13 @@ ipcMain.handle('jarvis:imagegen-install', () => getImageInstaller().install());
 // Image demandée sur le PC lui-même : rangée dans Images\\Jarvis puis ouverte. Le contenu adulte vient du réglage de l'utilisateur
 // (Réglages > Images, lu ici dans la configuration enregistrée) et jamais d'un argument de l'outil : le modèle ne peut pas l'activer.
 // Les demandes de mineurs sont refusées dans tous les cas (imageGen.cjs).
+ipcMain.handle('jarvis:imagegen-models', () => getImageGen().run({ action: 'models' }));
 ipcMain.handle('jarvis:imagegen-run', async (_e, input = {}) => {
   const safe = {
     prompt: String(input.prompt || ''),
     negative: String(input.negative || ''),
     width: input.width, height: input.height, steps: input.steps, seed: input.seed,
+    style: input.style, hd: input.hd === true, model: String(input.model || ''),
     adult: readStore().config_v1?.imageAdult === true,
     source: 'pc',
   };

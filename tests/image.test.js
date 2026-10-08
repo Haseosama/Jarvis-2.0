@@ -75,7 +75,7 @@ describe('images : les trois générateurs', () => {
     assert.equal(r.png, PNG);
     assert.equal(r.engine, 'forge');
     assert.match(r.text, /Forge .*graine 42/);
-    assert.equal(calls.at(-1).body.prompt, 'un phare dans la tempête');
+    assert.match(calls.at(-1).body.prompt, /^un phare dans la tempête, highly detailed/);
   });
 
   it('ComfyUI : met le graphe en file, attend l’historique et lit l’image', async () => {
@@ -101,7 +101,7 @@ describe('images : les trois générateurs', () => {
     assert.equal(r.engine, 'comfy');
     const graph = calls.find((c) => c.key.endsWith('/prompt')).body.prompt;
     assert.equal(graph[1].inputs.ckpt_name, 'juggernautXL.safetensors');
-    assert.equal(graph[2].inputs.text, 'forêt');
+    assert.equal(graph[2].inputs.text, 'forêt, highly detailed, sharp focus');
     assert.match(calls.find((c) => c.key.endsWith('/view')).url, /filename=p\.png.*type=temp/);
   });
 
@@ -465,5 +465,67 @@ describe('images : commande /image dans le chat', () => {
     assert.deepEqual(ran, [['generate_image', { prompt: 'un chat roux' }]]);
     assert.equal(out[0], 'Image créée.');
     assert.match(out[1], /Écrivez la description/);
+  });
+});
+
+describe('images : qualité (styles, HD, modèle)', () => {
+  it('ajoute une base de qualité, un style, et garde le refus des mineurs', () => {
+    const photo = txt2imgBody({ prompt: 'une femme adulte', style: 'photo', adult: true });
+    assert.match(photo.prompt, /^une femme adulte, photorealistic/);
+    assert.match(photo.negative_prompt, /bad hands/);
+    assert.match(photo.negative_prompt, /cartoon/);
+    assert.match(photo.negative_prompt, /underage/);
+    assert.doesNotMatch(photo.negative_prompt, /nsfw/);
+    const raw = txt2imgBody({ prompt: 'x', style: 'raw' });
+    assert.equal(raw.prompt, 'x');
+    assert.doesNotMatch(raw.negative_prompt, /bad hands/);
+    assert.match(raw.negative_prompt, /child/); // jamais retiré
+    assert.equal(txt2imgBody({ prompt: 'x' }).steps, 30);
+    assert.equal(txt2imgBody({ prompt: 'x', style: 'inconnu' }).prompt, 'x, highly detailed, sharp focus');
+  });
+
+  it('HD : seconde passe ComfyUI (latent agrandi) et hires fix côté Forge', () => {
+    const body = txt2imgBody({ prompt: 'x', hd: true, seed: 7 });
+    const g = comfyWorkflow(body, 'm.safetensors');
+    assert.equal(g[8].class_type, 'LatentUpscaleBy');
+    assert.equal(g[9].inputs.denoise, 0.45);
+    assert.deepEqual(g[6].inputs.samples, ['9', 0]);
+    assert.equal(g[5].inputs.sampler_name, 'dpmpp_2m_sde');
+    assert.equal(g[9].inputs.seed, 7);
+    assert.equal(body.enable_hr, true);
+    const plain = comfyWorkflow(txt2imgBody({ prompt: 'x' }), 'm.safetensors');
+    assert.equal(plain[8], undefined);
+    assert.deepEqual(plain[6].inputs.samples, ['5', 0]);
+    assert.equal(txt2imgBody({ prompt: 'x' }).enable_hr, undefined);
+  });
+
+  it('liste les modèles d’un générateur lancé, et choisit celui demandé (sinon erreur claire)', async () => {
+    const calls = [];
+    const routes = {
+      'GET http://127.0.0.1:8188/system_stats': () => ({ json: {} }),
+      'GET http://127.0.0.1:8188/models/checkpoints': () => ({ json: ['a.safetensors', 'juggernaut.safetensors'] }),
+      'POST http://127.0.0.1:8188/prompt': () => ({ json: { prompt_id: 'z' } }),
+      'GET http://127.0.0.1:8188/history/z': () => ({ json: { z: { status: { status_str: 'success' }, outputs: { 7: { images: [{ filename: 'p.png' }] } } } } }),
+      'GET http://127.0.0.1:8188/view': () => ({ bytes: Buffer.from(PNG, 'base64') }),
+    };
+    const gen = createImageGen({ baseUrl: '', pollMs: 1, fetchImpl: fakeFetch(routes, calls) });
+    assert.deepEqual((await gen.run({ action: 'models' })).models, ['a.safetensors', 'juggernaut.safetensors']);
+    const ok = await gen.run({ prompt: 'forêt', model: 'a.safetensors', hd: true });
+    assert.equal(ok.ok, true, ok.text);
+    assert.match(ok.text, /\+ HD/);
+    assert.equal(calls.find((c) => c.key.endsWith('/prompt')).body.prompt[1].inputs.ckpt_name, 'a.safetensors');
+    const bad = await gen.run({ prompt: 'forêt', model: 'absent.safetensors' });
+    assert.equal(bad.ok, false);
+    assert.match(bad.text, /absent\.safetensors/);
+    const none = createImageGen({ baseUrl: '', fetchImpl: fakeFetch({}) });
+    assert.deepEqual((await none.run({ action: 'models' })).models, []);
+  });
+
+  it('le Studio d’images propose style, HD, nombre, graine et modèle', () => {
+    const studio = fs.readFileSync(new URL('../src/ui/ImageStudio.jsx', import.meta.url), 'utf8');
+    for (const k of ['style', 'hd', 'seed', 'model']) assert.match(studio, new RegExp(`${k}[,:]`));
+    assert.match(studio, /hostBridge\.imageGen\('models'\)/);
+    const main = fs.readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
+    assert.match(main, /jarvis:imagegen-models/);
   });
 });

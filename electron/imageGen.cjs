@@ -19,6 +19,8 @@ const CANDIDATES = [
   { kind: 'fooocus', url: 'http://127.0.0.1:8888' },
 ];
 const MAX_PROMPT = 1500;
+const HD_SCALE = 1.4; // seconde passe « HD » (agrandissement dans l'espace latent puis raffinage)
+const HD_DENOISE = 0.45;
 const TIMEOUT_MS = 170_000;
 
 // Mots (français et anglais) qui désignent un enfant ou un mineur : la demande est refusée, réglage adulte ou non.
@@ -39,6 +41,22 @@ const EXPLICIT_WORDS = [
 
 const ALWAYS_NEGATIVE = 'child, children, kid, minor, underage, teen, teenager, young girl, young boy, loli, childlike, '
   + 'baby face, petite child body, school uniform';
+// Qualité : ce qui améliore presque toujours le rendu (mains, anatomie, flou, filigranes). Le style choisit en plus un
+// complément à la description et à l'invite négative ; « raw » n'ajoute rien.
+const QUALITY_NEGATIVE = 'lowres, blurry, out of focus, bad anatomy, bad proportions, bad hands, extra fingers, missing fingers, '
+  + 'fused fingers, extra limbs, deformed, disfigured, mutated, cross-eyed, watermark, text, signature, jpeg artifacts';
+const STYLES = {
+  auto: { positive: 'highly detailed, sharp focus', negative: '' },
+  photo: {
+    positive: 'photorealistic, natural skin texture, soft cinematic lighting, sharp focus, highly detailed, 8k, dslr photo',
+    negative: 'cartoon, anime, illustration, 3d render, painting, plastic skin, airbrushed',
+  },
+  anime: {
+    positive: 'anime style, detailed illustration, clean lineart, vibrant colors, masterpiece, best quality',
+    negative: 'photo, photorealistic, realistic, 3d render, sketch',
+  },
+  raw: { positive: '', negative: '' },
+};
 const SAFE_NEGATIVE = 'nsfw, nude, naked, nudity, nipples, sexual, explicit, erotic, lingerie';
 
 function normalize(text) {
@@ -73,27 +91,37 @@ function clampInt(v, min, max, def) {
 /** Le corps envoyé à /sdapi/v1/txt2img. Taille multiple de 64, 512 à 1536. */
 function txt2imgBody(input = {}) {
   const adult = input.adult === true;
-  const negative = [String(input.negative || '').trim().slice(0, 600), ALWAYS_NEGATIVE, adult ? '' : SAFE_NEGATIVE]
+  const style = STYLES[String(input.style || 'auto').toLowerCase()] || STYLES.auto;
+  const raw = String(input.style || '').toLowerCase() === 'raw';
+  const negative = [String(input.negative || '').trim().slice(0, 600), ALWAYS_NEGATIVE, raw ? '' : QUALITY_NEGATIVE, style.negative, adult ? '' : SAFE_NEGATIVE]
     .filter(Boolean).join(', ');
   const side = (v, d) => Math.round(clampInt(v, 512, 1536, d) / 64) * 64;
+  const prompt = [String(input.prompt || '').trim().slice(0, MAX_PROMPT), style.positive].filter(Boolean).join(', ');
+  const hd = input.hd === true;
   return {
-    prompt: String(input.prompt || '').trim().slice(0, MAX_PROMPT),
+    prompt,
     negative_prompt: negative,
     width: side(input.width, 832),
     height: side(input.height, 1216),
-    steps: clampInt(input.steps, 10, 50, 25),
-    cfg_scale: 6,
+    steps: clampInt(input.steps, 10, 50, 30),
+    cfg_scale: 5.5,
     seed: clampInt(input.seed, -1, 2 ** 31 - 1, -1),
     batch_size: 1,
     n_iter: 1,
     save_images: false,
     send_images: true,
+    hd,
+    model: String(input.model || '').trim().slice(0, 200),
+    // Forge / A1111 : « hires fix » en seconde passe dans l'espace latent.
+    ...(hd ? { enable_hr: true, hr_scale: HD_SCALE, hr_upscaler: 'Latent', denoising_strength: HD_DENOISE, hr_second_pass_steps: 15 } : {}),
+    ...(String(input.model || '').trim() ? { override_settings: { sd_model_checkpoint: String(input.model).trim().slice(0, 200) } } : {}),
   };
 }
 
 /** Le graphe ComfyUI (format API) d'une image texte → image avec le modèle `ckpt`. */
 function comfyWorkflow(body, ckpt) {
-  return {
+  const seed = body.seed >= 0 ? body.seed : Math.floor(Math.random() * 2 ** 31);
+  const graph = {
     1: { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckpt } },
     2: { class_type: 'CLIPTextEncode', inputs: { text: body.prompt, clip: ['1', 1] } },
     3: { class_type: 'CLIPTextEncode', inputs: { text: body.negative_prompt, clip: ['1', 1] } },
@@ -102,13 +130,26 @@ function comfyWorkflow(body, ckpt) {
       class_type: 'KSampler',
       inputs: {
         model: ['1', 0], positive: ['2', 0], negative: ['3', 0], latent_image: ['4', 0],
-        seed: body.seed >= 0 ? body.seed : Math.floor(Math.random() * 2 ** 31), steps: body.steps, cfg: body.cfg_scale,
-        sampler_name: 'euler_ancestral', scheduler: 'normal', denoise: 1,
+        seed, steps: body.steps, cfg: body.cfg_scale,
+        sampler_name: 'dpmpp_2m_sde', scheduler: 'karras', denoise: 1,
       },
     },
     6: { class_type: 'VAEDecode', inputs: { samples: ['5', 0], vae: ['1', 2] } },
     7: { class_type: 'PreviewImage', inputs: { images: ['6', 0] } },
   };
+  if (body.hd) {
+    // Passe HD : agrandissement du latent puis second échantillonnage léger, qui ajoute du détail (peau, tissus, yeux).
+    graph[8] = { class_type: 'LatentUpscaleBy', inputs: { samples: ['5', 0], upscale_method: 'bislerp', scale_by: HD_SCALE } };
+    graph[9] = {
+      class_type: 'KSampler',
+      inputs: {
+        model: ['1', 0], positive: ['2', 0], negative: ['3', 0], latent_image: ['8', 0],
+        seed, steps: 18, cfg: body.cfg_scale, sampler_name: 'dpmpp_2m_sde', scheduler: 'karras', denoise: HD_DENOISE,
+      },
+    };
+    graph[6].inputs.samples = ['9', 0];
+  }
+  return graph;
 }
 
 /** Le corps envoyé à Fooocus-API (/v1/generation/text-to-image), réponse synchrone en base64. */
@@ -165,7 +206,7 @@ function createImageGen({
     return null;
   }
 
-  async function locate() {
+  async function locate(start = true) {
     const own = value(baseUrl).replace(/\/+$/, '');
     if (own) return probe(own);
     if (found && (await probe(found.url, found.kind))) return found;
@@ -174,7 +215,7 @@ function createImageGen({
       if (hit) return hit;
     }
     // Rien ne tourne : le ComfyUI que Jarvis a installé démarre à la demande.
-    if (installer && installer.installed() && (await installer.ensureRunning())) return probe(CANDIDATES[1].url, 'comfy');
+    if (start && installer && installer.installed() && (await installer.ensureRunning())) return probe(CANDIDATES[1].url, 'comfy');
     return null;
   }
 
@@ -226,7 +267,11 @@ function createImageGen({
   }
 
   async function comfy(url, body) {
-    let ckpt = value(comfyModel);
+    let ckpt = body.model || value(comfyModel);
+    if (body.model) {
+      const names = await comfyModels(url);
+      if (!names.includes(body.model)) return { error: `ComfyUI n’a pas le modèle « ${body.model} » (modèles : ${names.slice(0, 6).join(', ') || 'aucun'}).` };
+    }
     if (!ckpt) {
       const names = await comfyModels(url);
       // Le modèle que Jarvis installe d'abord, sinon le premier trouvé.
@@ -242,7 +287,7 @@ function createImageGen({
       return { error: `ComfyUI a refusé la demande (code ${queued.status})${why ? ` : ${why}` : ''}.` };
     }
     const id = (await queued.json()).prompt_id;
-    const deadline = Date.now() + timeoutMs;
+    const deadline = Date.now() + timeoutMs * (body.hd ? 3 : 1); // la passe HD demande bien plus de temps
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, pollMs));
       const hist = await (await call(`${url}/history/${encodeURIComponent(id)}`, {}, 10_000)).json();
@@ -291,6 +336,19 @@ function createImageGen({
       return { ok: r.ok, text: r.text };
     }
     if (action === 'status') return installState();
+    if (action === 'models') {
+      // Les modèles du générateur déjà lancé (on n'en démarre pas un pour ça).
+      const here = await locate(false);
+      if (!here) return { ok: true, models: [], engine: null, text: 'Aucun générateur ne tourne pour l’instant : il démarrera à la première image.' };
+      try {
+        if (here.kind === 'comfy') return { ok: true, engine: 'comfy', models: await comfyModels(here.url), text: '' };
+        if (here.kind === 'forge') {
+          const list = await (await call(`${here.url}/sdapi/v1/sd-models`, {}, 10_000)).json();
+          return { ok: true, engine: 'forge', models: (Array.isArray(list) ? list : []).map((m) => String(m.title || m.model_name || '')).filter(Boolean), text: '' };
+        }
+      } catch { /* liste indisponible */ }
+      return { ok: true, engine: here.kind, models: [], text: '' };
+    }
     const adult = input.adult === true;
     const why = refusal(input.prompt, adult, input.source === 'pc' ? 'pc' : 'phone');
     if (why) return { ok: false, text: why };
@@ -323,7 +381,7 @@ function createImageGen({
     const seed = out.seed ?? null;
     return {
       ok: true,
-      text: `Image créée avec ${NAMES[where.kind]} (${body.width}×${body.height}${seed != null ? `, graine ${seed}` : ''}).`,
+      text: `Image créée avec ${NAMES[where.kind]} (${body.width}×${body.height}${body.hd ? ' + HD' : ''}${seed != null ? `, graine ${seed}` : ''}).`,
       png,
       seed,
       engine: where.kind,
@@ -333,4 +391,4 @@ function createImageGen({
   return { run, locate };
 }
 
-module.exports = { createImageGen, refusal, txt2imgBody, comfyWorkflow, fooocusBody, CANDIDATES };
+module.exports = { createImageGen, refusal, STYLES, txt2imgBody, comfyWorkflow, fooocusBody, CANDIDATES };
