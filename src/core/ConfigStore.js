@@ -176,6 +176,7 @@ const DEFAULT_CONFIG = {
   sncfKey: '',
   navitiaKey: '',
   confirmDestructiveActions: true,
+  imageAdult: false, // images créées sur ce PC : contenu adulte (18+) autorisé ; jamais de mineur
 };
 
 /** Copie de la configuration sans secrets : c'est elle qui est écrite en clair (localStorage, jarvis-store.json). */

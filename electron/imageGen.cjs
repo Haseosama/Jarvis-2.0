@@ -51,14 +51,16 @@ function hasWord(text, words) {
 }
 
 /** Pourquoi refuser cette demande, ou null si elle passe. */
-function refusal(prompt, adult) {
+function refusal(prompt, adult, source = 'phone') {
   const p = String(prompt || '');
   if (!p.trim()) return 'Décrivez l’image à créer.';
   if (hasWord(p, MINOR_WORDS) || UNDERAGE_AGE.test(p)) {
     return 'Refusé : je ne crée aucune image d’enfant ni de mineur.';
   }
   if (!adult && hasWord(p, EXPLICIT_WORDS)) {
-    return 'Le contenu adulte est désactivé : activez-le dans Jarvis Android (Réglages > Images IA) pour ce genre d’image.';
+    return source === 'pc'
+      ? 'Le contenu adulte est désactivé : activez-le dans les Réglages de Jarvis 2.0 (Images créées sur ce PC, 18+) pour ce genre d’image.'
+      : 'Le contenu adulte est désactivé : activez-le dans Jarvis Android (Réglages > Images IA) pour ce genre d’image.';
   }
   return null;
 }
@@ -290,7 +292,7 @@ function createImageGen({
     }
     if (action === 'status') return installState();
     const adult = input.adult === true;
-    const why = refusal(input.prompt, adult);
+    const why = refusal(input.prompt, adult, input.source === 'pc' ? 'pc' : 'phone');
     if (why) return { ok: false, text: why };
     const body = txt2imgBody({ ...input, adult });
     const where = await locate();

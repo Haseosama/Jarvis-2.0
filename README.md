@@ -1,6 +1,6 @@
 # JARVIS 2.0 — Édition PC Autonome (Sans Backend)
 
-**Version actuelle : 2.0.36** — la release GitHub est étiquetée à partir de `package.json`. Incrémenter cette version avant toute publication.
+**Version actuelle : 2.0.37** — la release GitHub est étiquetée à partir de `package.json`. Incrémenter cette version avant toute publication.
 
 Adaptation complète sur PC (Windows / Desktop autonome) de **[Jarvis-Android v0.9.53](https://github.com/Haseosama/Jarvis-Android)**, conçue pour fonctionner en tant qu'exécutable `.exe` autonome sans aucun serveur backend externe.
 

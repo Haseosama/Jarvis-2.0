@@ -539,6 +539,26 @@ export default function SettingsModal({ onClose, onTestVoice, onOpenCreator }) {
                 </div>
               </div>
 
+              <h4>Images créées sur ce PC (ComfyUI)</h4>
+              <label className="settings-field" style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <input
+                  type="checkbox"
+                  checked={cfg.imageAdult === true}
+                  onChange={(e) => {
+                    if (!e.target.checked) return update({ imageAdult: false });
+                    if (window.confirm('Autoriser les images pour adultes (18 ans et plus) ?\n\nRéservé aux adultes, pour des personnages fictifs adultes : ne créez pas d’images de personnes réelles. Jarvis refuse toujours toute demande d’enfant ou de mineur.')) {
+                      update({ imageAdult: true });
+                    }
+                  }}
+                />
+                <span>
+                  Autoriser le contenu adulte (18+)
+                  <span className="settings-hint" style={{ display: 'block' }}>
+                    Désactivé par défaut. Quand il est activé, l’outil de création d’images n’ajoute plus le filtre « contenu sûr » ; les demandes d’enfants ou de mineurs restent toujours refusées.
+                  </span>
+                </span>
+              </label>
+
               <h4>Google Workspace — Gmail, Agenda, Drive</h4>
               <p className="settings-hint">
                 Dans Google Cloud Console, activez les API Gmail, Calendar et Drive, puis créez un identifiant OAuth de type « Application de bureau » et collez son Client ID et son Client Secret. Jarvis demande : lecture Gmail, création de brouillons/envoi (toujours avec votre confirmation), événements d’agenda, lecture Drive et fichiers créés par Jarvis. Tant que votre projet est en mode « Test », Google expire la connexion au bout de 7 jours.

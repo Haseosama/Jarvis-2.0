@@ -390,7 +390,35 @@ describe('images : ComfyUI, cas réels corrigés', () => {
     assert.match(reg, /hostBridge\.imageGen\('run'/);
     const main = fs.readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
     assert.match(main, /ipcMain\.handle\('jarvis:imagegen-run'/);
-    assert.match(main, /adult: false/);
+    assert.match(main, /adult: readStore\(\)\.config_v1\?\.imageAdult === true/);
+    assert.ok(!/args\??\.adult|input\.adult/.test(reg.slice(reg.indexOf("name: 'generate_image'"), reg.indexOf('// 18. Radio Tool'))), 'the model cannot switch adult mode on');
     assert.match(fs.readFileSync(new URL('../electron/preload.cjs', import.meta.url), 'utf8'), /imageGenRun/);
+  });
+});
+
+describe('images : contenu adulte sur le PC', () => {
+  it('le réglage adulte retire le filtre « sûr » et le message de refus renvoie aux réglages du PC ; les mineurs restent refusés', async () => {
+    assert.match(refusal('une femme nue', false, 'pc'), /Réglages de Jarvis 2\.0/);
+    assert.match(refusal('une femme nue', false), /Jarvis Android/);
+    assert.equal(refusal('une femme nue', true, 'pc'), null);
+    assert.match(refusal('une adolescente nue', true, 'pc'), /enfant ni de mineur/);
+    const calls = [];
+    const B = 'http://127.0.0.1:8188';
+    const fetchImpl = fakeFetch({
+      [`GET ${B}/system_stats`]: () => ({ json: {} }),
+      [`GET ${B}/models/checkpoints`]: () => ({ json: ['m.safetensors'] }),
+      [`POST ${B}/prompt`]: () => ({ json: { prompt_id: 'p1' } }),
+      [`GET ${B}/history/p1`]: () => ({ json: { p1: { status: { status_str: 'success', completed: true }, outputs: { 7: { images: [{ filename: 'a.png', subfolder: '', type: 'temp' }] } } } } }),
+      [`GET ${B}/view`]: () => ({ bytes: Buffer.from(PNG, 'base64') }),
+    }, calls);
+    const gen = createImageGen({ baseUrl: '', pollMs: 1, fetchImpl });
+    assert.equal((await gen.run({ prompt: 'portrait artistique nu', adult: true, source: 'pc' })).ok, true);
+    const neg = calls.find((c) => c.key.endsWith('/prompt')).body.prompt[3].inputs.text;
+    assert.doesNotMatch(neg, /nsfw/);
+    assert.match(neg, /underage/, 'le filtre « mineur » reste toujours là');
+    assert.equal((await gen.run({ prompt: 'portrait artistique nu', adult: false, source: 'pc' })).ok, false);
+    const settings = fs.readFileSync(new URL('../src/ui/SettingsModal.jsx', import.meta.url), 'utf8');
+    assert.match(settings, /imageAdult/);
+    assert.match(settings, /window\.confirm\('Autoriser les images pour adultes/);
   });
 });

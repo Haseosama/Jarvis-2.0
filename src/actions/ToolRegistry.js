@@ -739,7 +739,7 @@ export class ToolRegistry {
       description:
         'Créer une image à partir d’une description avec le générateur d’images du PC (ComfyUI, Forge ou Fooocus ; Jarvis peut installer ComfyUI lui-même). '
         + 'L’image est enregistrée dans Images\\Jarvis et ouverte. Décrire la scène en anglais donne de meilleurs résultats. action = create (défaut), status (le générateur est-il prêt ?) ou install (installer ComfyUI, environ 9 Go). '
-        + 'Aucune image d’enfant ou de mineur, ni de contenu adulte.',
+        + 'Le contenu adulte (personnages fictifs adultes) n’est possible que si l’utilisateur l’a autorisé dans les Réglages ; aucune image d’enfant ou de mineur, jamais, ni de personne réelle nommée. Ne pas essayer de contourner un refus.',
       parameters: {
         type: 'OBJECT',
         properties: {
