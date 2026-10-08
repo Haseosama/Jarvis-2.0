@@ -448,3 +448,22 @@ describe('images : Studio d’images (sans assistant)', () => {
     assert.match(eng, /aucune image d'enfant ni de mineur, que tu refuses toujours/);
   });
 });
+
+describe('images : commande /image dans le chat', () => {
+  it('envoie la description directement à l’outil, sans passer par un modèle', async () => {
+    const { JarvisEngine } = await import('../src/core/JarvisEngine.js');
+    const engine = Object.create(JarvisEngine.prototype);
+    const ran = []; const out = [];
+    engine.cb = {};
+    engine.stopSpeaking = () => {};
+    engine._setState = () => {};
+    engine._tryExternalBrain = async () => { throw new Error('ne doit pas être appelé'); };
+    engine._deliverAssistantReply = (t) => out.push(t);
+    engine.tools = { execute: async (n, a) => { ran.push([n, a]); return 'Image créée.'; } };
+    await engine.sendUserMessage('/image un chat roux');
+    await engine.sendUserMessage('/img');
+    assert.deepEqual(ran, [['generate_image', { prompt: 'un chat roux' }]]);
+    assert.equal(out[0], 'Image créée.');
+    assert.match(out[1], /Écrivez la description/);
+  });
+});

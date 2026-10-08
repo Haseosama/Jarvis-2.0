@@ -88,6 +88,7 @@ jobs:
 
           ### Nouveautés de cette version
           - Accès à distance pour Jarvis Android : le téléphone pilote ce PC de partout (4G, autre Wi-Fi) par Tailscale, réseau privé chiffré et gratuit, sans port à ouvrir ; le Wi-Fi local est fermé (bouton « Passer en Wi-Fi local » pour l’ancien fonctionnement). Installez Tailscale sur le PC et le téléphone avec le même compte, puis appairez de nouveau le téléphone.
+          - Commande /image dans le chat : « /image description » envoie la demande directement au générateur d’images du PC, sans passer par l’assistant (réglage 18+ de l’utilisateur ; aucune image de mineur).
           - Studio IA › Images : créez vos images vous-même (description, format, étapes) directement avec ComfyUI, Forge ou Fooocus, sans passer par l’assistant ; case 18+ partagée avec les Réglages, installation de ComfyUI depuis l’onglet.
           - Images pour adultes sur le PC : nouveau réglage « Autoriser le contenu adulte (18+) » (désactivé par défaut, confirmation à l’activation) ; les demandes d’enfants ou de mineurs restent toujours refusées.
           - Images avec ComfyUI : raison précise des échecs, journal de démarrage (`images-ia\comfyui.log`) avec conseil (Visual C++, pilotes, mémoire, port), liste des modèles plus fiable, travail trop long interrompu, téléchargement du modèle repris après coupure, ComfyUI Desktop reconnu ; nouvel outil `generate_image` pour créer une image directement sur le PC (rangée dans Images\Jarvis).
