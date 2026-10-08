@@ -1,0 +1,25 @@
+{
+  "name": "bilan_pc",
+  "description": "Fait le point sur le PC : état processeur, mémoire, stockage, fenêtres ouvertes et tâches à faire. Pour « comment va mon PC ? », « fais-moi le bilan du bureau ».",
+  "parameters": [],
+  "type": "routine",
+  "steps": [
+    {
+      "tool": "system_monitor",
+      "args": {}
+    },
+    {
+      "tool": "pc_control",
+      "args": {
+        "action": "list_windows"
+      }
+    },
+    {
+      "tool": "tasks",
+      "args": {
+        "action": "list",
+        "list_name": "todo"
+      }
+    }
+  ]
+}

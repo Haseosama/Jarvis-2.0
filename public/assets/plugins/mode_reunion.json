@@ -1,0 +1,20 @@
+{
+  "name": "mode_reunion",
+  "description": "Prépare le PC pour une réunion : met le lecteur multimédia en pause et coupe le son du PC.",
+  "type": "routine",
+  "steps": [
+    {
+      "tool": "device_settings",
+      "args": {
+        "action": "media",
+        "command": "pause"
+      }
+    },
+    {
+      "tool": "device_settings",
+      "args": {
+        "setting": "mute"
+      }
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "name": "mode_cinema",
+  "description": "Prépare le PC pour une séance : réduit la luminosité quand l’écran le permet, met le son en sourdine et lance un minuteur. Équivalent bureau du mode cinéma mobile.",
+  "parameters": [
+    {
+      "name": "minutes",
+      "description": "Durée en minutes (60 par défaut)",
+      "required": false,
+      "default": "60"
+    }
+  ],
+  "type": "routine",
+  "steps": [
+    {
+      "tool": "device_settings",
+      "args": {
+        "setting": "brightness",
+        "value": "25"
+      }
+    },
+    {
+      "tool": "device_settings",
+      "args": {
+        "setting": "mute"
+      }
+    },
+    {
+      "tool": "set_timer",
+      "args": {
+        "action": "start",
+        "minutes": "{minutes}",
+        "label": "Fin du mode cinéma"
+      }
+    }
+  ]
+}
