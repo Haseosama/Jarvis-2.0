@@ -271,6 +271,30 @@ function getImageGen() {
 ipcMain.handle('jarvis:imagegen-status', () => getImageInstaller().status());
 ipcMain.handle('jarvis:imagegen-install', () => getImageInstaller().install());
 
+// Image demandée sur le PC lui-même : rangée dans Images\\Jarvis puis ouverte (la contrainte « pas de mineur / pas d'adulte
+// sans réglage » de imageGen.cjs s'applique ; ici le mode adulte n'existe pas).
+ipcMain.handle('jarvis:imagegen-run', async (_e, input = {}) => {
+  const safe = {
+    prompt: String(input.prompt || ''),
+    negative: String(input.negative || ''),
+    width: input.width, height: input.height, steps: input.steps, seed: input.seed,
+    adult: false,
+  };
+  const res = await getImageGen().run(safe);
+  if (!res.ok || !res.png) return { ok: false, text: res.text };
+  try {
+    const dir = path.join(app.getPath('pictures'), 'Jarvis');
+    fs.mkdirSync(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+    const file = path.join(dir, `jarvis-${stamp}${res.seed != null ? `-${res.seed}` : ''}.png`);
+    fs.writeFileSync(file, Buffer.from(res.png, 'base64'));
+    shell.openPath(file).catch(() => {});
+    return { ok: true, text: `${res.text} Enregistrée et ouverte : ${file}`, path: file, seed: res.seed };
+  } catch (err) {
+    return { ok: false, text: `${res.text} Mais l’enregistrement a échoué : ${err.message || err}` };
+  }
+});
+
 // ── Contrôle à distance depuis Jarvis Android (electron/remoteServer.cjs) ──────
 
 function getRemoteServer() {

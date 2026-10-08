@@ -719,12 +719,12 @@ export const hostBridge = {
 
   // ── Générateur d'images installé par Jarvis (electron/imageInstall.cjs) ──
 
-  async imageGen(action) {
+  async imageGen(action, payload) {
     const host = hasElectron() ? window.jarvisHost : null;
-    const fn = host && { status: host.imageGenStatus, install: host.imageGenInstall }[action];
+    const fn = host && { status: host.imageGenStatus, install: host.imageGenInstall, run: host.imageGenRun }[action];
     if (typeof fn !== 'function') return { unavailable: true };
     try {
-      return await fn();
+      return await fn(payload);
     } catch (e) {
       return { step: 'error', text: e.message || String(e) };
     }

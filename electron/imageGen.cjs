@@ -15,6 +15,7 @@
 const CANDIDATES = [
   { kind: 'forge', url: 'http://127.0.0.1:7860' },
   { kind: 'comfy', url: 'http://127.0.0.1:8188' },
+  { kind: 'comfy', url: 'http://127.0.0.1:8000' }, // ComfyUI Desktop (l'application) écoute sur 8000
   { kind: 'fooocus', url: 'http://127.0.0.1:8888' },
 ];
 const MAX_PROMPT = 1500;
@@ -196,19 +197,48 @@ function createImageGen({
     return { png: Array.isArray(data.images) ? data.images[0] : '', seed };
   }
 
+  /** Le texte d'une erreur de ComfyUI (réponse 400 de /prompt : error.message + node_errors). */
+  async function comfyProblem(res) {
+    try {
+      const data = await res.json();
+      const first = Object.values(data?.node_errors || {})[0]?.errors?.[0];
+      const detail = first?.details || first?.message || data?.error?.details || data?.error?.message;
+      return detail ? String(detail).slice(0, 200) : '';
+    } catch { return ''; }
+  }
+
+  /** Les modèles de ComfyUI : /models/checkpoints (stable), sinon la liste de /object_info (deux formes selon la version). */
+  async function comfyModels(url) {
+    try {
+      const r = await call(`${url}/models/checkpoints`, {}, 10_000);
+      if (r.ok) {
+        const list = await r.json();
+        if (Array.isArray(list) && list.length) return list.map(String);
+      }
+    } catch { /* on essaie object_info */ }
+    const info = await (await call(`${url}/object_info/CheckpointLoaderSimple`, {}, 10_000)).json();
+    const spec = info?.CheckpointLoaderSimple?.input?.required?.ckpt_name;
+    if (Array.isArray(spec?.[0])) return spec[0].map(String);
+    if (Array.isArray(spec?.[1]?.options)) return spec[1].options.map(String); // forme « COMBO » des versions récentes
+    return [];
+  }
+
   async function comfy(url, body) {
     let ckpt = value(comfyModel);
     if (!ckpt) {
-      const info = await (await call(`${url}/object_info/CheckpointLoaderSimple`, {}, 10_000)).json();
-      const names = info?.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0];
-      ckpt = Array.isArray(names) ? names[0] : '';
+      const names = await comfyModels(url);
+      // Le modèle que Jarvis installe d'abord, sinon le premier trouvé.
+      ckpt = names.find((n) => /juggernaut/i.test(n)) || names[0] || '';
     }
     if (!ckpt) return { error: 'ComfyUI n’a aucun modèle installé (dossier models/checkpoints).' };
     const graph = comfyWorkflow(body, ckpt);
     const queued = await call(`${url}/prompt`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: graph, client_id: 'jarvis' }),
     });
-    if (!queued.ok) return { error: `ComfyUI a refusé la demande (code ${queued.status}).` };
+    if (!queued.ok) {
+      const why = await comfyProblem(queued);
+      return { error: `ComfyUI a refusé la demande (code ${queued.status})${why ? ` : ${why}` : ''}.` };
+    }
     const id = (await queued.json()).prompt_id;
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -216,14 +246,26 @@ function createImageGen({
       const hist = await (await call(`${url}/history/${encodeURIComponent(id)}`, {}, 10_000)).json();
       const entry = hist && hist[id];
       if (!entry) continue;
-      if (entry.status?.status_str === 'error') return { error: 'ComfyUI a échoué en créant l’image.' };
+      if (entry.status?.status_str === 'error') {
+        const msg = (entry.status.messages || []).find((m) => m?.[0] === 'execution_error')?.[1];
+        const why = msg?.exception_message ? String(msg.exception_message).trim().slice(0, 200) : '';
+        return { error: `ComfyUI a échoué en créant l’image${why ? ` : ${why}` : ''}.` };
+      }
       const img = Object.values(entry.outputs || {}).flatMap((o) => o.images || [])[0];
-      if (!img) continue;
+      if (!img) {
+        if (entry.status?.completed) return { error: 'ComfyUI a fini sans rendre d’image.' };
+        continue;
+      }
       const q = new URLSearchParams({ filename: img.filename, subfolder: img.subfolder || '', type: img.type || 'temp' });
       const pic = await call(`${url}/view?${q}`, {}, 20_000);
       if (!pic.ok) return { error: 'ComfyUI n’a pas rendu l’image.' };
       return { png: Buffer.from(await pic.arrayBuffer()).toString('base64'), seed: graph[5].inputs.seed, ckpt };
     }
+    // Trop long : on arrête ce travail, sinon il reste en file et bloque la prochaine demande.
+    try {
+      await call(`${url}/queue`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ delete: [id] }) }, 5000);
+      await call(`${url}/interrupt`, { method: 'POST' }, 5000);
+    } catch { /* ComfyUI ne répond plus : rien à arrêter */ }
     return { error: 'timeout' };
   }
 
@@ -257,7 +299,10 @@ function createImageGen({
       if (value(baseUrl)) return { ok: false, text: `Aucun générateur d’images ne répond à ${value(baseUrl)}.` };
       const st = installer ? installer.status() : null;
       if (st?.installing) return { ok: false, text: `Le générateur d’images s’installe encore sur le PC (${st.text}).` };
-      if (st?.installed) return { ok: false, text: 'ComfyUI est installé sur le PC mais n’a pas démarré.' };
+      if (st?.installed) {
+        const why = installer.startProblem ? installer.startProblem() : '';
+        return { ok: false, text: `ComfyUI est installé sur le PC mais n’a pas démarré.${why ? ` ${why}` : ''}` };
+      }
       return { ok: false, text: installer ? NONE_FOUND_INSTALL : NONE_FOUND };
     }
     found = where;
@@ -268,7 +313,7 @@ function createImageGen({
       out = { error: err && (err.name === 'TimeoutError' || err.name === 'AbortError') ? 'timeout' : `${NAMES[where.kind]} ne répond plus.` };
     }
     if (out.error === 'timeout') {
-      return { ok: false, text: `${NAMES[where.kind]} n’a pas fini l’image à temps. Réessayez avec une image plus petite.` };
+      return { ok: false, text: `${NAMES[where.kind]} n’a pas fini l’image à temps (le premier essai charge le modèle, c’est le plus long). Réessayez : ce sera plus rapide, ou demandez une image plus petite.` };
     }
     if (out.error) return { ok: false, text: out.error };
     const png = String(out.png || '').replace(/^data:image\/\w+;base64,/, '');

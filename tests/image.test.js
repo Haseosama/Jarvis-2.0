@@ -237,3 +237,160 @@ describe('images : ComfyUI installé par Jarvis', () => {
     assert.match((await gen.run({ action: 'status' })).text, /échoué.*carte graphique/);
   });
 });
+
+const { diagnose } = require('../electron/imageInstall.cjs');
+
+describe('images : ComfyUI, cas réels corrigés', () => {
+  const route = (base, extra = {}) => ({
+    [`GET ${base}/system_stats`]: () => ({ json: {} }),
+    [`POST ${base}/prompt`]: () => ({ json: { prompt_id: 'p1' } }),
+    [`GET ${base}/history/p1`]: () => ({ json: { p1: { status: { status_str: 'success', completed: true }, outputs: { 7: { images: [{ filename: 'a.png', subfolder: '', type: 'temp' }] } } } } }),
+    [`GET ${base}/view`]: () => ({ bytes: Buffer.from(PNG, 'base64') }),
+    ...extra,
+  });
+  const B = 'http://127.0.0.1:8188';
+
+  it('lit la liste des modèles par /models/checkpoints et préfère Juggernaut', async () => {
+    const calls = [];
+    const gen = createImageGen({ baseUrl: '', pollMs: 1, fetchImpl: fakeFetch(route(B, { [`GET ${B}/models/checkpoints`]: () => ({ json: ['aaa.safetensors', 'Juggernaut-XL_v9.safetensors'] }) }), calls) });
+    assert.equal((await gen.run({ prompt: 'chat' })).ok, true);
+    assert.equal(calls.find((c) => c.key.endsWith('/prompt')).body.prompt[1].inputs.ckpt_name, 'Juggernaut-XL_v9.safetensors');
+  });
+
+  it('comprend aussi la forme « COMBO » de /object_info des versions récentes', async () => {
+    const calls = [];
+    const gen = createImageGen({
+      baseUrl: '', pollMs: 1,
+      fetchImpl: fakeFetch(route(B, { [`GET ${B}/object_info/CheckpointLoaderSimple`]: () => ({ json: { CheckpointLoaderSimple: { input: { required: { ckpt_name: ['COMBO', { options: ['neuf.safetensors'] }] } } } } }) }), calls),
+    });
+    assert.equal((await gen.run({ prompt: 'chat' })).ok, true);
+    assert.equal(calls.find((c) => c.key.endsWith('/prompt')).body.prompt[1].inputs.ckpt_name, 'neuf.safetensors');
+  });
+
+  it('dit pourquoi ComfyUI refuse ou échoue, au lieu d’un code muet', async () => {
+    const refused = createImageGen({
+      baseUrl: '', pollMs: 1,
+      fetchImpl: fakeFetch(route(B, {
+        [`GET ${B}/models/checkpoints`]: () => ({ json: ['m.safetensors'] }),
+        [`POST ${B}/prompt`]: () => ({ status: 400, json: { error: { message: 'Prompt outputs failed validation' }, node_errors: { 1: { errors: [{ message: 'Value not in list', details: 'ckpt_name: m.safetensors not in []' }] } } } }),
+      })),
+    });
+    assert.match((await refused.run({ prompt: 'chat' })).text, /code 400\) : ckpt_name: m\.safetensors not in \[\]/);
+    const failed = createImageGen({
+      baseUrl: '', pollMs: 1,
+      fetchImpl: fakeFetch(route(B, {
+        [`GET ${B}/models/checkpoints`]: () => ({ json: ['m.safetensors'] }),
+        [`GET ${B}/history/p1`]: () => ({ json: { p1: { status: { status_str: 'error', messages: [['execution_error', { exception_message: 'Allocation on device\n' }]] }, outputs: {} } } }),
+      })),
+    });
+    assert.match((await failed.run({ prompt: 'chat' })).text, /a échoué en créant l’image : Allocation on device\./);
+  });
+
+  it('arrête le travail trop long (file + interruption) pour ne pas bloquer la demande suivante', async () => {
+    const calls = [];
+    const gen = createImageGen({
+      baseUrl: '', pollMs: 1, timeoutMs: 40,
+      fetchImpl: fakeFetch(route(B, {
+        [`GET ${B}/models/checkpoints`]: () => ({ json: ['m.safetensors'] }),
+        [`GET ${B}/history/p1`]: () => ({ json: {} }),
+        [`POST ${B}/queue`]: () => ({ json: {} }),
+        [`POST ${B}/interrupt`]: () => ({ json: {} }),
+      }), calls),
+    });
+    const r = await gen.run({ prompt: 'chat' });
+    assert.equal(r.ok, false);
+    assert.match(r.text, /pas fini l’image à temps/);
+    assert.deepEqual(calls.find((c) => c.key === `POST ${B}/queue`).body, { delete: ['p1'] });
+    assert.ok(calls.some((c) => c.key === `POST ${B}/interrupt`));
+  });
+
+  it('trouve ComfyUI Desktop sur le port 8000', async () => {
+    const D = 'http://127.0.0.1:8000';
+    const gen = createImageGen({ baseUrl: '', pollMs: 1, fetchImpl: fakeFetch(route(D, { [`GET ${D}/models/checkpoints`]: () => ({ json: ['m.safetensors'] }) })) });
+    const r = await gen.run({ prompt: 'chat' });
+    assert.equal(r.ok, true, r.text);
+  });
+
+  it('traduit le journal de ComfyUI en conseil (Visual C++, pilotes, mémoire, port)', () => {
+    assert.match(diagnose('OSError: [WinError 126] ... c10.dll" or one of its dependencies'), /Visual C\+\+/);
+    assert.match(diagnose('AssertionError: Torch not compiled with CUDA enabled'), /pilotes/);
+    assert.match(diagnose('torch.OutOfMemoryError: CUDA out of memory'), /Mémoire insuffisante/);
+    assert.match(diagnose('[Errno 10048] error while attempting to bind on address'), /port 8188/);
+    assert.equal(diagnose('tout va bien'), '');
+  });
+
+  function fakeInstall(dir) {
+    const base = path.join(dir, 'images-ia', 'ComfyUI_windows_portable');
+    fs.mkdirSync(path.join(base, 'python_embeded'), { recursive: true });
+    fs.mkdirSync(path.join(base, 'ComfyUI', 'models', 'checkpoints'), { recursive: true });
+    fs.writeFileSync(path.join(base, 'python_embeded', 'python.exe'), '');
+    fs.writeFileSync(path.join(base, 'ComfyUI', 'main.py'), '');
+    fs.writeFileSync(path.join(base, 'ComfyUI', 'models', 'checkpoints', 'Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors'), '');
+  }
+
+  it('garde le journal de ComfyUI et explique un démarrage raté', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jr-img-'));
+    fakeInstall(dir);
+    const inst = createImageInstaller({
+      dataDir: dir, platform: 'win32', isUp: async () => false,
+      spawnImpl: (cmd, args, opts) => {
+        const p = new EventEmitter();
+        p.kill = () => {};
+        fs.writeSync(opts.stdio[1], 'OSError: [WinError 126] Error loading "c10.dll" or one of its dependencies.\n');
+        setImmediate(() => p.emit('exit', 1));
+        return p;
+      },
+    });
+    assert.equal(await inst.ensureRunning(3000), false);
+    assert.match(inst.startProblem(), /Visual C\+\+/);
+    const gen = createImageGen({ baseUrl: '', installer: inst, fetchImpl: fakeFetch({}) });
+    assert.match((await gen.run({ prompt: 'chat' })).text, /installé sur le PC mais n’a pas démarré\. Il manque « Microsoft Visual C\+\+/);
+  });
+
+  it('reprend un téléchargement interrompu avec l’en-tête Range et refuse un disque trop plein', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jr-img-'));
+    fs.mkdirSync(path.join(dir, 'images-ia'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'images-ia', '7zr.exe.part'), 'AAAAA');
+    const ranges = [];
+    const fetchImpl = async (url, init = {}) => {
+      ranges.push([url.split('/').pop(), init.headers?.Range || null]);
+      const resumed = init.headers?.Range === 'bytes=5-';
+      const bytes = Buffer.from(resumed ? 'BBBBB' : `contenu de ${url}`);
+      return { ok: true, status: resumed ? 206 : 200, headers: { get: () => String(bytes.length) }, body: (async function* () { yield bytes; })() };
+    };
+    const spawnImpl = (cmd, args) => {
+      const p = new EventEmitter();
+      p.kill = () => {};
+      if (path.basename(cmd) === '7zr.exe') {
+        const base = path.join(args.find((a) => a.startsWith('-o')).slice(2), 'ComfyUI_windows_portable');
+        fs.mkdirSync(path.join(base, 'python_embeded'), { recursive: true });
+        fs.mkdirSync(path.join(base, 'ComfyUI'), { recursive: true });
+        fs.writeFileSync(path.join(base, 'python_embeded', 'python.exe'), '');
+        fs.writeFileSync(path.join(base, 'ComfyUI', 'main.py'), '');
+        setImmediate(() => p.emit('exit', 0));
+      }
+      return p;
+    };
+    const inst = createImageInstaller({ dataDir: dir, fetchImpl, spawnImpl, platform: 'win32', gpus: async () => ['NVIDIA GeForce RTX 3060'], freeBytes: () => 50e9 });
+    inst.install();
+    while (inst.status().installing) await new Promise((r) => setTimeout(r, 5));
+    assert.equal(inst.status().step, 'done', inst.status().text);
+    assert.deepEqual(ranges[0], ['7zr.exe', 'bytes=5-']);
+    assert.equal(fs.readFileSync(path.join(dir, 'images-ia', '7zr.exe'), 'utf8'), 'AAAAABBBBB');
+
+    const full = createImageInstaller({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'jr-img-')), fetchImpl: async () => { throw new Error('rien ne doit être téléchargé'); }, platform: 'win32', gpus: async () => ['NVIDIA GeForce RTX 3060'], freeBytes: () => 3e9 });
+    full.install();
+    while (full.status().installing) await new Promise((r) => setTimeout(r, 5));
+    assert.match(full.status().text, /Pas assez de place.*12 Go.*3\.0/);
+  });
+
+  it('expose la création d’image au PC : outil generate_image, IPC et pont', () => {
+    const reg = fs.readFileSync(new URL('../src/actions/ToolRegistry.js', import.meta.url), 'utf8');
+    assert.match(reg, /name: 'generate_image'/);
+    assert.match(reg, /hostBridge\.imageGen\('run'/);
+    const main = fs.readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
+    assert.match(main, /ipcMain\.handle\('jarvis:imagegen-run'/);
+    assert.match(main, /adult: false/);
+    assert.match(fs.readFileSync(new URL('../electron/preload.cjs', import.meta.url), 'utf8'), /imageGenRun/);
+  });
+});

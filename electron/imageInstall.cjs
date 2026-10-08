@@ -20,6 +20,7 @@ const MODEL_FILE = 'Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors';
 const MODEL_URL = `https://huggingface.co/RunDiffusion/Juggernaut-XL-v9/resolve/main/${MODEL_FILE}`;
 const COMFY_PORT = 8188;
 const START_TIMEOUT_MS = 180_000;
+const NEEDED_BYTES = 12e9; // archive (2 Go) + ComfyUI décompressé (~5 Go) + modèle (7 Go), l'archive étant effacée ensuite
 
 /** La variante de ComfyUI pour ces cartes graphiques (noms Windows), ou null sans carte utilisable. */
 function pickGpu(names = []) {
@@ -39,6 +40,24 @@ function listGpus(run = execFile) {
   });
 }
 
+/** Ce que dit le journal de ComfyUI quand il ne démarre pas, traduit en conseil. */
+function diagnose(logText = '') {
+  const t = String(logText);
+  if (/c10\.dll|vcruntime|msvcp140|VCRUNTIME|0xc0000135/i.test(t)) {
+    return 'Il manque « Microsoft Visual C++ Redistributable » : installez-le (https://aka.ms/vc14/vc_redist.x64.exe) puis réessayez.';
+  }
+  if (/Torch not compiled with CUDA|no NVIDIA driver|driver.{0,40}(too old|outdated)|CUDA (driver|error|initialization)|cudaGetDeviceCount/i.test(t)) {
+    return 'Les pilotes de la carte graphique sont trop anciens ou absents : mettez à jour les pilotes NVIDIA (ou AMD/Intel) puis réessayez.';
+  }
+  if (/out of memory|CUDA out of memory|DefaultCPUAllocator|paging file/i.test(t)) {
+    return 'Mémoire insuffisante (carte graphique ou fichier d’échange Windows) : fermez les autres applications lourdes ou réduisez la taille de l’image.';
+  }
+  if (/address already in use|only one usage of each socket|Errno 10048/i.test(t)) {
+    return 'Le port 8188 est déjà pris par un autre programme : fermez-le (ou l’autre ComfyUI) puis réessayez.';
+  }
+  return '';
+}
+
 function createImageInstaller({
   dataDir,
   fetchImpl = globalThis.fetch,
@@ -46,6 +65,7 @@ function createImageInstaller({
   gpus = () => listGpus(),
   isUp = null, // async () => boolean : ComfyUI répond-il ?
   platform = process.platform,
+  freeBytes = null, // () => octets libres (injectable pour les tests)
 } = {}) {
   const root = path.join(dataDir, 'images-ia');
   // Le dossier que l'archive a créé (ComfyUI_windows_portable selon la variante) : celui qui contient python_embeded.
@@ -70,6 +90,20 @@ function createImageInstaller({
   let state = { step: 'idle', text: '', percent: 0 };
   let installing = null;
   let child = null;
+  let startProblem = '';
+  const logPath = path.join(root, 'comfyui.log');
+  const readLog = () => {
+    try {
+      const size = fs.statSync(logPath).size;
+      const fd = fs.openSync(logPath, 'r');
+      try {
+        const len = Math.min(size, 6000);
+        const buf = Buffer.alloc(len);
+        fs.readSync(fd, buf, 0, len, size - len);
+        return buf.toString('utf8');
+      } finally { fs.closeSync(fd); }
+    } catch { return ''; }
+  };
 
   const up = isUp || (async () => {
     try {
@@ -89,12 +123,18 @@ function createImageInstaller({
 
   async function download(url, dest, label) {
     const part = `${dest}.part`;
-    const res = await fetchImpl(url, { redirect: 'follow' });
+    // Reprise : un téléchargement interrompu (7 Go pour le modèle) repart de l'octet déjà reçu au lieu de zéro.
+    let have = 0;
+    try { have = fs.statSync(part).size; } catch { /* rien de commencé */ }
+    const res = await fetchImpl(url, { redirect: 'follow', headers: have > 0 ? { Range: `bytes=${have}-` } : {} });
     if (!res.ok || !res.body) throw new Error(`${label} : téléchargement refusé (code ${res.status}).`);
-    const total = Number(res.headers?.get?.('content-length')) || 0;
-    let got = 0;
+    const resumed = have > 0 && res.status === 206;
+    if (!resumed) have = 0;
+    const length = Number(res.headers?.get?.('content-length')) || 0;
+    const total = length ? length + have : 0;
+    let got = have;
     let shown = -1;
-    const out = fs.createWriteStream(part);
+    const out = fs.createWriteStream(part, { flags: resumed ? 'a' : 'w' });
     try {
       for await (const chunk of res.body) {
         got += chunk.length;
@@ -108,7 +148,16 @@ function createImageInstaller({
     } finally {
       await new Promise((r) => out.end(r));
     }
+    if (total && got < total) throw new Error(`${label} : téléchargement interrompu (${Math.round(got / 1e6)} Mo sur ${Math.round(total / 1e6)}). Relancez l’installation : elle reprend là où elle s’est arrêtée.`);
     fs.renameSync(part, dest);
+  }
+
+  /** Espace libre (octets) sur le disque des données de Jarvis, ou null si Node ne sait pas le dire. */
+  function freeSpace() {
+    try {
+      const st = fs.statfsSync(root);
+      return Number(st.bavail) * Number(st.bsize);
+    } catch { return null; }
   }
 
   function extract(sevenZr, archive) {
@@ -127,6 +176,10 @@ function createImageInstaller({
       throw new Error('Aucune carte graphique NVIDIA, AMD ou Intel Arc trouvée : ce PC ne peut pas créer d’images en un temps raisonnable.');
     }
     fs.mkdirSync(root, { recursive: true });
+    const free = freeBytes ? freeBytes() : freeSpace();
+    if (free !== null && free < NEEDED_BYTES && !installed()) {
+      throw new Error(`Pas assez de place sur le disque : il faut environ 12 Go libres pour ComfyUI et son modèle, il en reste ${(free / 1e9).toFixed(1)}.`);
+    }
     if (!fs.existsSync(pathsNow().mainPy)) {
       const sevenZr = path.join(root, '7zr.exe');
       if (!fs.existsSync(sevenZr)) await download(SEVEN_ZR_URL, sevenZr, 'Extracteur 7-Zip');
@@ -160,12 +213,17 @@ function createImageInstaller({
   async function ensureRunning(waitMs = START_TIMEOUT_MS) {
     if (await up()) return true;
     if (!installed()) return false;
+    startProblem = '';
     if (!child) {
       const { python, mainPy, comfyDir } = pathsNow();
       const args = ['-s', mainPy, '--listen', '127.0.0.1', '--port', String(COMFY_PORT), '--disable-auto-launch', '--preview-method', 'none'];
-      child = spawnImpl(python, args, { cwd: comfyDir, windowsHide: true, stdio: 'ignore' });
-      child.on('exit', () => { child = null; });
-      child.on('error', () => { child = null; });
+      // Le journal de ComfyUI est gardé : sans lui, un démarrage raté (pilote, Visual C++, port pris) reste muet.
+      let fd = 'ignore';
+      try { fs.mkdirSync(root, { recursive: true }); fd = fs.openSync(logPath, 'w'); } catch { /* sans journal */ }
+      child = spawnImpl(python, args, { cwd: comfyDir, windowsHide: true, stdio: ['ignore', fd, fd] });
+      if (typeof fd === 'number') { try { fs.closeSync(fd); } catch { /* déjà fermé */ } }
+      child.on('exit', (code) => { child = null; if (code) startProblem = diagnose(readLog()) || `ComfyUI s’est arrêté (code ${code}).`; });
+      child.on('error', (err) => { child = null; startProblem = `ComfyUI n’a pas pu être lancé : ${err.message || err}`; });
     }
     const deadline = Date.now() + waitMs;
     while (Date.now() < deadline) {
@@ -173,6 +231,7 @@ function createImageInstaller({
       if (!child) return false;
       await new Promise((r) => setTimeout(r, 1500));
     }
+    startProblem = diagnose(readLog()) || 'ComfyUI met trop de temps à démarrer (le premier lancement peut durer plusieurs minutes) : réessayez dans un moment.';
     return false;
   }
 
@@ -183,7 +242,7 @@ function createImageInstaller({
     }
   }
 
-  return { install, status, ensureRunning, stop, installed, paths: pathsNow };
+  return { install, status, ensureRunning, stop, installed, paths: pathsNow, startProblem: () => startProblem, logPath };
 }
 
-module.exports = { createImageInstaller, pickGpu, listGpus, COMFY_URL, MODEL_URL, SEVEN_ZR_URL, COMFY_PORT };
+module.exports = { createImageInstaller, diagnose, pickGpu, listGpus, COMFY_URL, MODEL_URL, SEVEN_ZR_URL, COMFY_PORT };

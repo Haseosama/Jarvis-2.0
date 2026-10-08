@@ -733,6 +733,37 @@ export class ToolRegistry {
       },
     });
 
+    // 17c. Images créées sur le PC (ComfyUI installé par Jarvis, Forge ou Fooocus, electron/imageGen.cjs)
+    this.register({
+      name: 'generate_image',
+      description:
+        'Créer une image à partir d’une description avec le générateur d’images du PC (ComfyUI, Forge ou Fooocus ; Jarvis peut installer ComfyUI lui-même). '
+        + 'L’image est enregistrée dans Images\\Jarvis et ouverte. Décrire la scène en anglais donne de meilleurs résultats. action = create (défaut), status (le générateur est-il prêt ?) ou install (installer ComfyUI, environ 9 Go). '
+        + 'Aucune image d’enfant ou de mineur, ni de contenu adulte.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          action: { type: 'STRING', description: 'create (défaut), status ou install.' },
+          prompt: { type: 'STRING', description: 'Description de l’image à créer.' },
+          negative: { type: 'STRING', description: 'Ce qu’il ne faut pas voir (facultatif).' },
+          width: { type: 'NUMBER', description: 'Largeur en pixels, 512 à 1536 (défaut 832).' },
+          height: { type: 'NUMBER', description: 'Hauteur en pixels, 512 à 1536 (défaut 1216).' },
+          steps: { type: 'NUMBER', description: 'Étapes de calcul, 10 à 50 (défaut 25).' },
+        },
+      },
+      run: async (args) => {
+        const action = String(args?.action || 'create').toLowerCase();
+        if (action === 'status' || action === 'install') {
+          const st = await hostBridge.imageGen(action);
+          if (st?.unavailable) return 'Le générateur d’images n’est disponible que dans l’application Windows.';
+          return String(st?.text || (st?.installed ? 'Le générateur d’images est installé.' : 'Le générateur d’images n’est pas installé.'));
+        }
+        const res = await hostBridge.imageGen('run', args || {});
+        if (res?.unavailable) return 'Le générateur d’images n’est disponible que dans l’application Windows.';
+        return String(res?.text || 'Pas de réponse du générateur d’images.');
+      },
+    });
+
     // 18. Radio Tool
     this.register({
       name: 'radio',
