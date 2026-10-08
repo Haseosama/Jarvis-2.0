@@ -734,7 +734,7 @@ export const hostBridge = {
 
   async remote(action, arg) {
     const host = hasElectron() ? window.jarvisHost : null;
-    const fn = host && { status: host.remoteStatus, enable: host.remoteEnable, newKey: host.remoteNewKey, revoke: host.remoteRevoke }[action];
+    const fn = host && { status: host.remoteStatus, enable: host.remoteEnable, newKey: host.remoteNewKey, revoke: host.remoteRevoke, mode: host.remoteMode }[action];
     if (typeof fn !== 'function') return { ok: false, unavailable: true, error: 'Disponible seulement dans l’application de bureau Jarvis 2.0.' };
     try {
       return await fn(arg);

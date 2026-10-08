@@ -12,6 +12,11 @@
 //  - le navigateur Playwright du PC : POST /api/browser, même chiffrement, l'action en JSON ; la réponse revient tout de suite ;
 //  - une image créée par le générateur du PC (Fooocus, ComfyUI ou Forge, electron/imageGen.cjs) : POST /api/image, même chiffrement.
 // Le certificat est fabriqué ici une fois (aucune dépendance) ; le téléphone l'épingle à l'appairage.
+//
+// Accès à distance (mode « distance », par défaut) : le serveur n'accepte que les connexions arrivées par Tailscale, un réseau
+// privé chiffré (WireGuard) entre les appareils d'un même compte, gratuit, sans port à ouvrir sur la box. Le téléphone joint
+// alors le PC de partout (4G, autre Wi-Fi) à son adresse Tailscale (100.x.y.z), et plus personne ne le joint par le Wi-Fi local.
+// Le mode « local » garde l'ancien fonctionnement (même Wi-Fi seulement).
 
 const https = require('https');
 const crypto = require('crypto');
@@ -129,6 +134,37 @@ function lanAddress(interfaces = os.networkInterfaces()) {
   return all[0]?.address || '127.0.0.1';
 }
 
+/** Une adresse du réseau Tailscale (100.64.0.0/10 en IPv4, fd7a:115c:a1e0::/48 en IPv6). */
+function isTailnetIp(ip) {
+  const a = String(ip || '').replace(/^::ffff:/i, '');
+  const m = a.match(/^100\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+  if (m) return Number(m[1]) >= 64 && Number(m[1]) <= 127;
+  return /^fd7a:115c:a1e0:/i.test(a);
+}
+
+const isLoopback = (ip) => /^(127\.|::1$|::ffff:127\.)/.test(String(ip || ''));
+
+/** L'adresse IPv4 Tailscale du PC, ou '' si Tailscale n'est pas installé ou pas connecté. */
+function tailnetAddress(interfaces = os.networkInterfaces()) {
+  for (const list of Object.values(interfaces || {})) {
+    for (const a of list || []) {
+      if ((a.family === 'IPv4' || a.family === 4) && !a.internal && isTailnetIp(a.address)) return a.address;
+    }
+  }
+  return '';
+}
+
+/**
+ * Faut-il accepter cette connexion ? En mode « distance », seulement si elle est arrivée sur l'adresse Tailscale du PC (ou
+ * vient du PC lui-même) : c'est l'adresse locale de la connexion qui compte, pas celle de l'appelant, pour qu'un appareil
+ * du Wi-Fi ne passe pas même s'il se donnait une adresse en 100.x.
+ */
+function connectionAllowed(socket, mode) {
+  if (mode === 'local') return true;
+  if (isLoopback(socket?.remoteAddress) && isLoopback(socket?.localAddress)) return true;
+  return isTailnetIp(socket?.localAddress);
+}
+
 // ── WebSocket minimal (RFC 6455, côté serveur) ─────────────────────────────────
 
 function wsFrame(text, opcode = 0x1) {
@@ -166,7 +202,10 @@ function wsParse(buf) {
 
 // ── Serveur ────────────────────────────────────────────────────────────────────
 
-function createRemoteServer({ dataDir, onCommand = () => {}, onEvent = () => {}, onBrowser = null, onImage = null, port = PORT, now = () => Date.now() } = {}) {
+function createRemoteServer({
+  dataDir, onCommand = () => {}, onEvent = () => {}, onBrowser = null, onImage = null, port = PORT, now = () => Date.now(),
+  mode = () => 'distance', interfaces = () => os.networkInterfaces(),
+} = {}) {
   const certDir = path.join(dataDir, 'remote');
   const devicesFile = path.join(certDir, 'devices.json');
   const pending = new Map(); // code → expiration
@@ -174,7 +213,7 @@ function createRemoteServer({ dataDir, onCommand = () => {}, onEvent = () => {},
   const clients = new Set();
   let history = [];
   let server = null;
-  let address = lanAddress();
+  let address = lanAddress(interfaces());
 
   const readDevices = () => {
     try { return JSON.parse(fs.readFileSync(devicesFile, 'utf8')); } catch { return []; }
@@ -190,7 +229,7 @@ function createRemoteServer({ dataDir, onCommand = () => {}, onEvent = () => {},
     if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
       return { key: fs.readFileSync(keyPath, 'utf8'), cert: fs.readFileSync(certPath, 'utf8') };
     }
-    const pair = makeSelfSignedCert([address]);
+    const pair = makeSelfSignedCert([address, tailnetAddress(interfaces())].filter(Boolean));
     fs.mkdirSync(certDir, { recursive: true });
     fs.writeFileSync(keyPath, pair.key, { encoding: 'utf8', mode: 0o600 });
     fs.writeFileSync(certPath, pair.cert, 'utf8');
@@ -202,9 +241,18 @@ function createRemoteServer({ dataDir, onCommand = () => {}, onEvent = () => {},
     for (const [k, exp] of pending) if (exp <= t) pending.delete(k);
     let key = '';
     for (let i = 0; i < 6; i++) key += KEY_CHARS[crypto.randomInt(KEY_CHARS.length)];
+    const here = currentAddress();
+    if (!here) {
+      throw new Error('Tailscale n’est pas connecté sur ce PC : installez-le (tailscale.com/download), connectez-vous, puis faites de même sur le téléphone avec le même compte. Ou passez en « Wi-Fi local ».');
+    }
+    address = here;
     pending.set(key, t + KEY_TTL_MS);
-    address = lanAddress();
     return { key, expiresAt: t + KEY_TTL_MS, url: `https://${address}:${port}/auto-login?key=${key}`, address: `${address}:${port}` };
+  }
+
+  /** L'adresse à donner au téléphone : celle de Tailscale en mode « distance » ('' sans Tailscale), du Wi-Fi sinon. */
+  function currentAddress() {
+    return mode() === 'local' ? lanAddress(interfaces()) : tailnetAddress(interfaces());
   }
 
   function takeKey(raw) {
@@ -381,6 +429,7 @@ function createRemoteServer({ dataDir, onCommand = () => {}, onEvent = () => {},
     return new Promise((resolve, reject) => {
       const { key, cert } = certificate();
       server = https.createServer({ key, cert }, (req, res) => { handle(req, res).catch(() => { try { send(res, 500, { error: 'Erreur' }); } catch {} }); });
+      server.on('connection', (socket) => { if (!connectionAllowed(socket, mode())) socket.destroy(); });
       server.on('upgrade', upgrade);
       server.once('error', (err) => { server = null; reject(err); });
       server.listen(port, '0.0.0.0', () => resolve(info()));
@@ -405,7 +454,13 @@ function createRemoteServer({ dataDir, onCommand = () => {}, onEvent = () => {},
   }
 
   function info() {
-    return { running: Boolean(server), address: `${address}:${port}`, devices: readDevices().length, fingerprint: server ? fingerprint() : '' };
+    const ifs = interfaces();
+    const here = currentAddress();
+    if (here) address = here;
+    return {
+      running: Boolean(server), address: here ? `${here}:${port}` : '', devices: readDevices().length, fingerprint: server ? fingerprint() : '',
+      mode: mode() === 'local' ? 'local' : 'distance', tailscale: tailnetAddress(ifs), lan: lanAddress(ifs),
+    };
   }
 
   function revokeAll() {
@@ -447,6 +502,9 @@ module.exports = {
   decryptCommand,
   encryptCommand,
   lanAddress,
+  tailnetAddress,
+  isTailnetIp,
+  connectionAllowed,
   wsFrame,
   wsParse,
 };

@@ -10,13 +10,14 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const {
   createRemoteServer, createReplyCollector, makeSelfSignedCert, decryptCommand, encryptCommand, lanAddress, wsFrame, wsParse,
+  tailnetAddress, isTailnetIp, connectionAllowed,
 } = require('../electron/remoteServer.cjs');
 
-function request(port, method, pathName, { body, token } = {}) {
+function request(port, method, pathName, { body, token, host = '127.0.0.1' } = {}) {
   return new Promise((resolve, reject) => {
     const data = body ? JSON.stringify(body) : null;
     const req = https.request({
-      host: '127.0.0.1', port, method, path: pathName, rejectUnauthorized: false, agent: false,
+      host, port, method, path: pathName, rejectUnauthorized: false, agent: false,
       headers: { ...(data ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     }, (res) => {
       let text = '';
@@ -70,6 +71,60 @@ describe('contrôle à distance depuis Jarvis Android', () => {
     assert.equal(lanAddress({}), '127.0.0.1');
   });
 
+  it('reconnaît l’adresse Tailscale du PC', () => {
+    const ifs = {
+      'Wi-Fi': [{ family: 'IPv4', internal: false, address: '192.168.1.20' }],
+      Tailscale: [{ family: 'IPv6', internal: false, address: 'fd7a:115c:a1e0::1234' }, { family: 'IPv4', internal: false, address: '100.101.102.103' }],
+    };
+    assert.equal(tailnetAddress(ifs), '100.101.102.103');
+    assert.equal(lanAddress(ifs), '192.168.1.20');
+    assert.equal(tailnetAddress({ 'Wi-Fi': ifs['Wi-Fi'] }), '');
+    assert.ok(isTailnetIp('100.64.0.1') && isTailnetIp('100.127.255.254') && isTailnetIp('::ffff:100.100.1.2') && isTailnetIp('fd7a:115c:a1e0:ab12::1'));
+    assert.ok(!isTailnetIp('100.63.0.1') && !isTailnetIp('100.128.0.1') && !isTailnetIp('192.168.1.20') && !isTailnetIp(''));
+  });
+
+  it('à distance, refuse les connexions du Wi-Fi local et accepte celles de Tailscale', () => {
+    const lan = { localAddress: '192.168.1.20', remoteAddress: '192.168.1.35' };
+    const tail = { localAddress: '100.101.102.103', remoteAddress: '100.90.1.2' };
+    const spoof = { localAddress: '192.168.1.20', remoteAddress: '100.90.1.2' };
+    const self = { localAddress: '127.0.0.1', remoteAddress: '127.0.0.1' };
+    assert.ok(!connectionAllowed(lan, 'distance'));
+    assert.ok(!connectionAllowed(spoof, 'distance'));
+    assert.ok(connectionAllowed(tail, 'distance'));
+    assert.ok(connectionAllowed(self, 'distance'));
+    assert.ok(connectionAllowed(lan, 'local'));
+  });
+
+  it('sans Tailscale, refuse de donner un code d’appairage à distance', () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-remote-'));
+    try {
+      const srv = createRemoteServer({ dataDir, interfaces: () => ({ 'Wi-Fi': [{ family: 'IPv4', internal: false, address: '192.168.1.20' }] }) });
+      assert.throws(() => srv.newKey(), /Tailscale/);
+      assert.equal(srv.info().address, '');
+      assert.equal(srv.info().mode, 'distance');
+      const local = createRemoteServer({ dataDir, mode: () => 'local', interfaces: () => ({ 'Wi-Fi': [{ family: 'IPv4', internal: false, address: '192.168.1.20' }] }) });
+      assert.match(local.newKey().url, /^https:\/\/192\.168\.1\.20:8000\/auto-login\?key=/);
+    } finally {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('à distance, coupe vraiment une connexion arrivée par une autre carte réseau', async (t) => {
+    const lanIp = Object.values(os.networkInterfaces()).flat().find((a) => a && (a.family === 'IPv4' || a.family === 4) && !a.internal)?.address;
+    if (!lanIp) return t.skip('pas de carte réseau hors boucle locale');
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-remote-'));
+    const port = 19000 + Math.floor(Math.random() * 1000);
+    const srv = createRemoteServer({ dataDir, port });
+    try {
+      await srv.start();
+      await assert.rejects(request(port, 'GET', '/api/files', { host: lanIp }));
+      assert.equal((await request(port, 'GET', '/api/files')).status, 401); // le PC lui-même passe
+    } finally {
+      await srv.stop();
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it('regroupe les morceaux d’une réplique en une seule phrase', async () => {
     const out = [];
     const collect = createReplyCollector((m) => out.push(m.text), 30);
@@ -84,12 +139,13 @@ describe('contrôle à distance depuis Jarvis Android', () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-remote-'));
     const port = 18000 + Math.floor(Math.random() * 1000);
     const received = [];
-    let srv = createRemoteServer({ dataDir, port, onCommand: (t) => received.push(t) });
+    const interfaces = () => ({ Tailscale: [{ family: 'IPv4', internal: false, address: '100.101.102.103' }] });
+    let srv = createRemoteServer({ dataDir, port, interfaces, onCommand: (t) => received.push(t) });
     try {
       await srv.start();
       const { key, url } = srv.newKey();
       assert.match(key, /^[A-HJKMNP-Z2-9]{6}$/);
-      assert.ok(url.endsWith(`:${port}/auto-login?key=${key}`));
+      assert.equal(url, `https://100.101.102.103:${port}/auto-login?key=${key}`);
 
       const page = await request(port, 'GET', `/auto-login?key=${key}`);
       const token = item(page.text, 'jarvis_token');
@@ -103,7 +159,7 @@ describe('contrôle à distance depuis Jarvis Android', () => {
       assert.deepEqual(received, ['ouvre Chrome']);
 
       await srv.stop();
-      srv = createRemoteServer({ dataDir, port, onCommand: (t) => received.push(t) });
+      srv = createRemoteServer({ dataDir, port, interfaces, onCommand: (t) => received.push(t) });
       await srv.start();
       assert.equal((await request(port, 'GET', '/api/files', { token })).status, 401);
       const relog = await request(port, 'POST', '/api/device-login', { body: { device_token: device } });
