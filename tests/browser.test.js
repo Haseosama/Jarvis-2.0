@@ -155,7 +155,7 @@ describe('navigateur depuis le téléphone (POST /api/browser)', () => {
   it('déchiffre l’action, la passe au navigateur et renvoie sa réponse', async () => {
     const seen = [];
     const free = await new Promise((r) => { const s = http.createServer().listen(0, () => { const p = s.address().port; s.close(() => r(p)); }); });
-    const srv = createRemoteServer({
+    const srv = createRemoteServer({ mode: () => 'local',
       dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'jr-')), port: free,
       onBrowser: async (input) => { seen.push(input); return { ok: true, text: 'Page : Test' }; },
     });

@@ -286,6 +286,8 @@ function getRemoteServer() {
     },
     onBrowser: (input) => getBrowserControl().run(input),
     onImage: (input) => getImageGen().run(input),
+    // « distance » (par défaut) : seulement par Tailscale, de partout ; « local » : seulement le même Wi-Fi.
+    mode: () => (readStore().remoteMode === 'local' ? 'local' : 'distance'),
   });
   remoteCollect = createReplyCollector((msg) => remoteServer.broadcast(msg));
   return remoteServer;
@@ -316,7 +318,22 @@ ipcMain.handle('jarvis:remote-new-key', async () => {
     const started = await setRemoteEnabled(true);
     if (!started.ok) return started;
   }
-  return { ok: true, ...srv.newKey() };
+  try {
+    return { ok: true, ...srv.newKey() };
+  } catch (err) {
+    return { ok: false, error: String(err.message || err), ...srv.info() };
+  }
+});
+ipcMain.handle('jarvis:remote-mode', async (_e, mode) => {
+  const store = readStore();
+  store.remoteMode = mode === 'local' ? 'local' : 'distance';
+  writeStore(store);
+  // redémarre le serveur pour couper les connexions déjà ouvertes par l'autre chemin
+  if (store.remoteEnabled) {
+    await getRemoteServer().stop();
+    return setRemoteEnabled(true);
+  }
+  return { ok: true, ...getRemoteServer().info() };
 });
 ipcMain.handle('jarvis:remote-revoke', () => {
   getRemoteServer().revokeAll();

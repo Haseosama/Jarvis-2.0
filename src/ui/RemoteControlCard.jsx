@@ -66,6 +66,21 @@ export default function RemoteControlCard() {
     refresh();
   };
 
+  const switchMode = async () => {
+    const next = status?.mode === 'local' ? 'distance' : 'local';
+    const res = await hostBridge.remote('mode', next);
+    setPairing(null);
+    setQr('');
+    setMessage(
+      !res.ok
+        ? res.error || 'Échec.'
+        : next === 'distance'
+          ? 'Accès à distance : le téléphone passe par Tailscale, le Wi-Fi local est fermé. Appairez de nouveau le téléphone.'
+          : 'Wi-Fi local : le téléphone doit être sur le même réseau que le PC. Appairez de nouveau le téléphone.',
+    );
+    refresh();
+  };
+
   const revoke = async () => {
     await hostBridge.remote('revoke');
     setMessage('Tous les téléphones ont été oubliés : il faudra un nouveau code.');
@@ -81,18 +96,34 @@ export default function RemoteControlCard() {
     );
   }
 
+  const remote = status?.mode !== 'local';
   const remaining = pairing ? Math.max(0, Math.round((pairing.expiresAt - now) / 1000)) : 0;
 
   return (
     <div className="space-card">
       <h4>📱 Contrôle depuis le téléphone (Jarvis Android)</h4>
       <p className="settings-hint">
-        Pilotez ce PC par la voix depuis Jarvis Android, sur le même réseau Wi-Fi. Dans l’app : Réglages &gt; Jarvis PC, puis
-        scannez le QR code (ou tapez l’adresse et le code). Le téléphone reste appairé, même après un redémarrage de Jarvis.
+        Pilotez ce PC par la voix depuis Jarvis Android. Dans l’app : Réglages &gt; Jarvis PC, puis scannez le QR code (ou
+        tapez l’adresse et le code). Le téléphone reste appairé, même après un redémarrage de Jarvis.
+      </p>
+      <p className="settings-hint">
+        {remote ? (
+          <>
+            🌍 <b>Accès à distance</b> : le téléphone joint ce PC de partout (4G, autre Wi-Fi) par Tailscale, un réseau privé
+            chiffré et gratuit entre vos appareils, sans port à ouvrir sur la box. Le Wi-Fi local, lui, est fermé : un autre
+            appareil de la maison ne peut pas s’y connecter. Une seule fois : installez Tailscale sur ce PC (tailscale.com/download)
+            et sur le téléphone (Play Store), connectez-vous avec le même compte sur les deux, puis appairez le téléphone.
+          </>
+        ) : (
+          <>🏠 <b>Wi-Fi local</b> : seulement quand le téléphone est sur le même réseau que le PC.</>
+        )}
       </p>
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '8px 0' }}>
         <button className="space-mini-btn" onClick={showCode}>
           🔗 Appairer un téléphone
+        </button>
+        <button className="space-mini-btn" onClick={switchMode}>
+          {remote ? '🏠 Passer en Wi-Fi local' : '🌍 Passer en accès à distance'}
         </button>
         <button className="space-mini-btn" onClick={toggle}>
           {status?.enabled ? '⏸️ Désactiver' : '▶️ Activer'}
@@ -104,8 +135,10 @@ export default function RemoteControlCard() {
         )}
       </div>
       <div className="settings-hint">
-        {status?.running
-          ? `Actif sur ${status.address} • ${status.devices || 0} téléphone(s) appairé(s)`
+        {status?.running && remote && !status.tailscale
+          ? 'Actif, mais Tailscale n’est pas connecté sur ce PC : le téléphone ne peut pas le joindre.'
+          : status?.running
+          ? `Actif sur ${status.address}${remote ? ' (Tailscale)' : ' (Wi-Fi local)'} • ${status.devices || 0} téléphone(s) appairé(s)`
           : status?.enabled
             ? 'Activé, mais le serveur n’a pas pu démarrer.'
             : 'Désactivé.'}

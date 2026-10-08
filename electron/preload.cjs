@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('jarvisHost', {
   remoteEnable: (enabled) => ipcRenderer.invoke('jarvis:remote-enable', enabled),
   remoteNewKey: () => ipcRenderer.invoke('jarvis:remote-new-key'),
   remoteRevoke: () => ipcRenderer.invoke('jarvis:remote-revoke'),
+  remoteMode: (mode) => ipcRenderer.invoke('jarvis:remote-mode', mode),
   remoteSay: (msg) => ipcRenderer.send('jarvis:remote-say', msg),
   onRemoteCommand: (cb) => {
     const handler = (_e, text) => cb(text);

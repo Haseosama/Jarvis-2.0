@@ -132,7 +132,7 @@ describe('images depuis le téléphone (POST /api/image)', () => {
   it('déchiffre la demande et renvoie l’image', async () => {
     const seen = [];
     const free = await new Promise((r) => { const s = http.createServer().listen(0, () => { const p = s.address().port; s.close(() => r(p)); }); });
-    const srv = createRemoteServer({
+    const srv = createRemoteServer({ mode: () => 'local',
       dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'jr-')), port: free,
       onImage: async (input) => { seen.push(input); return { ok: true, text: 'Image créée.', png: PNG }; },
     });
