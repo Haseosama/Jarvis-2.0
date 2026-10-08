@@ -717,6 +717,19 @@ export const hostBridge = {
     }
   },
 
+  // ── Générateur d'images installé par Jarvis (electron/imageInstall.cjs) ──
+
+  async imageGen(action) {
+    const host = hasElectron() ? window.jarvisHost : null;
+    const fn = host && { status: host.imageGenStatus, install: host.imageGenInstall }[action];
+    if (typeof fn !== 'function') return { unavailable: true };
+    try {
+      return await fn();
+    } catch (e) {
+      return { step: 'error', text: e.message || String(e) };
+    }
+  },
+
   // ── Contrôle à distance depuis Jarvis Android (electron/remoteServer.cjs) ──
 
   async remote(action, arg) {

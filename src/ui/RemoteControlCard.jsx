@@ -10,6 +10,7 @@ export default function RemoteControlCard() {
   const [qr, setQr] = useState('');
   const [message, setMessage] = useState('');
   const [now, setNow] = useState(Date.now());
+  const [images, setImages] = useState(null); // electron/imageInstall.cjs : installé, en cours, erreur
 
   const refresh = async () => setStatus(await hostBridge.remote('status'));
 
@@ -25,12 +26,18 @@ export default function RemoteControlCard() {
         setMessage(`Ordre reçu du téléphone : « ${String(event.text).slice(0, 80)} »`);
       } else if (event?.type === 'browser') {
         setMessage(`Navigateur piloté depuis le téléphone (${String(event.action).slice(0, 20)}).`);
+      } else if (event?.type === 'image') {
+        setMessage('Image demandée depuis le téléphone.');
       }
     });
     const tick = setInterval(() => setNow(Date.now()), 1000);
+    const readImages = async () => setImages(await hostBridge.imageGen('status'));
+    readImages();
+    const imageTick = setInterval(readImages, 3000);
     return () => {
       unsub?.();
       clearInterval(tick);
+      clearInterval(imageTick);
     };
   }, []);
 
@@ -119,6 +126,25 @@ export default function RemoteControlCard() {
       )}
       {pairing && remaining === 0 && <div className="settings-hint">Code expiré : cliquez de nouveau sur « Appairer un téléphone ».</div>}
       {message && <div className="settings-hint" style={{ marginTop: '8px' }}>{message}</div>}
+      {images && !images.unavailable && (
+        <div style={{ marginTop: '12px' }}>
+          <div className="settings-hint">
+            🎨 Images pour le téléphone :{' '}
+            {images.installed
+              ? `ComfyUI installé${images.running ? ', en marche' : ' (démarre à la première image)'}.`
+              : images.installing
+                ? images.text
+                : images.step === 'error'
+                  ? `échec : ${images.text}`
+                  : 'aucun générateur installé (ComfyUI et son modèle, environ 9 Go ; carte graphique NVIDIA conseillée).'}
+          </div>
+          {!images.installed && !images.installing && (
+            <button className="space-mini-btn" style={{ marginTop: '6px' }} onClick={async () => setImages(await hostBridge.imageGen('install'))}>
+              ⬇️ Installer le générateur d’images
+            </button>
+          )}
+        </div>
+      )}
       {status?.running && status.fingerprint && (
         <div className="settings-hint" style={{ marginTop: '6px', wordBreak: 'break-all', opacity: 0.7 }}>
           Empreinte du certificat : {status.fingerprint}
