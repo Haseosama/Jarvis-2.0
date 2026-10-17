@@ -24,6 +24,9 @@ import { hostBridge } from './core/hostBridge.js';
 import { clampMiniAvatarPosition } from './ui/miniAvatarPosition.js';
 import { formatTraceValue } from './ui/executionTrace.js';
 import { confirmGate } from './core/safety.js';
+import ClipboardPanel from './ui/ClipboardPanel.jsx';
+import { alertText, checkTopics } from './core/topicWatch.js';
+import { dataStore } from './core/DataStore.js';
 import { AUDIO_SPECTRUM_BAND_COUNT } from './audio/AudioSpectrum.js';
 
 const MINI_AVATAR_POSITION_KEY = 'jarvis.miniAvatarPosition';
@@ -324,6 +327,18 @@ export default function App() {
       }
     });
 
+    // Surveillance de sujets : une vérification par jour, annoncée dans la conversation (sans parole).
+    const runTopicCheck = async () => {
+      try {
+        const store = { get: () => dataStore.get().topicWatches || [], set: (list) => dataStore.update({ topicWatches: list }) };
+        if (!store.get().length) return;
+        const alerts = await checkTopics({ store, fetcher: (u) => hostBridge.httpFetch(u, { timeoutMs: 12000 }) });
+        if (alerts.length) engine._deliverAssistantReply(alertText(alerts), false);
+      } catch { /* réseau absent : on réessaiera au prochain démarrage */ }
+    };
+    const topicTimer = setTimeout(runTopicCheck, 8000);
+    const topicInterval = setInterval(runTopicCheck, 3600 * 1000);
+
     // Mot d'éveil local (« Hey Jarvis ») : actif seulement si l'utilisateur l'a activé dans les réglages.
     const syncWake = (c) => {
       if (c.wakeListenEnabled) engine.localVoice.startWake();
@@ -349,6 +364,8 @@ export default function App() {
       unsub();
       unsubPtt?.();
       unsubWake?.();
+      clearTimeout(topicTimer);
+      clearInterval(topicInterval);
       engine.localVoice.stopWake();
       unsubRemote?.();
       engine.stopLiveSession();
@@ -882,6 +899,10 @@ export default function App() {
         </aside>
       </main>
 
+      <ClipboardPanel
+        enabled={cfg.clipboardPanel === true}
+        onAsk={(prompt) => engineRef.current?.sendUserMessage(prompt, { speakReply: true })}
+      />
       {pendingConfirm && (
         <div className="hud-confirm" role="alertdialog" aria-label="Confirmation requise">
           <div className="hud-confirm-title">⚠️ {pendingConfirm.title}</div>

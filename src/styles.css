@@ -1570,3 +1570,20 @@ html, body, #root {
 .hud-confirm-actions button { border-radius: 6px; padding: 6px 16px; font-weight: 700; cursor: pointer; border: 1px solid; background: transparent; }
 .hud-confirm-yes { color: #ff5252; border-color: #ff5252; }
 .hud-confirm-no { color: var(--cyan); border-color: var(--cyan); }
+
+/* ── Presse-papiers intelligent ──────────────────────────────────────────── */
+.clip-panel {
+  position: fixed;
+  right: 18px;
+  bottom: 70px;
+  background: rgba(4, 14, 28, 0.96);
+  border: 1px solid var(--cyan);
+  border-radius: 10px;
+  padding: 10px 12px;
+  z-index: 55;
+  max-width: 340px;
+  box-shadow: 0 6px 24px rgba(0, 229, 255, 0.25);
+}
+.clip-preview { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; word-break: break-word; }
+.clip-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.clip-actions button { background: transparent; color: var(--cyan); border: 1px solid var(--cyan); border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 12px; }

@@ -177,6 +177,9 @@ const DEFAULT_CONFIG = {
   navitiaKey: '',
   confirmDestructiveActions: true,
   // Voix hors Gemini (serveurs compatibles OpenAI : whisper.cpp, faster-whisper, Piper via openedai-speech, ElevenLabs)
+  audioInputId: '', // micro choisi (vide = celui du système)
+  audioOutputId: '', // haut-parleurs choisis (vide = ceux du système)
+  clipboardPanel: false, // panneau Traduire / Résumer / Expliquer / Corriger sur un texte copié
   sttEngine: 'browser', // 'browser' | 'local'
   ttsEngine: 'gemini', // 'gemini' | 'local' | 'elevenlabs'
   speechBaseUrl: 'http://localhost:8000/v1',

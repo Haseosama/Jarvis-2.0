@@ -3,6 +3,7 @@
 import { configStore } from './ConfigStore.js';
 import { hostBridge } from './hostBridge.js';
 import { transcribe, synthesize, SPEECH_DEFAULTS } from '../llm/speech.js';
+import { applySink, audioConstraints } from '../audio/devices.js';
 import { matchWakeWord, isEcho, WAKE_SLEEP_MS } from '../audio/voiceGuards.js';
 
 const SILENCE_RMS = 0.015;
@@ -59,7 +60,7 @@ export class LocalVoice {
       this.engine.cb.onStatusText?.(res.error);
       return false;
     }
-    const ctx = (this.engine.audioCtx = this.engine.audioCtx || new (window.AudioContext || window.webkitAudioContext)());
+    const ctx = (this.engine.audioCtx = this.engine.audioCtx || applySink(new (window.AudioContext || window.webkitAudioContext)(), this.cfg.audioOutputId));
     if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
     const buffer = await ctx.decodeAudioData(res.bytes.buffer.slice(res.bytes.byteOffset, res.bytes.byteOffset + res.bytes.byteLength));
     const src = ctx.createBufferSource();
@@ -94,7 +95,7 @@ export class LocalVoice {
     this.listening = true;
     let stream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      stream = await navigator.mediaDevices.getUserMedia(audioConstraints(this.cfg));
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 1024;

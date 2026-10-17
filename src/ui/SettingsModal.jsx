@@ -1,5 +1,6 @@
 import { toggleAdultImages } from './adultImages.js';
 import MemoryPanel from './MemoryPanel.jsx';
+import DevicePicker from './DevicePicker.jsx';
 import React, { useEffect, useState } from 'react';
 import {
   configStore,
@@ -510,6 +511,18 @@ export default function SettingsModal({ onClose, onTestVoice, onOpenCreator }) {
                   Écouter le mot d’activation (« Hey {cfg.wakeWord || 'jarvis'} »)
                   <span className="settings-hint" style={{ display: 'block' }}>
                     Reconnaissance du navigateur uniquement pour détecter le mot. Veille automatique après 2 minutes sans mot d’activation. Ctrl+Espace ouvre ou ferme le micro.
+                  </span>
+                </span>
+              </label>
+
+              <DevicePicker cfg={cfg} update={update} />
+
+              <label className="settings-field" style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <input type="checkbox" checked={cfg.clipboardPanel === true} onChange={(e) => update({ clipboardPanel: e.target.checked })} />
+                <span>
+                  Presse-papiers intelligent
+                  <span className="settings-hint" style={{ display: 'block' }}>
+                    Un texte copié propose Traduire, Résumer, Expliquer ou Corriger. Le presse-papiers n’est lu que lorsque c’est activé, et son contenu est traité comme une donnée.
                   </span>
                 </span>
               </label>

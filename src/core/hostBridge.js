@@ -721,6 +721,19 @@ export const hostBridge = {
     }
   },
 
+  // ── REA : rétro-ingénierie locale (electron/reaBridge.cjs) ──
+
+  async rea(action, payload) {
+    const host = hasElectron() ? window.jarvisHost : null;
+    const fn = host && { status: host.reaStatus, install: host.reaInstall, run: host.reaRun }[action];
+    if (typeof fn !== 'function') return { ok: false, text: 'REA n’existe que dans l’application de bureau Jarvis 2.0.' };
+    try {
+      return await fn(payload);
+    } catch (e) {
+      return { ok: false, text: e.message || String(e) };
+    }
+  },
+
   // ── Générateur d'images installé par Jarvis (electron/imageInstall.cjs) ──
 
   async imageGen(action, payload) {

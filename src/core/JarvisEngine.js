@@ -8,6 +8,7 @@ import { UNTRUSTED_PROMPT, OUTCOME_PROMPT } from './safety.js';
 import { memoryPromptBlock } from './memorySearch.js';
 import { LocalVoice } from './LocalVoice.js';
 import { isEcho } from '../audio/voiceGuards.js';
+import { applySink, audioConstraints } from '../audio/devices.js';
 import { configStore, REST_MODELS, VOICE_PROFILES, DEFAULT_TTS_MODEL } from './ConfigStore.js';
 import { dataStore } from './DataStore.js';
 import { hostBridge } from './hostBridge.js';
@@ -56,9 +57,14 @@ export class JarvisEngine {
     this.externalHistory = []; // tours terminés (texte) du cerveau externe
     this.lastSpoken = ''; // dernière phrase dite à voix haute : sert à ignorer sa propre voix captée par le micro
     this.localVoice = new LocalVoice(this);
+    this._sinkId = configStore.get().audioOutputId;
 
     // Reconnect Gemini Live automatically whenever voiceName or API key changes
     this._unsubConfig = configStore.subscribe((cfg) => {
+      if (cfg.audioOutputId !== this._sinkId) {
+        this._sinkId = cfg.audioOutputId;
+        applySink(this.audioCtx, cfg.audioOutputId);
+      }
       const activeKey = configStore.getActiveApiKey();
       if (this.ws && (this.wsVoice !== cfg.voiceName || this.wsKey !== activeKey)) {
         this._closeLiveSocketOnly();
@@ -933,17 +939,11 @@ ${OUTCOME_PROMPT}` +
   async _startMicPcmStream() {
     try {
       this._stopMicPcmStream();
-      this.audioCtx = this.audioCtx || new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      this.audioCtx = this.audioCtx || applySink(new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 }), configStore.get().audioOutputId);
       if (this.audioCtx.state === 'suspended') {
         await this.audioCtx.resume().catch(() => {});
       }
-      this.micStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
+      this.micStream = await navigator.mediaDevices.getUserMedia(audioConstraints(configStore.get(), { autoGainControl: true }));
       const source = this.audioCtx.createMediaStreamSource(this.micStream);
       const processor = this.audioCtx.createScriptProcessor(4096, 1, 1);
       this.micProcessor = processor;

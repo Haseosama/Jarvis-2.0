@@ -197,6 +197,16 @@ function runCmd(cmd, timeout = 10000) {
   });
 }
 
+// Attend (jusqu'à ~4 s) qu'un processus portant ce nom d'image apparaisse dans la table des processus.
+async function waitForProcess(image, tries = 8) {
+  for (let i = 0; i < tries; i++) {
+    const res = await runCmd(`tasklist /FI "IMAGENAME eq ${image}" /NH`, 4000);
+    if (res.ok && res.stdout.toLowerCase().includes(image.toLowerCase())) return true;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
+}
+
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1340,
@@ -247,6 +257,16 @@ function getBrowserControl() {
 }
 
 ipcMain.handle('jarvis:browser', (_e, payload) => getBrowserControl().run(payload || {}));
+
+// ── REA : rétro-ingénierie locale (electron/reaBridge.cjs) ──────────────────────
+let reaBridge = null;
+const getReaBridge = () => {
+  if (!reaBridge) reaBridge = require('./reaBridge.cjs').createReaBridge({ dataDir: app.getPath('userData') });
+  return reaBridge;
+};
+ipcMain.handle('jarvis:rea-status', () => getReaBridge().status());
+ipcMain.handle('jarvis:rea-install', () => getReaBridge().install());
+ipcMain.handle('jarvis:rea-run', (_e, payload) => getReaBridge().exec(payload || {}));
 
 // ── Images créées par Fooocus, ComfyUI ou Forge sur ce PC (electron/imageGen.cjs), pour Jarvis Android ──
 
@@ -796,7 +816,12 @@ ipcMain.handle('jarvis:open-app', async (_e, appName) => {
         return { ok: true, message: `Application ouverte : ${raw}` };
       }
       const res = await runCmd(`start "" "${mapped}"`);
-      if (res.ok) return { ok: true, message: `Application lancée : ${raw}` };
+      if (res.ok) {
+        // `start` réussit dès qu'un shell est parti : on vérifie qu'un processus existe vraiment.
+        const image = /^[\w.-]+\.exe$/i.test(mapped) ? mapped : /^[\w-]+$/.test(mapped) ? `${mapped}.exe` : '';
+        if (image && (await waitForProcess(image))) return { ok: true, verified: true, process: image, message: `Application vérifiée en cours d'exécution : ${raw}` };
+        return { ok: true, message: `Application lancée : ${raw}` };
+      }
     }
     // Search Start Menu shortcuts via PowerShell
     const safe = raw.replace(/["'`$&|;<>]/g, '');

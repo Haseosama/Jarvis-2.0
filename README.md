@@ -54,6 +54,16 @@ Adaptation complète sur PC (Windows / Desktop autonome) de **[Jarvis-Android v0
 - **Organisation & Vie quotidienne** : listes de tâches/courses, agenda, minuteurs, dépenses, budgets, abonnements, habitudes (streaks), recettes, suivi de colis, anniversaires, mémoire à long terme, briefing du matin (`wake_briefing`), météo Open-Meteo, pluie dans l'heure, qualité de l'air/pollens et prix des carburants en France.
 - **82 Plugins JSON déclaratifs réparés** (`public/assets/plugins/`) : les réponses sont décodées par chemins/collections de résultats, les paramètres manquants sont signalés et les routines Android ont été remplacées par leurs équivalents PC (fenêtres, lecteur multimédia, volume, luminosité, agenda/tâches et minuteurs). Les appels web passent par le pont réseau de l’application, sans serveur backend à installer.
 
+
+### 7. 🛡️ Garde-fous, voix locale et REA (2.0.42 → 2.0.44, portés de Mark LVI)
+- **Résultats honnêtes** : un outil répond `done` (vérifié), `unverified` (demande partie, non confirmée) ou `failed`. `open_app` vérifie le processus avant de dire « ouvert » (`src/core/safety.js`).
+- **Contenu non fiable** : pages web, mails, fichiers, presse-papiers, résultats REA et titres d'actualité arrivent au modèle entourés de `<<<UNTRUSTED ...>>>` : ce sont des données, jamais des consignes.
+- **Confirmation réelle** : veille, redémarrage et arrêt attendent un bouton CONFIRMER à l'écran que le modèle ne peut pas presser ; il en va de même pour l'installation de REA.
+- **Mémoire consultable** : le prompt ne porte que les 40 souvenirs les plus récents, `recall_memory` retrouve les autres ; panneau Mémoire dans les Réglages (rechercher, supprimer). **Annulation** (`undo`) des fichiers écrits ou supprimés et des souvenirs.
+- **Voix hors Gemini** : écoute Whisper et voix Piper/Kokoro/ElevenLabs via un serveur compatible OpenAI que vous lancez (Réglages › Voix hors Gemini). Mot d'éveil « Hey Jarvis » (veille après 2 min), anti-écho, blocs `<think>` jamais lus, budget d'outils pour les petits modèles locaux, choix du micro et des haut-parleurs avec bouton TEST.
+- **Surveillance de sujets** (`watch_topic`, une vérification par jour) et **presse-papiers intelligent** (Traduire / Résumer / Expliquer / Corriger, désactivé par défaut).
+- **REA — Reverse Engineer Anything** ([morluto/rea](https://github.com/morluto/rea), MIT) : l'outil `reverse_engineer` analyse localement et statiquement une application Electron/JS, un assembly .NET, une base SQLite, un binaire Go/Rust, ou un binaire natif via Ghidra/Hopper/IDA déjà installés. Nécessite Node.js ≥ 22.19 ; le paquet `rea-agents` (version fixée) s'installe une fois dans les données de Jarvis après votre confirmation, sans exécuter ses scripts d'installation. Les résultats complets sont enregistrés dans un fichier, Jarvis n'en reçoit qu'un résumé. À réserver aux logiciels que vous avez le droit d'étudier.
+
 ---
 
 ## 🚀 Installation & Compilation en `.exe` (Windows)
