@@ -1548,3 +1548,25 @@ html, body, #root {
 .llm-image-card { margin: 0; padding: 8px; border: 1px solid var(--border-cyan); border-radius: 10px; background: rgba(12, 26, 44, 0.7); }
 .llm-image-card img { width: 100%; border-radius: 6px; display: block; margin-bottom: 6px; }
 .llm-image-card video { width: 100%; border-radius: 6px; display: block; margin-bottom: 6px; background: #000; }
+
+/* ── Confirmation réelle (actions irréversibles) ─────────────────────────── */
+.hud-confirm {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(24, 8, 8, 0.96);
+  border: 1px solid #ff5252;
+  border-radius: 10px;
+  padding: 12px 18px;
+  box-shadow: 0 6px 28px rgba(255, 82, 82, 0.35);
+  z-index: 70;
+  text-align: center;
+  max-width: min(480px, 92vw);
+}
+.hud-confirm-title { color: #ff8a80; font-weight: 700; font-size: 14px; }
+.hud-confirm-detail { color: var(--text-muted); font-size: 12px; margin-top: 4px; }
+.hud-confirm-actions { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
+.hud-confirm-actions button { border-radius: 6px; padding: 6px 16px; font-weight: 700; cursor: pointer; border: 1px solid; background: transparent; }
+.hud-confirm-yes { color: #ff5252; border-color: #ff5252; }
+.hud-confirm-no { color: var(--cyan); border-color: var(--cyan); }

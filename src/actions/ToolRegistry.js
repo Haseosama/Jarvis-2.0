@@ -3,6 +3,7 @@
 
 import { monthKey, monthLabel, summarizeMonth } from '../core/finance.js';
 import { hostBridge } from '../core/hostBridge.js';
+import { confirmGate, done, failed, unverified, untrusted } from '../core/safety.js';
 import { configStore, ALL_VOICES, VOICE_DESC } from '../core/ConfigStore.js';
 import { dataStore } from '../core/DataStore.js';
 import { pluginEngine } from '../core/PluginEngine.js';
@@ -33,6 +34,22 @@ import {
   solarSystemObjects,
   moonPhase,
 } from '../space/SpaceEngine.js';
+
+// Outils dont le résultat contient du texte écrit par un tiers : il part au modèle comme donnée, pas comme consigne.
+const UNTRUSTED_SOURCES = {
+  web_search: 'web',
+  read_webpage: 'web',
+  navigateur: 'browser',
+  google_workspace: 'google',
+  plugins: 'plugin',
+};
+const untrustedSource = (name, args) => {
+  if (UNTRUSTED_SOURCES[name]) return UNTRUSTED_SOURCES[name];
+  const action = String(args?.action || '').toLowerCase();
+  if (name === 'clipboard' && action !== 'write') return 'clipboard';
+  if (name === 'file_manager' && action === 'read') return 'file';
+  return null;
+};
 
 export class ToolRegistry {
   constructor(uiCallbacks = {}) {
@@ -95,6 +112,8 @@ export class ToolRegistry {
           : `Outil inconnu : ${cleanName}`;
       }
       if (typeof result === 'string' && /^(Erreur|Impossible|Error)\b/i.test(result) && cleanName !== 'auto_heal') this._recordFailure(cleanName, safeArgs, result);
+      const source = typeof result === 'string' && result ? untrustedSource(cleanName, safeArgs) : null;
+      if (source) result = untrusted(source, result);
       this.ui.onToolExecuted?.(cleanName, safeArgs, result, traceMeta());
       return result;
     } catch (err) {
@@ -130,7 +149,7 @@ export class ToolRegistry {
     // 2. PC Device Settings (Volume, Brightness, Media, Lock, Sleep, Windows Settings)
     this.register({
       name: 'device_settings',
-      description: 'Contrôler les réglages système du PC : volume (0-100), mute, unmute, brightness (0-100), media_play_pause, media_next, media_prev, lock (verrouiller la session Windows), sleep (mettre en veille), ou ouvrir un panneau de paramètres (wifi, bluetooth, display, sound).',
+      description: 'Contrôler les réglages système du PC : volume (0-100), mute, unmute, brightness (0-100), media_play_pause, media_next, media_prev, lock (verrouiller la session Windows), sleep / restart / shutdown (demandent une confirmation à l’écran de l’utilisateur), ou ouvrir un panneau de paramètres (wifi, bluetooth, display, sound).',
       parameters: {
         type: 'OBJECT',
         properties: {
@@ -143,6 +162,15 @@ export class ToolRegistry {
         required: ['setting'],
       },
       run: async (args) => {
+        const setting = String(args.setting || '').toLowerCase();
+        // Irréversible : l'arrêt, le redémarrage et la veille attendent un bouton que seul l'utilisateur peut presser.
+        if (['sleep', 'restart', 'shutdown'].includes(setting)) {
+          const label = { sleep: 'Mettre le PC en veille', restart: 'Redémarrer le PC', shutdown: 'Éteindre le PC' }[setting];
+          return confirmGate.request(`device_settings:${setting}`, label, 'Le travail non enregistré peut être perdu.', async () => {
+            const res = await hostBridge.setDeviceSetting(args);
+            return res.ok === false ? failed('device_settings', res.message || 'refusé', { setting }) : done('device_settings', { setting, applied: true });
+          });
+        }
         const res = await hostBridge.setDeviceSetting(args);
         return res.message || `Réglage PC « ${args.setting} » appliqué.`;
       },
@@ -160,8 +188,14 @@ export class ToolRegistry {
         required: ['app_name'],
       },
       run: async (args) => {
-        const res = await hostBridge.openApp(args.app_name || args.app || '');
-        return res.message || `Application ${args.app_name} ouverte.`;
+        const name = args.app_name || args.app || '';
+        const res = await hostBridge.openApp(name);
+        if (res.ok === false) return failed('open_app', res.message || 'application introuvable', { app: name });
+        // Lancer une application passe par un shell : « la commande est partie » ne prouve pas qu'une fenêtre existe.
+        if (/^(Application lancée|Commande lancée)/.test(res.message || '')) {
+          return unverified('open_app', 'la commande de lancement a été acceptée, la fenêtre n’a pas été vérifiée', { app: name });
+        }
+        return res.message || done('open_app', { app: name });
       },
     });
 

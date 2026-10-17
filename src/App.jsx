@@ -23,6 +23,7 @@ import { JarvisEngine } from './core/JarvisEngine.js';
 import { hostBridge } from './core/hostBridge.js';
 import { clampMiniAvatarPosition } from './ui/miniAvatarPosition.js';
 import { formatTraceValue } from './ui/executionTrace.js';
+import { confirmGate } from './core/safety.js';
 import { AUDIO_SPECTRUM_BAND_COUNT } from './audio/AudioSpectrum.js';
 
 const MINI_AVATAR_POSITION_KEY = 'jarvis.miniAvatarPosition';
@@ -98,6 +99,13 @@ export default function App() {
   ]);
   const [inputText, setInputText] = useState('');
   const [toast, setToast] = useState('');
+  const [pendingConfirm, setPendingConfirm] = useState(null);
+  useEffect(() => confirmGate.subscribe(setPendingConfirm), []);
+  useEffect(() => {
+    if (!pendingConfirm) return undefined;
+    const t = setTimeout(() => confirmGate.resolve(false), 90_000);
+    return () => clearTimeout(t);
+  }, [pendingConfirm]);
 
   const engineRef = useRef(null);
   const toolsRef = useRef(null);
@@ -864,6 +872,16 @@ export default function App() {
         </aside>
       </main>
 
+      {pendingConfirm && (
+        <div className="hud-confirm" role="alertdialog" aria-label="Confirmation requise">
+          <div className="hud-confirm-title">⚠️ {pendingConfirm.title}</div>
+          {pendingConfirm.detail && <div className="hud-confirm-detail">{pendingConfirm.detail}</div>}
+          <div className="hud-confirm-actions">
+            <button className="hud-confirm-yes" onClick={async () => { const r = await confirmGate.resolve(true); if (r) showToast(r.startsWith('status=') ? '✅ Action exécutée' : r); }}>CONFIRMER</button>
+            <button className="hud-confirm-no" onClick={async () => { const r = await confirmGate.resolve(false); if (r) showToast(r); }}>ANNULER</button>
+          </div>
+        </div>
+      )}
       {toast && <div className="hud-toast">{toast}</div>}
 
       {polyOpen && (
