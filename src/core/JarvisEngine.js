@@ -5,6 +5,9 @@
 // 3. Offline / Local Intent Engine that works immediately even without an API key
 
 import { UNTRUSTED_PROMPT, OUTCOME_PROMPT } from './safety.js';
+import { memoryPromptBlock } from './memorySearch.js';
+import { LocalVoice } from './LocalVoice.js';
+import { isEcho } from '../audio/voiceGuards.js';
 import { configStore, REST_MODELS, VOICE_PROFILES, DEFAULT_TTS_MODEL } from './ConfigStore.js';
 import { dataStore } from './DataStore.js';
 import { hostBridge } from './hostBridge.js';
@@ -51,6 +54,8 @@ export class JarvisEngine {
     this.ttsTimer = null;
     this.chatHistory = [];
     this.externalHistory = []; // tours terminés (texte) du cerveau externe
+    this.lastSpoken = ''; // dernière phrase dite à voix haute : sert à ignorer sa propre voix captée par le micro
+    this.localVoice = new LocalVoice(this);
 
     // Reconnect Gemini Live automatically whenever voiceName or API key changes
     this._unsubConfig = configStore.subscribe((cfg) => {
@@ -84,9 +89,7 @@ export class JarvisEngine {
       hour: '2-digit',
       minute: '2-digit',
     });
-    const memBlock = mems.length
-      ? '\nMémoire utilisateur :\n' + mems.map((m) => `- ${m.key}: ${m.value}`).join('\n')
-      : '';
+    const memBlock = memoryPromptBlock(mems);
     return (
       `Tu es Jarvis 2.0, un assistant personnel intelligent sur PC (Windows / Desktop autonome). ` +
       `Tu parles en français de manière naturelle, concise, chaleureuse et efficace. ` +
@@ -205,7 +208,7 @@ ${OUTCOME_PROMPT}` +
       brain = llmStore.get().brain;
       if (!brain?.enabled || !brain.model || brain.provider === 'gemini' || !llmStore.isConfigured(brain.provider)) return null;
       const res = await runBrain({
-        slot: llmStore.resolve(brain),
+        slot: { ...llmStore.resolve(brain), toolBudget: brain.provider === 'local' },
         system: this.buildSystemPrompt(),
         history: this.externalHistory || (this.externalHistory = []),
         userText: text,
@@ -242,6 +245,7 @@ ${OUTCOME_PROMPT}` +
     });
 
     if (speak && configStore.get().ttsEnabled) {
+      this.lastSpoken = text;
       this.speakTextWithLipSync(text);
     } else {
       this._setState(this.micActive ? 'LISTENING' : 'IDLE', this.micActive ? 'À l’écoute...' : 'Prêt');
@@ -266,6 +270,7 @@ ${OUTCOME_PROMPT}` +
     }
 
     const cfg = configStore.get();
+    if (this.localVoice.usesLocalTts() && (await this.localVoice.speak(cleanForSpeech))) return;
     const voiceName = voiceOverride || cfg.voiceName || 'Aoede';
     const profile = VOICE_PROFILES[voiceName] || { gender: 'female', pitch: 1.0, rate: 1.05, idx: 0 };
     const apiKey = configStore.getActiveApiKey();
@@ -1090,7 +1095,28 @@ ${OUTCOME_PROMPT}` +
 
   // ── Browser / Electron Web Speech Recognition (PTT / Continuous) ───────────
 
+  stopVoiceRecognition() {
+    this.localVoice.stopListening();
+    try { this.recognition?.stop(); } catch { /* déjà arrêté */ }
+  }
+
+  _heard(transcript) {
+    const text = String(transcript || '').trim();
+    if (!text) return;
+    // Anti-écho : la fin de sa propre phrase captée par le micro est écartée sans couper l'écoute.
+    if (isEcho(text, this.lastSpoken)) return;
+    this.sendUserMessage(text, { speakReply: true });
+  }
+
   startVoiceRecognition() {
+    if (this.localVoice.usesLocalStt()) {
+      this._setState('LISTENING', 'À l’écoute (Whisper local)...');
+      this.localVoice.listenOnce().then((t) => {
+        if (t) this._heard(t);
+        else this._setState('IDLE', 'Prêt');
+      });
+      return;
+    }
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) {
       this._setState('IDLE', 'Reconnaissance vocale du navigateur non supportée ici — utilisez la barre de commande.');
@@ -1106,9 +1132,7 @@ ${OUTCOME_PROMPT}` +
 
       rec.onresult = (event) => {
         const transcript = event.results?.[0]?.[0]?.transcript || '';
-        if (transcript.trim()) {
-          this.sendUserMessage(transcript.trim(), { speakReply: true });
-        }
+        this._heard(transcript);
       };
       rec.onerror = () => {
         this._setState('IDLE', 'Prêt');

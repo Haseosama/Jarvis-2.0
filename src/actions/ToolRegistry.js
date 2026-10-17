@@ -4,6 +4,8 @@
 import { monthKey, monthLabel, summarizeMonth } from '../core/finance.js';
 import { hostBridge } from '../core/hostBridge.js';
 import { confirmGate, done, failed, unverified, untrusted } from '../core/safety.js';
+import { searchMemories } from '../core/memorySearch.js';
+import { undoStack } from '../core/undo.js';
 import { configStore, ALL_VOICES, VOICE_DESC } from '../core/ConfigStore.js';
 import { dataStore } from '../core/DataStore.js';
 import { pluginEngine } from '../core/PluginEngine.js';
@@ -364,6 +366,16 @@ export class ToolRegistry {
       },
       run: async (args) => {
         const root = configStore.get().workFolderPath || '';
+        const op = (action, extra = {}) => hostBridge.fileOp({ root, action, relPath: args.path || '', content: '', query: '', ...extra });
+        const act = String(args.action || '').toLowerCase();
+        // Photo de l'état précédent pour pouvoir annuler : contenu d'un fichier existant, ou absence.
+        let before = null;
+        if (['write', 'append', 'delete'].includes(act) && args.path) {
+          const prev = await op('read');
+          before = prev.ok && typeof prev.content === 'string' ? { existed: true, content: prev.content } : { existed: false };
+        } else if (act === 'mkdir') {
+          before = { existed: false, dir: true };
+        }
         const res = await hostBridge.fileOp({
           root,
           action: args.action,
@@ -372,6 +384,16 @@ export class ToolRegistry {
           query: args.query || '',
         });
         if (!res.ok) return `Erreur fichier : ${res.error}`;
+        if (before) {
+          const label = `${act} ${args.path}`;
+          if (act === 'delete') {
+            if (before.existed) undoStack.record(label, async () => { await op('write', { content: before.content }); });
+          } else if (!before.existed) {
+            undoStack.record(label, async () => { await op('delete'); });
+          } else if (!before.dir) {
+            undoStack.record(label, async () => { await op('write', { content: before.content }); });
+          }
+        }
         if (args.action === 'list') {
           const items = res.items || [];
           if (!items.length) return `Le dossier (${res.root}) est vide.`;
@@ -1064,7 +1086,12 @@ export class ToolRegistry {
         required: ['key', 'value'],
       },
       run: async (args) => {
+        const previous = (dataStore.get().memories || []).find((m) => m.key.toLowerCase() === String(args.key || '').trim().toLowerCase());
         dataStore.rememberFact(args.key, args.value);
+        undoStack.record(`souvenir « ${args.key} »`, async () => {
+          if (previous) dataStore.rememberFact(previous.key, previous.value);
+          else dataStore.forgetFact(args.key);
+        });
         return `Mémorisé : [${args.key}] = ${args.value}`;
       },
     });
@@ -1080,7 +1107,10 @@ export class ToolRegistry {
         required: ['key'],
       },
       run: async (args) => {
+        const k = String(args.key || '').trim().toLowerCase();
+        const before = (dataStore.get().memories || []).filter((m) => m.key.toLowerCase().includes(k));
         const removed = dataStore.forgetFact(args.key);
+        if (removed) undoStack.record(`oubli de « ${args.key} »`, async () => before.forEach((m) => dataStore.rememberFact(m.key, m.value)));
         return removed ? `Souvenir « ${args.key} » supprimé.` : `Aucun souvenir trouvé pour « ${args.key} ».`;
       },
     });
@@ -1093,6 +1123,41 @@ export class ToolRegistry {
         const mems = dataStore.get().memories || [];
         if (!mems.length) return 'Aucun souvenir enregistré.';
         return 'Mémoire à long terme :\n' + mems.map((m) => `• ${m.key} : ${m.value}`).join('\n');
+      },
+    });
+
+    this.register({
+      name: 'recall_memory',
+      description: 'Retrouver dans la mémoire à long terme les souvenirs qui correspondent à un sujet (le prompt ne porte que les plus récents).',
+      parameters: {
+        type: 'OBJECT',
+        properties: { query: { type: 'STRING', description: 'Sujet ou mots-clés à retrouver.' } },
+        required: ['query'],
+      },
+      run: async (args) => {
+        const hits = searchMemories(dataStore.get().memories || [], args.query, 8);
+        return hits.length ? 'Souvenirs trouvés :\n' + hits.map((m) => `• ${m.key} : ${m.value}`).join('\n') : `Aucun souvenir ne correspond à « ${args.query} ».`;
+      },
+    });
+
+    this.register({
+      name: 'undo',
+      description: 'Annuler la ou les dernières actions réversibles de Jarvis (fichiers écrits ou supprimés, souvenirs ajoutés ou oubliés). count = nombre d’actions à annuler (1 par défaut) ; action=list montre ce qui peut être annulé.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          count: { type: 'NUMBER', description: 'Nombre d’actions à annuler.' },
+          action: { type: 'STRING', description: 'undo (défaut) ou list.' },
+        },
+      },
+      run: async (args) => {
+        if (String(args.action || '').toLowerCase() === 'list') {
+          const items = undoStack.list();
+          return items.length ? 'Annulable (de la plus récente à la plus ancienne) :\n' + items.map((l) => `• ${l}`).join('\n') : 'Rien à annuler.';
+        }
+        if (!undoStack.peek()) return failed('undo', 'aucune action réversible récente');
+        const res = await undoStack.undoLast(Math.min(10, Math.max(1, Number(args.count) || 1)));
+        return res.join('\n');
       },
     });
 

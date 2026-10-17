@@ -1291,16 +1291,20 @@ ipcMain.handle('jarvis:save-document', async (_e, { fileName, base64, openAfter 
 });
 
 // CORS-free HTTP fetch from Electron main process
-ipcMain.handle('jarvis:http-fetch', async (_e, { url, method = 'GET', headers = {}, body = null, timeoutMs = 15000 }) => {
+ipcMain.handle('jarvis:http-fetch', async (_e, { url, method = 'GET', headers = {}, body = null, bodyBase64 = null, responseType = 'text', timeoutMs = 15000 }) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       method,
       headers: { 'User-Agent': 'Jarvis-PC/2.0', ...headers },
-      body: method !== 'GET' && method !== 'HEAD' ? body : undefined,
+      body: method !== 'GET' && method !== 'HEAD' ? (bodyBase64 ? Buffer.from(String(bodyBase64), 'base64') : body) : undefined,
       signal: controller.signal,
     });
+    if (responseType === 'base64') {
+      const buf = Buffer.from(await res.arrayBuffer());
+      return { ok: res.ok, status: res.status, text: '', base64: res.ok ? buf.toString('base64') : '', error: res.ok ? '' : buf.toString('utf8').slice(0, 300) };
+    }
     const text = await res.text();
     return { ok: res.ok, status: res.status, text };
   } catch (e) {

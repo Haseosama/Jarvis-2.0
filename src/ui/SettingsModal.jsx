@@ -1,4 +1,5 @@
 import { toggleAdultImages } from './adultImages.js';
+import MemoryPanel from './MemoryPanel.jsx';
 import React, { useEffect, useState } from 'react';
 import {
   configStore,
@@ -498,6 +499,60 @@ export default function SettingsModal({ onClose, onTestVoice, onOpenCreator }) {
                   />
                 </div>
               </div>
+
+              <label className="settings-field" style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <input
+                  type="checkbox"
+                  checked={cfg.wakeListenEnabled === true}
+                  onChange={(e) => update({ wakeListenEnabled: e.target.checked })}
+                />
+                <span>
+                  Écouter le mot d’activation (« Hey {cfg.wakeWord || 'jarvis'} »)
+                  <span className="settings-hint" style={{ display: 'block' }}>
+                    Reconnaissance du navigateur uniquement pour détecter le mot. Veille automatique après 2 minutes sans mot d’activation. Ctrl+Espace ouvre ou ferme le micro.
+                  </span>
+                </span>
+              </label>
+
+              <h4>Voix hors Gemini (locale ou ElevenLabs)</h4>
+              <p className="settings-hint">
+                Serveur compatible OpenAI (whisper.cpp server, faster-whisper-server, LocalAI, openedai-speech/Piper…). Jarvis n’installe rien : lancez votre serveur, puis indiquez son adresse.
+              </p>
+              <div className="settings-grid-fields">
+                <div className="settings-field">
+                  <label>Reconnaissance (écoute)</label>
+                  <select value={cfg.sttEngine || 'browser'} onChange={(e) => update({ sttEngine: e.target.value })}>
+                    <option value="browser">Navigateur (par défaut)</option>
+                    <option value="local">Whisper local / serveur compatible</option>
+                  </select>
+                </div>
+                <div className="settings-field">
+                  <label>Synthèse (voix)</label>
+                  <select value={cfg.ttsEngine || 'gemini'} onChange={(e) => update({ ttsEngine: e.target.value })}>
+                    <option value="gemini">Gemini / voix du système (par défaut)</option>
+                    <option value="local">Serveur local (Piper, Kokoro…)</option>
+                    <option value="elevenlabs">ElevenLabs</option>
+                  </select>
+                </div>
+                <div className="settings-field">
+                  <label>Adresse du serveur vocal</label>
+                  <input type="text" value={cfg.speechBaseUrl || ''} onChange={(e) => update({ speechBaseUrl: e.target.value })} />
+                </div>
+                <div className="settings-field">
+                  <label>Clé (ElevenLabs ou serveur)</label>
+                  <input type="password" value={cfg.speechKey || ''} onChange={(e) => update({ speechKey: e.target.value })} />
+                </div>
+                <div className="settings-field">
+                  <label>Voix du serveur local</label>
+                  <input type="text" value={cfg.ttsLocalVoice || ''} onChange={(e) => update({ ttsLocalVoice: e.target.value })} />
+                </div>
+                <div className="settings-field">
+                  <label>Identifiant de voix ElevenLabs</label>
+                  <input type="text" value={cfg.elevenVoiceId || ''} onChange={(e) => update({ elevenVoiceId: e.target.value })} />
+                </div>
+              </div>
+
+              <MemoryPanel />
 
               <div className="settings-field">
                 <label>Dossier de travail PC (Fichiers & Documents générés)</label>

@@ -176,12 +176,23 @@ const DEFAULT_CONFIG = {
   sncfKey: '',
   navitiaKey: '',
   confirmDestructiveActions: true,
+  // Voix hors Gemini (serveurs compatibles OpenAI : whisper.cpp, faster-whisper, Piper via openedai-speech, ElevenLabs)
+  sttEngine: 'browser', // 'browser' | 'local'
+  ttsEngine: 'gemini', // 'gemini' | 'local' | 'elevenlabs'
+  speechBaseUrl: 'http://localhost:8000/v1',
+  sttLocalModel: 'whisper-1',
+  sttLanguage: '',
+  ttsLocalModel: 'tts-1',
+  ttsLocalVoice: 'alloy',
+  elevenVoiceId: '',
+  elevenModel: 'eleven_multilingual_v2',
+  speechKey: '', // clé ElevenLabs / serveur vocal : stockage chiffré uniquement
   imageAdult: false, // images créées sur ce PC : contenu adulte (18+) autorisé ; jamais de mineur
 };
 
 /** Copie de la configuration sans secrets : c'est elle qui est écrite en clair (localStorage, jarvis-store.json). */
 export function scrubSecrets(state) {
-  return { ...state, apiKeys: (state.apiKeys || []).map(() => ''), haToken: '' };
+  return { ...state, apiKeys: (state.apiKeys || []).map(() => ''), haToken: '', speechKey: '' };
 }
 
 class ConfigStore {
@@ -248,6 +259,12 @@ class ConfigStore {
       } else if (this.state.haToken) {
         if (!(await hostBridge.setSecret('haToken', this.state.haToken))) this._secretsFailed = true;
       }
+      const speechKey = await hostBridge.getSecret('speechKey', '');
+      if (speechKey) {
+        this.state.speechKey = speechKey;
+      } else if (this.state.speechKey) {
+        if (!(await hostBridge.setSecret('speechKey', this.state.speechKey))) this._secretsFailed = true;
+      }
       this._persist();
       this._notify();
     } catch {
@@ -291,6 +308,7 @@ class ConfigStore {
     };
     if (patch.apiKeys) saveSecret('apiKeys', this.state.apiKeys);
     if (patch.haToken !== undefined) saveSecret('haToken', this.state.haToken);
+    if (patch.speechKey !== undefined) saveSecret('speechKey', this.state.speechKey);
     this._notify();
     return this.state;
   }

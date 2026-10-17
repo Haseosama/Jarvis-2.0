@@ -1,6 +1,7 @@
 // « Cerveau » alternatif de Jarvis (texte) : un modèle OpenAI / Anthropic / OpenRouter / local répond à la place de
 // Gemini REST et peut appeler les outils de Jarvis (boucle d'appels d'outils).
 import { PROVIDERS, callModel } from './providers.js';
+import { stripThink } from '../audio/voiceGuards.js';
 
 export const BRAIN_MAX_HOPS = 5;
 export const BRAIN_MAX_TOOLS = 120; // limite courante des API (OpenAI : 128)
@@ -23,6 +24,30 @@ export function toJsonSchema(node) {
     if (Array.isArray(node.required) && node.required.length) out.required = node.required.filter((name) => name in out.properties);
   }
   if (type === 'array') out.items = node.items ? toJsonSchema(node.items) : { type: 'string' };
+  return out;
+}
+
+// Outils toujours proposés en premier à un petit modèle : ce que l'utilisateur demande le plus souvent.
+export const CORE_TOOLS = ['open_app', 'device_settings', 'pc_control', 'web_search', 'read_webpage', 'navigateur', 'remember_fact', 'recall_memory', 'list_memories', 'file_manager', 'weather', 'calendar', 'tasks', 'set_timer', 'undo', 'read_screen', 'clipboard', 'send_message'];
+export const SMALL_MODEL_TOOL_BUDGET = 24;
+export const SMALL_MODEL_CHAR_BUDGET = 9000;
+
+/**
+ * Budget d'outils pour un petit modèle : les outils essentiels d'abord, puis le reste, dans la limite d'un nombre
+ * d'outils ET d'une taille de descriptions (un modèle local de 7B se perd au-delà de ~25 outils).
+ */
+export function budgetTools(declarations, { maxTools = SMALL_MODEL_TOOL_BUDGET, maxChars = SMALL_MODEL_CHAR_BUDGET, core = CORE_TOOLS } = {}) {
+  const list = (declarations || []).filter((d) => d?.name);
+  const rank = (d) => { const i = core.indexOf(d.name); return i < 0 ? core.length : i; };
+  const ordered = [...list].sort((a, b) => rank(a) - rank(b));
+  const out = [];
+  let chars = 0;
+  for (const d of ordered) {
+    const size = String(d.description || '').length + JSON.stringify(d.parameters || {}).length;
+    if (out.length >= maxTools || (chars + size > maxChars && out.length > 0)) continue;
+    out.push(d);
+    chars += size;
+  }
   return out;
 }
 
@@ -50,7 +75,7 @@ export const BRAIN_SYSTEM_SUFFIX =
 export async function runBrain({ slot, system = '', history = [], userText, declarations = [], execute, call = callModel, maxHops = BRAIN_MAX_HOPS }) {
   const def = PROVIDERS[slot?.provider];
   if (!def || def.kind === 'gemini') return { ok: false, text: '', toolsUsed: [], error: 'Fournisseur non pris en charge pour le cerveau.' };
-  const specs = toolSpecs(declarations);
+  const specs = toolSpecs(slot?.toolBudget ? budgetTools(declarations, slot.toolBudget === true ? {} : slot.toolBudget) : declarations);
   let useTools = specs.length > 0;
   const messages = [...history.map((h) => ({ role: h.role, content: String(h.content) })), { role: 'user', content: String(userText) }];
   const toolsUsed = [];
@@ -63,6 +88,7 @@ export async function runBrain({ slot, system = '', history = [], userText, decl
       if (hop === 0 && useTools && /HTTP 4(00|22)/.test(res.error) && /tool|function/i.test(res.error)) { useTools = false; continue; }
       return { ok: false, text: '', toolsUsed, error: res.error };
     }
+    res.text = stripThink(res.text);
     if (res.text) lastText = res.text;
     if (!res.toolCalls?.length || hop >= maxHops) return { ok: true, text: res.text || lastText || 'Action exécutée.', toolsUsed };
 

@@ -623,7 +623,7 @@ export const hostBridge = {
       typeof urlOrPayload === 'string'
         ? { url: urlOrPayload, ...options }
         : { ...(urlOrPayload || {}) };
-    const { url, method = 'GET', headers = {}, body = null, timeoutMs = 12000 } = payload;
+    const { url, method = 'GET', headers = {}, body = null, bodyBase64 = null, responseType = 'text', timeoutMs = 12000 } = payload;
 
     try {
       if (hasElectron() && typeof window.jarvisHost.httpFetch === 'function') {
@@ -632,12 +632,16 @@ export const hostBridge = {
           method,
           headers,
           body,
+          bodyBase64,
+          responseType,
           timeoutMs,
         });
         const text = res?.text || '';
         return {
           ok: Boolean(res?.ok),
           status: res?.status || 0,
+          base64: res?.base64 || '',
+          error: res?.error || '',
           text,
           json: safeJsonParse(text, null),
         };

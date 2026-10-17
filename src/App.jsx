@@ -324,6 +324,14 @@ export default function App() {
       }
     });
 
+    // Mot d'éveil local (« Hey Jarvis ») : actif seulement si l'utilisateur l'a activé dans les réglages.
+    const syncWake = (c) => {
+      if (c.wakeListenEnabled) engine.localVoice.startWake();
+      else engine.localVoice.stopWake();
+    };
+    syncWake(configStore.get());
+    const unsubWake = configStore.subscribe(syncWake);
+
     // Ordres envoyés par Jarvis Android (Contrôle à distance) : traités comme un message tapé ici.
     const unsubRemote = hostBridge.onRemoteCommand((text) => {
       engineRef.current?.sendUserMessage(text, { speakReply: true });
@@ -340,6 +348,8 @@ export default function App() {
     return () => {
       unsub();
       unsubPtt?.();
+      unsubWake?.();
+      engine.localVoice.stopWake();
       unsubRemote?.();
       engine.stopLiveSession();
       engine._closeLiveSocketOnly?.();
