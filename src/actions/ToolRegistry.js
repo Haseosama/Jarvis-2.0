@@ -809,7 +809,7 @@ export class ToolRegistry {
           action: { type: 'STRING', description: 'status, install, ou le nom de l’analyse (voir description).' },
           target: { type: 'STRING', description: 'Chemin absolu du fichier ou dossier à analyser.' },
           query: { type: 'STRING', description: 'Pour search/function/decompile/xrefs/trace : texte, nom de fonction ou adresse.' },
-          provider: { type: 'STRING', description: 'Pour le natif : ghidra, hopper, ida (laisser vide pour le choix automatique).' },
+          provider: { type: 'STRING', description: 'Pour le natif : ghidra, hopper, ida (laisser vide pour le choix automatique). Ghidra 12.1.x et un JDK 21+ doivent être installés à part et leurs dossiers indiqués dans les Réglages ; action=doctor avec provider=ghidra vérifie la configuration.' },
           type: { type: 'STRING', description: 'Pour inspect_managed_members : nom exact du type .NET.' },
           table: { type: 'STRING', description: 'Pour inspect_sqlite_database : table à échantillonner.' },
         },
@@ -832,7 +832,7 @@ export class ToolRegistry {
             return res.ok ? done('reverse_engineer', { installed: true }) : failed('reverse_engineer', res.text);
           });
         }
-        const res = await hostBridge.rea('run', { command: action, target: args.target, query: args.query, provider: args.provider, type: args.type, table: args.table });
+        const res = await hostBridge.rea('run', { command: action, target: args.target, query: args.query, provider: args.provider, type: args.type, table: args.table, ghidraDir: configStore.get().ghidraInstallDir || '', javaHome: configStore.get().javaHome || '' });
         if (res.needsInstall) return failed('reverse_engineer', 'REA n’est pas installé : propose à l’utilisateur de l’installer (action=install).');
         if (!res.ok && !res.file) return failed('reverse_engineer', res.text);
         return done('reverse_engineer', { action, saved_to: res.file, size_bytes: res.size }) + `

@@ -180,6 +180,8 @@ const DEFAULT_CONFIG = {
   audioInputId: '', // micro choisi (vide = celui du système)
   audioOutputId: '', // haut-parleurs choisis (vide = ceux du système)
   clipboardPanel: false, // panneau Traduire / Résumer / Expliquer / Corriger sur un texte copié
+  ghidraInstallDir: '', // moteur natif de REA : dossier ghidra_12.1.x_PUBLIC (installé à part)
+  javaHome: '', // JDK 21+ complet exigé par Ghidra
   sttEngine: 'browser', // 'browser' | 'local'
   ttsEngine: 'gemini', // 'gemini' | 'local' | 'elevenlabs'
   speechBaseUrl: 'http://localhost:8000/v1',

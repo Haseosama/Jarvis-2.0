@@ -87,3 +87,17 @@ describe('REA (morluto/rea)', () => {
     assert.ok(summary.length < 4500);
   });
 });
+
+describe('REA : moteur natif Ghidra', () => {
+  const { engineEnv } = require('../electron/reaBridge.cjs');
+  it('ne transmet que des dossiers Ghidra / JDK valides', () => {
+    const ghidra = path.resolve('/tools/ghidra_12.1.4_PUBLIC');
+    const jdk = path.resolve('/jdk21');
+    const exists = (p) => p.startsWith(ghidra) ? p.endsWith('application.properties') : p.startsWith(jdk) ? /java(\.exe)?$/.test(p) : false;
+    assert.deepEqual(engineEnv({ ghidraDir: ghidra, javaHome: jdk }, { exists }).env, { GHIDRA_INSTALL_DIR: ghidra, JAVA_HOME: jdk });
+    assert.match(engineEnv({ ghidraDir: path.resolve('/autre') }, { exists }).problems[0], /n’est pas un dossier Ghidra/);
+    assert.match(engineEnv({ javaHome: path.resolve('/vide') }, { exists }).problems[0], /bin\/java/);
+    assert.match(engineEnv({ ghidraDir: 'relatif' }, { exists }).problems[0], /absolu/);
+    assert.deepEqual(engineEnv({}, { exists }), { env: {}, problems: [] });
+  });
+});

@@ -527,6 +527,21 @@ export default function SettingsModal({ onClose, onTestVoice, onOpenCreator }) {
                 </span>
               </label>
 
+              <h4>REA — moteur natif (Ghidra)</h4>
+              <p className="settings-hint">
+                Nécessaire seulement pour analyser des binaires natifs (.exe/.dll non .NET). Les applications Electron/JS, les assemblies .NET, SQLite, Go et Rust n’en ont pas besoin. Installez Ghidra 12.1.x et un JDK 21+ vous-même (REA ne les installe pas), puis indiquez leurs dossiers. Sous Windows, le support Ghidra de REA est expérimental.
+              </p>
+              <div className="settings-grid-fields">
+                <div className="settings-field">
+                  <label>Dossier Ghidra</label>
+                  <input type="text" placeholder="C:/tools/ghidra_12.1.4_PUBLIC" value={cfg.ghidraInstallDir || ''} onChange={(e) => update({ ghidraInstallDir: e.target.value.trim() })} />
+                </div>
+                <div className="settings-field">
+                  <label>Dossier du JDK (JAVA_HOME)</label>
+                  <input type="text" placeholder="C:\Program Files\Java\jdk-21" value={cfg.javaHome || ''} onChange={(e) => update({ javaHome: e.target.value.trim() })} />
+                </div>
+              </div>
+
               <h4>Voix hors Gemini (locale ou ElevenLabs)</h4>
               <p className="settings-hint">
                 Serveur compatible OpenAI (whisper.cpp server, faster-whisper-server, LocalAI, openedai-speech/Piper…). Jarvis n’installe rien : lancez votre serveur, puis indiquez son adresse.

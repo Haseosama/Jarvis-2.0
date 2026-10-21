@@ -48,6 +48,27 @@ function nodeVersionOk(version) {
   return (major === 22 && minor >= 19) || (major === 24 && minor >= 11) || major >= 26;
 }
 
+/**
+ * Variables d'environnement pour le moteur natif. REA n'installe jamais Ghidra ni Java : il lit GHIDRA_INSTALL_DIR
+ * (Ghidra 12.1.x) et JAVA_HOME (JDK 64 bits complet, 21 ou plus récent). On ne les transmet que si elles ont l'air valides.
+ */
+function engineEnv({ ghidraDir, javaHome } = {}, { exists = (p) => fs.existsSync(p) } = {}) {
+  const env = {};
+  const problems = [];
+  if (ghidraDir) {
+    if (!path.isAbsolute(ghidraDir)) problems.push('Le dossier Ghidra doit être un chemin absolu.');
+    else if (!exists(path.join(ghidraDir, 'Ghidra', 'application.properties'))) problems.push(`« ${ghidraDir} » n’est pas un dossier Ghidra (Ghidra/application.properties introuvable). Indiquez le dossier ghidra_12.1.x_PUBLIC.`);
+    else env.GHIDRA_INSTALL_DIR = ghidraDir;
+  }
+  if (javaHome) {
+    const java = path.join(javaHome, 'bin', process.platform === 'win32' ? 'java.exe' : 'java');
+    if (!path.isAbsolute(javaHome)) problems.push('JAVA_HOME doit être un chemin absolu.');
+    else if (!exists(java)) problems.push(`« ${javaHome} » ne contient pas bin/java : indiquez le dossier d’un JDK complet (21 ou plus).`);
+    else env.JAVA_HOME = javaHome;
+  }
+  return { env, problems };
+}
+
 /** Construit la liste d'arguments (sans shell) ou renvoie { error }. */
 function buildArgs(command, params = {}, { exists = (p) => fs.existsSync(p) } = {}) {
   const spec = COMMANDS[String(command || '')];
@@ -158,7 +179,9 @@ function createReaBridge({ dataDir, nodeFinder } = {}) {
     if (!fs.existsSync(reaScript)) return { ok: false, needsInstall: true, text: 'REA n’est pas installé.' };
     const node = await findNode();
     if (!node.ok) return { ok: false, text: node.reason };
-    const res = await run(node.exe, [reaScript, ...built.args], { timeoutMs: RUN_TIMEOUT_MS, cwd: home });
+    const engine = engineEnv({ ghidraDir: params.ghidraDir, javaHome: params.javaHome });
+    if (engine.problems.length) return { ok: false, text: engine.problems.join(' ') };
+    const res = await run(node.exe, [reaScript, ...built.args], { timeoutMs: RUN_TIMEOUT_MS, cwd: home, env: engine.env });
     if (res.killed) return { ok: false, text: 'L’analyse a dépassé la limite (10 min) ou produit une sortie trop volumineuse.' };
     if (!res.ok && !res.stdout) return { ok: false, text: `REA a échoué (code ${res.code}) : ${res.stderr.slice(0, 600)}` };
     fs.mkdirSync(outDir, { recursive: true });
@@ -171,4 +194,4 @@ function createReaBridge({ dataDir, nodeFinder } = {}) {
   return { status, install, exec };
 }
 
-module.exports = { createReaBridge, buildArgs, summarizeJson, nodeVersionOk, COMMANDS, PROVIDERS, REA_VERSION };
+module.exports = { createReaBridge, engineEnv, buildArgs, summarizeJson, nodeVersionOk, COMMANDS, PROVIDERS, REA_VERSION };
