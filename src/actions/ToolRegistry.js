@@ -5,6 +5,9 @@ import { monthKey, monthLabel, summarizeMonth } from '../core/finance.js';
 import { hostBridge } from '../core/hostBridge.js';
 import { confirmGate, done, failed, unverified, untrusted } from '../core/safety.js';
 import { searchMemories } from '../core/memorySearch.js';
+import { validateArgs } from './argValidation.js';
+import { runTransit } from '../integrations/transit.js';
+import { describeTime } from '../core/worldClock.js';
 import { undoStack } from '../core/undo.js';
 import { MAX_TOPICS, alertText, checkTopics, normalizeTopic } from '../core/topicWatch.js';
 import { configStore, ALL_VOICES, VOICE_DESC } from '../core/ConfigStore.js';
@@ -45,6 +48,7 @@ const UNTRUSTED_SOURCES = {
   navigateur: 'browser',
   reverse_engineer: 'rea',
   watch_topic: 'news',
+  transport: 'transit',
   google_workspace: 'google',
   plugins: 'plugin',
 };
@@ -101,8 +105,14 @@ export class ToolRegistry {
       let result;
       const tool = this.tools.get(cleanName);
       if (tool) {
+        const checked = validateArgs(tool.parameters, safeArgs);
+        if (checked.error) {
+          const message = failed(cleanName, checked.error);
+          this.ui.onToolExecuted?.(cleanName, safeArgs, message, traceMeta());
+          return message;
+        }
         try {
-          result = await tool.run(safeArgs, this);
+          result = await tool.run(checked.args, this);
         } catch (err) {
           this._recordFailure(cleanName, safeArgs, err.message || err);
           this.ui.onToolFailed?.(cleanName, safeArgs, err, traceMeta());
@@ -1250,6 +1260,35 @@ Avertissement : ${res.warning}` : ''}`;
         }
         return failed('watch_topic', 'action inconnue (add, remove, list, check)');
       },
+    });
+
+    this.register({
+      name: 'world_clock',
+      description: 'Donner l’heure et la date dans une ville ou un fuseau horaire (ex : Tokyo, New York, Asia/Tokyo). Sans lieu : heure de Paris.',
+      parameters: { type: 'OBJECT', properties: { place: { type: 'STRING', description: 'Ville ou fuseau IANA.' } } },
+      run: async (args) => describeTime(args.place) || failed('world_clock', `lieu inconnu : « ${args.place} » (essayer une grande ville ou un fuseau comme Europe/Paris)`),
+    });
+
+    this.register({
+      name: 'transport',
+      description:
+        'Prochains passages de bus, tram, métro et RER en Île-de-France (temps réel, jeton PRIM gratuit saisi dans les Réglages). '
+        + 'action = search (query : nom de l’arrêt, renvoie des stop_id), add (stop_id, name : nom court comme « travail »), next (name : arrêt enregistré), list, remove (name).',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          action: { type: 'STRING', enum: ['search', 'add', 'next', 'list', 'remove'], description: 'search, add, next, list ou remove.' },
+          query: { type: 'STRING', description: 'Pour search : au moins 3 lettres du nom de l’arrêt.' },
+          stop_id: { type: 'STRING', description: 'Pour add : identifiant stop_area:... obtenu avec search.' },
+          name: { type: 'STRING', description: 'Nom court de l’arrêt enregistré (add, next, remove).' },
+        },
+        required: ['action'],
+      },
+      run: async (args) => runTransit(args, {
+        token: configStore.get().primKey || '',
+        fetcher: (req) => hostBridge.httpFetch(req),
+        store: { get: () => dataStore.get().transitStops || [], set: (list) => dataStore.update({ transitStops: list }) },
+      }),
     });
 
     // 26. Task & Shopping Lists

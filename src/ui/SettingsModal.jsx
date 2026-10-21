@@ -542,6 +542,12 @@ export default function SettingsModal({ onClose, onTestVoice, onOpenCreator }) {
                 </div>
               </div>
 
+              <div className="settings-field">
+                <label>Jeton PRIM (transports d’Île-de-France, gratuit)</label>
+                <input type="password" placeholder="prim.iledefrance-mobilites.fr" value={cfg.primKey || ''} onChange={(e) => update({ primKey: e.target.value.trim() })} />
+                <span className="settings-hint">Active l’outil « transport » : « quand passe mon bus ? ». Dites d’abord « enregistre l’arrêt Mairie de Montreuil comme maison ».</span>
+              </div>
+
               <h4>Voix hors Gemini (locale ou ElevenLabs)</h4>
               <p className="settings-hint">
                 Serveur compatible OpenAI (whisper.cpp server, faster-whisper-server, LocalAI, openedai-speech/Piper…). Jarvis n’installe rien : lancez votre serveur, puis indiquez son adresse.

@@ -191,13 +191,14 @@ const DEFAULT_CONFIG = {
   ttsLocalVoice: 'alloy',
   elevenVoiceId: '',
   elevenModel: 'eleven_multilingual_v2',
+  primKey: '', // jeton PRIM (Île-de-France Mobilités) pour l'outil transport : stockage chiffré uniquement
   speechKey: '', // clé ElevenLabs / serveur vocal : stockage chiffré uniquement
   imageAdult: false, // images créées sur ce PC : contenu adulte (18+) autorisé ; jamais de mineur
 };
 
 /** Copie de la configuration sans secrets : c'est elle qui est écrite en clair (localStorage, jarvis-store.json). */
 export function scrubSecrets(state) {
-  return { ...state, apiKeys: (state.apiKeys || []).map(() => ''), haToken: '', speechKey: '' };
+  return { ...state, apiKeys: (state.apiKeys || []).map(() => ''), haToken: '', speechKey: '', primKey: '' };
 }
 
 class ConfigStore {
@@ -264,6 +265,12 @@ class ConfigStore {
       } else if (this.state.haToken) {
         if (!(await hostBridge.setSecret('haToken', this.state.haToken))) this._secretsFailed = true;
       }
+      const primKey = await hostBridge.getSecret('primKey', '');
+      if (primKey) {
+        this.state.primKey = primKey;
+      } else if (this.state.primKey) {
+        if (!(await hostBridge.setSecret('primKey', this.state.primKey))) this._secretsFailed = true;
+      }
       const speechKey = await hostBridge.getSecret('speechKey', '');
       if (speechKey) {
         this.state.speechKey = speechKey;
@@ -313,6 +320,7 @@ class ConfigStore {
     };
     if (patch.apiKeys) saveSecret('apiKeys', this.state.apiKeys);
     if (patch.haToken !== undefined) saveSecret('haToken', this.state.haToken);
+    if (patch.primKey !== undefined) saveSecret('primKey', this.state.primKey);
     if (patch.speechKey !== undefined) saveSecret('speechKey', this.state.speechKey);
     this._notify();
     return this.state;

@@ -1320,18 +1320,21 @@ ipcMain.handle('jarvis:http-fetch', async (_e, { url, method = 'GET', headers = 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
+    // Redirections bornées (3), jamais https -> http, jetons non renvoyés à un autre site, réponse coupée à 8 Mo et signalée.
+    const { guardedFetch } = require('./httpGuard.cjs');
+    const got = await guardedFetch(url, {
       method,
       headers: { 'User-Agent': 'Jarvis-PC/2.0', ...headers },
       body: method !== 'GET' && method !== 'HEAD' ? (bodyBase64 ? Buffer.from(String(bodyBase64), 'base64') : body) : undefined,
       signal: controller.signal,
     });
+    if (got.error) return { ok: false, status: got.res?.status || 0, error: got.error, text: '' };
+    const res = got.res;
     if (responseType === 'base64') {
-      const buf = Buffer.from(await res.arrayBuffer());
-      return { ok: res.ok, status: res.status, text: '', base64: res.ok ? buf.toString('base64') : '', error: res.ok ? '' : buf.toString('utf8').slice(0, 300) };
+      const buf = got.buffer;
+      return { ok: res.ok, status: res.status, text: '', base64: res.ok ? buf.toString('base64') : '', truncated: got.truncated, error: res.ok ? '' : buf.toString('utf8').slice(0, 300) };
     }
-    const text = await res.text();
-    return { ok: res.ok, status: res.status, text };
+    return { ok: res.ok, status: res.status, text: got.buffer.toString('utf8'), truncated: got.truncated };
   } catch (e) {
     return { ok: false, status: 0, error: e.message || String(e), text: '' };
   } finally {

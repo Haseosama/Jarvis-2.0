@@ -28,7 +28,7 @@ export function toJsonSchema(node) {
 }
 
 // Outils toujours proposés en premier à un petit modèle : ce que l'utilisateur demande le plus souvent.
-export const CORE_TOOLS = ['open_app', 'device_settings', 'pc_control', 'web_search', 'read_webpage', 'navigateur', 'reverse_engineer', 'remember_fact', 'recall_memory', 'list_memories', 'file_manager', 'weather', 'calendar', 'tasks', 'set_timer', 'undo', 'read_screen', 'clipboard', 'send_message'];
+export const CORE_TOOLS = ['open_app', 'device_settings', 'pc_control', 'web_search', 'read_webpage', 'navigateur', 'reverse_engineer', 'remember_fact', 'recall_memory', 'world_clock', 'list_memories', 'file_manager', 'weather', 'calendar', 'tasks', 'set_timer', 'undo', 'read_screen', 'clipboard', 'send_message'];
 export const SMALL_MODEL_TOOL_BUDGET = 24;
 export const SMALL_MODEL_CHAR_BUDGET = 9000;
 

@@ -641,6 +641,7 @@ export const hostBridge = {
           ok: Boolean(res?.ok),
           status: res?.status || 0,
           base64: res?.base64 || '',
+          truncated: Boolean(res?.truncated),
           error: res?.error || '',
           text,
           json: safeJsonParse(text, null),
