@@ -87,7 +87,7 @@ describe('satellites audio : serveur', () => {
   let nextResult = {};
   before(async () => {
     port = 34000 + Math.floor(Math.random() * 2000);
-    srv = createSatelliteServer({ dataDir: tmp, port, tickMs: 10, onUtterance: async (u) => { heard.push(u); return nextResult; } });
+    srv = createSatelliteServer({ dataDir: tmp, port, mdns: false, tickMs: 10, onUtterance: async (u) => { heard.push(u); return nextResult; } });
     await srv.start();
   });
   after(async () => { await srv.stop(); fs.rmSync(tmp, { recursive: true, force: true }); });

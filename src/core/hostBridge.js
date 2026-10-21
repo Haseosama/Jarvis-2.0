@@ -740,6 +740,17 @@ export const hostBridge = {
     return window.jarvisHost.onSatelliteUtterance(cb);
   },
 
+  // ── Modules externes (electron/moduleHost.cjs) ──
+
+  async modules(req) {
+    if (!hasElectron() || typeof window.jarvisHost.modules !== 'function') return { ok: false, error: { code: 'unavailable', message: 'Les modules externes n’existent que dans l’application de bureau Jarvis 2.0.', retryable: false } };
+    try {
+      return await window.jarvisHost.modules(req);
+    } catch (e) {
+      return { ok: false, error: { code: 'upstream', message: e.message || String(e), retryable: false } };
+    }
+  },
+
   // ── REA : rétro-ingénierie locale (electron/reaBridge.cjs) ──
 
   async rea(action, payload) {

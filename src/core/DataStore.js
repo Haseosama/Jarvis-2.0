@@ -178,24 +178,56 @@ class DataStore {
   }
 
   // ── Memory Helpers ──
-  rememberFact(key, value) {
+  /** profileId : null = souvenir du foyer (visible de tous), sinon propre à cette personne. */
+  rememberFact(key, value, profileId = null) {
     const k = String(key || '').trim();
     const v = String(value || '').trim();
     if (!k || !v) return false;
+    const pid = profileId || null;
+    const entry = { key: k, value: v, updatedAt: Date.now(), ...(pid ? { profileId: pid } : {}) };
     const list = [...(this.data.memories || [])];
-    const idx = list.findIndex((m) => m.key.toLowerCase() === k.toLowerCase());
-    if (idx >= 0) list[idx] = { key: k, value: v, updatedAt: Date.now() };
-    else list.push({ key: k, value: v, updatedAt: Date.now() });
+    const idx = list.findIndex((m) => m.key.toLowerCase() === k.toLowerCase() && (m.profileId || null) === pid);
+    if (idx >= 0) list[idx] = entry;
+    else list.push(entry);
     this.update({ memories: list });
     return true;
   }
 
-  forgetFact(key) {
+  /** `visibleTo` : si fourni, seuls les souvenirs du foyer et de ce profil peuvent être oubliés. */
+  forgetFact(key, visibleTo) {
     const k = String(key || '').trim().toLowerCase();
     const before = (this.data.memories || []).length;
-    const list = (this.data.memories || []).filter((m) => !m.key.toLowerCase().includes(k));
+    const visible = (m) => visibleTo === undefined || !m.profileId || m.profileId === visibleTo;
+    const list = (this.data.memories || []).filter((m) => !(m.key.toLowerCase().includes(k) && visible(m)));
     this.update({ memories: list });
     return list.length < before;
+  }
+
+  addProfile(name) {
+    const clean = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+    if (!clean) return null;
+    const profiles = this.data.profiles || [];
+    const existing = profiles.find((p) => p.name.toLowerCase() === clean.toLowerCase());
+    if (existing) return existing.id;
+    const id = `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+    this.update({ profiles: [...profiles, { id, name: clean, createdAt: Date.now() }] });
+    return id;
+  }
+
+  /** Supprime la personne et ses souvenirs (ceux du foyer restent). */
+  removeProfile(id) {
+    const profiles = (this.data.profiles || []).filter((p) => p.id !== id);
+    this.update({
+      profiles,
+      memories: (this.data.memories || []).filter((m) => m.profileId !== id),
+      activeProfileId: this.data.activeProfileId === id ? null : this.data.activeProfileId ?? null,
+    });
+  }
+
+  setActiveProfile(id) {
+    const ok = id === null || (this.data.profiles || []).some((p) => p.id === id);
+    if (ok) this.update({ activeProfileId: id });
+    return ok;
   }
 
   clearMemories() {

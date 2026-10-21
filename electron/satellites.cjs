@@ -15,6 +15,7 @@ const https = require('https');
 const os = require('os');
 const path = require('path');
 const { makeSelfSignedCert, lanAddress, wsFrame, wsParse } = require('./remoteServer.cjs');
+const { createMdnsAnnouncer } = require('./mdns.cjs');
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const PROTOCOL = 1;
@@ -80,7 +81,7 @@ function createSegmenter(opts = {}) {
 
 function createSatelliteServer({
   dataDir, onUtterance = async () => ({}), onEvent = () => {}, port = PORT, now = () => Date.now(), interfaces = () => os.networkInterfaces(),
-  vad = {}, pingMs = PING_MS, silentMs = SILENT_MS, helloTimeoutMs = HELLO_TIMEOUT_MS, tickMs = 100,
+  vad = {}, mdns = true, pingMs = PING_MS, silentMs = SILENT_MS, helloTimeoutMs = HELLO_TIMEOUT_MS, tickMs = 100,
 } = {}) {
   const dir = path.join(dataDir, 'satellites');
   const file = path.join(dir, 'satellites.json');
@@ -91,6 +92,7 @@ function createSatelliteServer({
   let active = null; // { id, lastActivity }
   let wakeAvailable = false;
   let sweeper = null;
+  let announcer = null;
   let c_timer = null;
 
   // ── stockage ──
@@ -323,6 +325,7 @@ function createSatelliteServer({
           }
         }, Math.min(pingMs, 1000));
         c_timer = setInterval(tick, tickMs);
+        if (mdns) { announcer = createMdnsAnnouncer({ port, fingerprint: keyFingerprint(), interfaces }); announcer.start(); }
         resolve(info());
       });
     });
@@ -330,6 +333,7 @@ function createSatelliteServer({
 
   function stop() {
     clearInterval(sweeper); clearInterval(c_timer);
+    announcer?.stop(); announcer = null;
     for (const c of conns.values()) { try { c.socket.destroy(); } catch { /* fermé */ } }
     for (const sock of pendingSockets) { try { sock.destroy(); } catch { /* fermé */ } }
     pendingSockets.clear();

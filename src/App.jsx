@@ -25,6 +25,9 @@ import { clampMiniAvatarPosition } from './ui/miniAvatarPosition.js';
 import { formatTraceValue } from './ui/executionTrace.js';
 import { confirmGate } from './core/safety.js';
 import ClipboardPanel from './ui/ClipboardPanel.jsx';
+import AmbientView from './ui/AmbientView.jsx';
+import { PresenceMonitor } from './vision/PresenceMonitor.js';
+import { profileState } from './core/profiles.js';
 import { SatelliteBridge } from './core/SatelliteBridge.js';
 import { pollTasks } from './integrations/hermes.js';
 import { alertText, checkTopics } from './core/topicWatch.js';
@@ -105,6 +108,7 @@ export default function App() {
   const [inputText, setInputText] = useState('');
   const [toast, setToast] = useState('');
   const [pendingConfirm, setPendingConfirm] = useState(null);
+  const [presence, setPresence] = useState({ active: false, present: false, count: 0, multiple: false });
   useEffect(() => confirmGate.subscribe(setPendingConfirm), []);
   useEffect(() => {
     if (!pendingConfirm) return undefined;
@@ -357,6 +361,21 @@ export default function App() {
       } catch { /* Hermes injoignable : on réessaiera */ } finally { hermesBusy = false; }
     }, 2500);
 
+    // Présence par caméra (facultative) : compte les visages, passe en mode vie privée à plusieurs, peut ouvrir l'écoute à l'arrivée.
+    let lastLeftAt = 0;
+    const monitor = new PresenceMonitor({
+      onChange: (s) => { profileState.privacy = s.multiple; setPresence({ active: monitor.running, present: s.present, count: s.count, multiple: s.multiple }); },
+      onStatus: (t) => showToast(t),
+      onEvent: (e) => {
+        if (e === 'left') lastLeftAt = Date.now();
+        if (e === 'multiple') showToast('🔒 Plusieurs personnes : mode vie privée (souvenirs du foyer seulement)');
+        if (e === 'arrived' && configStore.get().presenceOpensMic && Date.now() - lastLeftAt > 60_000 && engine.state === 'IDLE') engine.startVoiceRecognition();
+      },
+    });
+    const syncPresence = (c) => { if (c.presenceEnabled) monitor.start(); else if (monitor.running) { monitor.stop(); profileState.privacy = false; } };
+    syncPresence(configStore.get());
+    const unsubPresence = configStore.subscribe(syncPresence);
+
     // Mot d'éveil local (« Hey Jarvis ») : actif seulement si l'utilisateur l'a activé dans les réglages.
     const syncWake = (c) => {
       if (c.wakeListenEnabled) engine.localVoice.startWake();
@@ -382,6 +401,9 @@ export default function App() {
       unsub();
       unsubPtt?.();
       unsubWake?.();
+      unsubPresence?.();
+      monitor.stop();
+      profileState.privacy = false;
       satelliteBridge.detach();
       clearInterval(hermesTimer);
       clearTimeout(topicTimer);
@@ -487,6 +509,12 @@ export default function App() {
             onClick={() => setActiveView('studio')}
           >
             🤖 Studio IA
+          </button>
+          <button
+            className={`hud-nav-btn ${activeView === 'ambient' ? 'active' : ''}`}
+            onClick={() => setActiveView('ambient')}
+          >
+            🪞 Ambiance
           </button>
           <button
             className={`hud-nav-btn ${activeView === 'plugins' ? 'active' : ''}`}
@@ -712,6 +740,8 @@ export default function App() {
             />
           )}
 
+          {activeView === 'ambient' && <AmbientView onClose={() => setActiveView('avatar')} />}
+
           {activeView === 'plugins' && (
             <PluginsPanel
               onClose={() => setActiveView('avatar')}
@@ -923,6 +953,11 @@ export default function App() {
         enabled={cfg.clipboardPanel === true}
         onAsk={(prompt) => engineRef.current?.sendUserMessage(prompt, { speakReply: true })}
       />
+      {presence.active && (
+        <div className="presence-badge" title="La caméra compte les visages en local. Rien n’est enregistré ni envoyé.">
+          📷 Présence active{presence.present ? ` · ${presence.count} visage${presence.count > 1 ? 's' : ''}` : ''}{presence.multiple ? ' · 🔒 vie privée' : ''}
+        </div>
+      )}
       {pendingConfirm && (
         <div className="hud-confirm" role="alertdialog" aria-label="Confirmation requise">
           <div className="hud-confirm-title">⚠️ {pendingConfirm.title}</div>

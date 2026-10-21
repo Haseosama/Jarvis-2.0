@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('jarvisHost', {
     ipcRenderer.on('jarvis:satellite-utterance', handler);
     return () => ipcRenderer.removeListener('jarvis:satellite-utterance', handler);
   },
+  modules: (req) => ipcRenderer.invoke('jarvis:modules', req),
   reaStatus: () => ipcRenderer.invoke('jarvis:rea-status'),
   reaInstall: () => ipcRenderer.invoke('jarvis:rea-install'),
   reaRun: (payload) => ipcRenderer.invoke('jarvis:rea-run', payload),

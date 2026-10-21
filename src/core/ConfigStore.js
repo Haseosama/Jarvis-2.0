@@ -191,6 +191,9 @@ const DEFAULT_CONFIG = {
   ttsLocalVoice: 'alloy',
   elevenVoiceId: '',
   elevenModel: 'eleven_multilingual_v2',
+  externalModulesEnabled: false, // modules externes (cornelius-modules) : du code qui s'exécute avec vos droits
+  externalModulesDir: '', // dossier cornelius-modules, choisi par l'utilisateur
+  moduleSecrets: {}, // jetons des modules : stockage chiffré uniquement
   hermesEnabled: false, // autorise Jarvis à confier des demandes à Hermes
   hermesUrl: 'http://127.0.0.1:8642',
   hermesToken: '', // jeton Hermes : stockage chiffré uniquement
@@ -200,12 +203,22 @@ const DEFAULT_CONFIG = {
   ragatorDetailed: false,
   primKey: '', // jeton PRIM (Île-de-France Mobilités) pour l'outil transport : stockage chiffré uniquement
   speechKey: '', // clé ElevenLabs / serveur vocal : stockage chiffré uniquement
+  presenceEnabled: false, // compte les visages devant la webcam (local, sans identification) : mode vie privée à plusieurs
+  presenceOpensMic: false, // ouvre l'écoute quand quelqu'un se présente après une absence
+  ambientTimezone: 'Europe/Paris', // fuseau de l'affichage permanent
+  visionEngine: 'local', // 'local' (modèle à vision local, l'image ne quitte pas le PC) | 'gemini'
+  visionBaseUrl: 'http://localhost:11434/v1',
+  visionModel: 'llava',
+  cameraId: '',
+  imageEngine: 'local', // 'local' (ComfyUI, Forge, Fooocus) | 'openai' (API Images, clé OpenAI de Studio IA)
+  openaiImageModel: 'gpt-image-1',
+  openaiImageQuality: 'auto', // low | medium | high | auto
   imageAdult: false, // images créées sur ce PC : contenu adulte (18+) autorisé ; jamais de mineur
 };
 
 /** Copie de la configuration sans secrets : c'est elle qui est écrite en clair (localStorage, jarvis-store.json). */
 export function scrubSecrets(state) {
-  return { ...state, apiKeys: (state.apiKeys || []).map(() => ''), haToken: '', speechKey: '', primKey: '', hermesToken: '' };
+  return { ...state, apiKeys: (state.apiKeys || []).map(() => ''), haToken: '', speechKey: '', primKey: '', hermesToken: '', moduleSecrets: {} };
 }
 
 class ConfigStore {
@@ -272,6 +285,12 @@ class ConfigStore {
       } else if (this.state.haToken) {
         if (!(await hostBridge.setSecret('haToken', this.state.haToken))) this._secretsFailed = true;
       }
+      const moduleSecrets = await hostBridge.getSecret('moduleSecrets', null);
+      if (moduleSecrets && typeof moduleSecrets === 'object') {
+        this.state.moduleSecrets = moduleSecrets;
+      } else if (this.state.moduleSecrets && Object.keys(this.state.moduleSecrets).length) {
+        if (!(await hostBridge.setSecret('moduleSecrets', this.state.moduleSecrets))) this._secretsFailed = true;
+      }
       const hermesToken = await hostBridge.getSecret('hermesToken', '');
       if (hermesToken) {
         this.state.hermesToken = hermesToken;
@@ -333,6 +352,7 @@ class ConfigStore {
     };
     if (patch.apiKeys) saveSecret('apiKeys', this.state.apiKeys);
     if (patch.haToken !== undefined) saveSecret('haToken', this.state.haToken);
+    if (patch.moduleSecrets !== undefined) saveSecret('moduleSecrets', this.state.moduleSecrets);
     if (patch.hermesToken !== undefined) saveSecret('hermesToken', this.state.hermesToken);
     if (patch.primKey !== undefined) saveSecret('primKey', this.state.primKey);
     if (patch.speechKey !== undefined) saveSecret('speechKey', this.state.speechKey);

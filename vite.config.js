@@ -1,5 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import fs from 'node:fs';
+import path from 'node:path';
 
 function handleProxyRequest(req, res) {
   if (!req.url || !req.url.startsWith('/__jarvis_proxy__')) return false;
@@ -72,9 +74,33 @@ function jarvisCorsProxyPlugin() {
   };
 }
 
+// MediaPipe (détection de visages pour la présence) : le moteur WebAssembly est servi depuis ce dossier de l'application.
+const MEDIAPIPE_WASM = ['vision_wasm_internal.js', 'vision_wasm_internal.wasm'];
+function mediapipeWasmPlugin() {
+  const dir = path.resolve('node_modules/@mediapipe/tasks-vision/wasm');
+  return {
+    name: 'jarvis-mediapipe-wasm',
+    configureServer(server) {
+      server.middlewares.use('/mediapipe/wasm', (req, res, next) => {
+        const name = decodeURIComponent((req.url || '').split('?')[0]).replace(/^\/+/, '');
+        if (!MEDIAPIPE_WASM.includes(name)) return next();
+        res.setHeader('Content-Type', name.endsWith('.wasm') ? 'application/wasm' : 'application/javascript');
+        fs.createReadStream(path.join(dir, name)).pipe(res);
+        return undefined;
+      });
+    },
+    generateBundle() {
+      for (const name of MEDIAPIPE_WASM) {
+        const file = path.join(dir, name);
+        if (fs.existsSync(file)) this.emitFile({ type: 'asset', fileName: `mediapipe/wasm/${name}`, source: fs.readFileSync(file) });
+      }
+    },
+  };
+}
+
 export default defineConfig({
   base: './',
-  plugins: [react(), jarvisCorsProxyPlugin()],
+  plugins: [react(), jarvisCorsProxyPlugin(), mediapipeWasmPlugin()],
   server: {
     host: '0.0.0.0',
     port: 5173,

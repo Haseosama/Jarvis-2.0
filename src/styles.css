@@ -1587,3 +1587,18 @@ html, body, #root {
 .clip-preview { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; word-break: break-word; }
 .clip-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .clip-actions button { background: transparent; color: var(--cyan); border: 1px solid var(--cyan); border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
+
+/* ── Affichage permanent (cartes ambiantes) ─────────────────────────────── */
+.ambient-view { display: flex; flex-direction: column; gap: 14px; padding: 18px; height: 100%; overflow: auto; background: #03080d; }
+.ambient-bar { display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 13px; }
+.ambient-bar button { margin-left: 8px; background: transparent; color: var(--cyan); border: 1px solid var(--cyan); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+.ambient-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.ambient-card { border: 1px solid rgba(0, 229, 255, 0.35); border-radius: 14px; padding: 18px 20px; background: rgba(4, 14, 28, 0.85); }
+.ambient-card.ambient-stale { border-color: rgba(255, 190, 80, 0.5); }
+.ambient-card.ambient-pending { opacity: 0.6; }
+.ambient-title { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); }
+.ambient-primary { font-size: 56px; font-weight: 700; color: var(--cyan); line-height: 1.1; margin: 6px 0; }
+.ambient-sub { font-size: 14px; color: var(--text-muted); }
+.ambient-item { display: flex; justify-content: space-between; font-size: 14px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.08); margin-top: 6px; }
+
+.presence-badge { position: fixed; left: 14px; bottom: 14px; z-index: 56; font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(4, 14, 28, 0.92); border: 1px solid #ffb74d; color: #ffcc80; }

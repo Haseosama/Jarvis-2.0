@@ -2,6 +2,8 @@ import { toggleAdultImages } from './adultImages.js';
 import MemoryPanel from './MemoryPanel.jsx';
 import DevicePicker from './DevicePicker.jsx';
 import SatellitePanel from './SatellitePanel.jsx';
+import ModulesPanel from './ModulesPanel.jsx';
+import ProfilesPanel from './ProfilesPanel.jsx';
 import React, { useEffect, useState } from 'react';
 import {
   configStore,
@@ -549,7 +551,26 @@ export default function SettingsModal({ onClose, onTestVoice, onOpenCreator }) {
                 <span className="settings-hint">Active l’outil « transport » : « quand passe mon bus ? ». Dites d’abord « enregistre l’arrêt Mairie de Montreuil comme maison ».</span>
               </div>
 
+              <h4>Présence (caméra)</h4>
+              <label className="settings-field" style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <input type="checkbox" checked={cfg.presenceEnabled === true} onChange={(e) => update({ presenceEnabled: e.target.checked })} />
+                <span>
+                  Compter les visages devant la webcam
+                  <span className="settings-hint" style={{ display: 'block' }}>
+                    Détection locale (MediaPipe) : seul un nombre de visages est calculé, jamais d’identification, rien n’est enregistré ni envoyé. La caméra reste allumée tant que c’est activé, avec un voyant visible. À plusieurs personnes devant l’écran, Jarvis passe en mode vie privée (souvenirs du foyer seulement).
+                  </span>
+                </span>
+              </label>
+              {cfg.presenceEnabled === true && (
+                <label className="settings-field" style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                  <input type="checkbox" checked={cfg.presenceOpensMic === true} onChange={(e) => update({ presenceOpensMic: e.target.checked })} />
+                  <span>Ouvrir l’écoute quand quelqu’un se présente après au moins une minute d’absence</span>
+                </label>
+              )}
+
               <SatellitePanel cfg={cfg} />
+
+              <ModulesPanel cfg={cfg} update={update} />
 
               <h4>Hermes — agent personnel (Nous Research)</h4>
               <p className="settings-hint">
@@ -628,6 +649,7 @@ export default function SettingsModal({ onClose, onTestVoice, onOpenCreator }) {
                 </div>
               </div>
 
+              <ProfilesPanel />
               <MemoryPanel />
 
               <div className="settings-field">
@@ -670,6 +692,34 @@ export default function SettingsModal({ onClose, onTestVoice, onOpenCreator }) {
                   />
                 </div>
               </div>
+
+              <h4>Moteur d’images</h4>
+              <div className="settings-grid-fields">
+                <div className="settings-field">
+                  <label>Créer les images avec</label>
+                  <select value={cfg.imageEngine || 'local'} onChange={(e) => update({ imageEngine: e.target.value })}>
+                    <option value="local">Ce PC (ComfyUI, Forge ou Fooocus)</option>
+                    <option value="openai">OpenAI (sans carte graphique)</option>
+                  </select>
+                </div>
+                {cfg.imageEngine === 'openai' && (
+                  <>
+                    <div className="settings-field">
+                      <label>Modèle OpenAI</label>
+                      <input type="text" value={cfg.openaiImageModel || ''} onChange={(e) => update({ openaiImageModel: e.target.value.trim() })} />
+                    </div>
+                    <div className="settings-field">
+                      <label>Qualité</label>
+                      <select value={cfg.openaiImageQuality || 'auto'} onChange={(e) => update({ openaiImageQuality: e.target.value })}>
+                        <option value="auto">Auto</option><option value="low">Basse (rapide, moins chère)</option><option value="medium">Moyenne</option><option value="high">Haute</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+              </div>
+              {cfg.imageEngine === 'openai' && (
+                <p className="settings-hint">La description part chez OpenAI, avec la clé saisie dans Studio IA › Modèles (fournisseur OpenAI). Le contenu adulte n’est pas possible avec ce moteur ; aucune image d’enfant ni de mineur dans tous les cas.</p>
+              )}
 
               <h4>Images créées sur ce PC (ComfyUI)</h4>
               <label className="settings-field" style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>

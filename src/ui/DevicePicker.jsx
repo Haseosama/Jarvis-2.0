@@ -3,7 +3,7 @@ import { listAudioDevices } from '../audio/devices.js';
 
 // Choix du micro et des haut-parleurs par leur nom, avec un bouton TEST (jauge en direct) pour le micro.
 export default function DevicePicker({ cfg, update }) {
-  const [devices, setDevices] = useState({ inputs: [], outputs: [] });
+  const [devices, setDevices] = useState({ inputs: [], outputs: [], cameras: [] });
   const [level, setLevel] = useState(null);
 
   const refresh = useCallback(async () => {
@@ -76,6 +76,24 @@ export default function DevicePicker({ cfg, update }) {
         <div className="settings-field">
           <label>Haut-parleurs</label>
           {select('audioOutputId', devices.outputs)}
+        </div>
+        <div className="settings-field">
+          <label>Webcam</label>
+          {select('cameraId', devices.cameras || [])}
+        </div>
+        <div className="settings-field">
+          <label>Vision (description de la webcam)</label>
+          <select value={cfg.visionEngine || 'local'} onChange={(e) => update({ visionEngine: e.target.value })}>
+            <option value="local">Modèle local (l’image reste sur ce PC)</option>
+            <option value="gemini">Gemini (l’image part chez Google)</option>
+          </select>
+          {(cfg.visionEngine || 'local') === 'local' && (
+            <>
+              <input type="text" placeholder="http://localhost:11434/v1" value={cfg.visionBaseUrl || ''} onChange={(e) => update({ visionBaseUrl: e.target.value.trim() })} />
+              <input type="text" placeholder="llava" value={cfg.visionModel || ''} onChange={(e) => update({ visionModel: e.target.value.trim() })} />
+              <span className="settings-hint">Serveur compatible OpenAI avec un modèle à vision (ex : Ollama, <code>ollama pull llava</code>). Une photo n’est prise que sur demande (« que vois-tu ? »).</span>
+            </>
+          )}
         </div>
       </div>
     </>

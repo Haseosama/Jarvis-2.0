@@ -6,6 +6,7 @@
 
 import { UNTRUSTED_PROMPT, OUTCOME_PROMPT } from './safety.js';
 import { memoryPromptBlock } from './memorySearch.js';
+import { effectiveProfileId, profilePromptLine, profileState, visibleMemories } from './profiles.js';
 import { LocalVoice } from './LocalVoice.js';
 import { isEcho } from '../audio/voiceGuards.js';
 import { applySink, audioConstraints } from '../audio/devices.js';
@@ -86,7 +87,8 @@ export class JarvisEngine {
 
   buildSystemPrompt() {
     const cfg = configStore.get();
-    const mems = dataStore.get().memories || [];
+    const data = dataStore.get();
+    const mems = visibleMemories(data, effectiveProfileId(data));
     const nowStr = new Date().toLocaleString('fr-FR', {
       weekday: 'long',
       year: 'numeric',
@@ -109,6 +111,7 @@ export class JarvisEngine {
 ${UNTRUSTED_PROMPT}
 ${OUTCOME_PROMPT}` +
       memBlock +
+      profilePromptLine(data) +
       (cfg.customPrompt ? `\nInstructions personnalisées : ${cfg.customPrompt}` : '')
     );
   }
@@ -173,7 +176,8 @@ ${OUTCOME_PROMPT}` +
 
     // 1. Always prefer Gemini Live WebSocket (even when microphone is NOT active!) so the response
     //    is spoken with the real Gemini Live 24 kHz voice (Aoede, Kore, Fenrir, Puck, etc.)
-    if (apiKey && mode !== 'offline' && !imageBase64) {
+    // (pas de voix en direct quand la réponse doit revenir en texte : satellite audio)
+    if (apiKey && mode !== 'offline' && !imageBase64 && !this._capture) {
       const liveReady = await this.ensureLiveSession();
       if (liveReady && this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.suppressNextLiveTranscript = false;
@@ -245,11 +249,17 @@ ${OUTCOME_PROMPT}` +
    * Répond à une phrase venue d'ailleurs (satellite audio) sans parler sur ce PC, avec une liste d'outils réduite.
    * Retourne le texte de la réponse ('' si aucune dans le délai).
    */
-  answerText(text, { allow = null, timeoutMs = 90000 } = {}) {
+  answerText(text, { allow = null, timeoutMs = 90000, profile } = {}) {
     return new Promise((resolve) => {
       const timer = setTimeout(() => { this._capture = null; resolve(''); }, timeoutMs);
       this._capture = (reply) => { clearTimeout(timer); resolve(reply); };
-      this.tools.withAllowlist(allow, () => this.sendUserMessage(text, { speakReply: false })).catch(() => {
+      // profile: null force le foyer (satellite audio : on ne sait pas qui parle) ; undefined garde le profil actif.
+      const run = async () => {
+        const previous = profileState.override;
+        if (profile !== undefined) profileState.override = profile;
+        try { await this.sendUserMessage(text, { speakReply: false }); } finally { profileState.override = previous; }
+      };
+      this.tools.withAllowlist(allow, run).catch(() => {
         clearTimeout(timer);
         this._capture = null;
         resolve('');

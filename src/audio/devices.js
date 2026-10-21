@@ -17,9 +17,9 @@ export function cleanDevices(devices, kind) {
 export async function listAudioDevices(enumerate = () => navigator.mediaDevices.enumerateDevices()) {
   try {
     const all = await enumerate();
-    return { inputs: cleanDevices(all, 'audioinput'), outputs: cleanDevices(all, 'audiooutput') };
+    return { inputs: cleanDevices(all, 'audioinput'), outputs: cleanDevices(all, 'audiooutput'), cameras: cleanDevices(all, 'videoinput') };
   } catch {
-    return { inputs: [], outputs: [] };
+    return { inputs: [], outputs: [], cameras: [] };
   }
 }
 

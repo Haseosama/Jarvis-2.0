@@ -106,7 +106,7 @@ export class SatelliteBridge {
         else if (turn.goodbye) result = { wake: true, reply: await this._say('À bientôt.'), close: true };
         else {
           this.engine.cb.onMessage?.({ id: `u_${Date.now()}`, role: 'user', text: `[${name}] ${turn.command}`, timestamp: Date.now() });
-          const answer = await this.engine.answerText(turn.command, { allow: SATELLITE_TOOLS });
+          const answer = await this.engine.answerText(turn.command, { allow: SATELLITE_TOOLS, profile: null });
           result = { wake: true, reply: await this._say(answer || 'Je n’ai pas de réponse.') };
         }
       }

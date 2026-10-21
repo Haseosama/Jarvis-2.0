@@ -44,6 +44,8 @@ const MIME_MAP = {
   '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
   '.bin': 'application/octet-stream',
+  '.wasm': 'application/wasm',
+  '.tflite': 'application/octet-stream',
 };
 
 function startEmbeddedAssetServer() {
@@ -301,6 +303,20 @@ ipcMain.handle('jarvis:satellites', async (_e, { action, payload = {} } = {}) =>
   }
 });
 
+// ── Modules externes au contrat de Cornelius (electron/moduleHost.cjs) ─────────────
+let moduleHost = null;
+const getModuleHost = () => {
+  if (!moduleHost) moduleHost = require('./moduleHost.cjs').createModuleHost();
+  return moduleHost;
+};
+// Activation et dossier viennent des Réglages (lus ici), jamais des arguments : le modèle ne peut ni les activer ni les changer.
+ipcMain.handle('jarvis:modules', async (_e, req = {}) => {
+  const cfg = readStore().config_v1 || {};
+  if (cfg.externalModulesEnabled !== true) return { ok: false, error: { code: 'config_invalid', message: 'Les modules externes sont désactivés (Réglages › Modules externes).', retryable: false } };
+  if (!['list', 'read', 'present'].includes(req.op)) return { ok: false, error: { code: 'invalid_params', message: 'Opération inconnue.', retryable: false } };
+  return getModuleHost().call(cfg.externalModulesDir, req);
+});
+
 // ── REA : rétro-ingénierie locale (electron/reaBridge.cjs) ──────────────────────
 let reaBridge = null;
 const getReaBridge = () => {
@@ -347,7 +363,16 @@ ipcMain.handle('jarvis:imagegen-run', async (_e, input = {}) => {
     adult: readStore().config_v1?.imageAdult === true,
     source: 'pc',
   };
-  const res = await getImageGen().run(safe);
+  // Moteur choisi dans les Réglages (lu ici, jamais dans les arguments de l'outil) : le générateur du PC, ou OpenAI.
+  const cfg = readStore().config_v1 || {};
+  let res;
+  if (cfg.imageEngine === 'openai') {
+    let key = '';
+    try { key = JSON.parse(decryptSecret(readStore().secret_llmKeys || '') || '{}').openai || ''; } catch { key = ''; }
+    res = await require('./openaiImage.cjs').generate(safe, { model: cfg.openaiImageModel, quality: cfg.openaiImageQuality }, key);
+  } else {
+    res = await getImageGen().run(safe);
+  }
   if (!res.ok || !res.png) return { ok: false, text: res.text };
   try {
     const dir = path.join(app.getPath('pictures'), 'Jarvis');
@@ -503,6 +528,7 @@ app.on('will-quit', () => {
   try {
     remoteServer?.stop();
     satelliteServer?.stop();
+    moduleHost?.stop();
   } catch {}
   try {
     browserControl?.close();
