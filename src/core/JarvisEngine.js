@@ -241,8 +241,31 @@ ${OUTCOME_PROMPT}` +
     }
   }
 
+  /**
+   * Répond à une phrase venue d'ailleurs (satellite audio) sans parler sur ce PC, avec une liste d'outils réduite.
+   * Retourne le texte de la réponse ('' si aucune dans le délai).
+   */
+  answerText(text, { allow = null, timeoutMs = 90000 } = {}) {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => { this._capture = null; resolve(''); }, timeoutMs);
+      this._capture = (reply) => { clearTimeout(timer); resolve(reply); };
+      this.tools.withAllowlist(allow, () => this.sendUserMessage(text, { speakReply: false })).catch(() => {
+        clearTimeout(timer);
+        this._capture = null;
+        resolve('');
+      });
+    });
+  }
+
   _deliverAssistantReply(replyText, speak = true) {
     const text = String(replyText || 'Action effectuée.').trim();
+    if (this._capture) {
+      const capture = this._capture;
+      this._capture = null;
+      this.cb.onMessage?.({ id: `a_${Date.now()}`, role: 'assistant', text, timestamp: Date.now() });
+      capture(text);
+      return;
+    }
     this.cb.onMessage?.({
       id: `a_${Date.now()}`,
       role: 'assistant',

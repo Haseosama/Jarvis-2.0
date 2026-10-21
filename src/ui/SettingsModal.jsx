@@ -1,6 +1,7 @@
 import { toggleAdultImages } from './adultImages.js';
 import MemoryPanel from './MemoryPanel.jsx';
 import DevicePicker from './DevicePicker.jsx';
+import SatellitePanel from './SatellitePanel.jsx';
 import React, { useEffect, useState } from 'react';
 import {
   configStore,
@@ -547,6 +548,47 @@ export default function SettingsModal({ onClose, onTestVoice, onOpenCreator }) {
                 <input type="password" placeholder="prim.iledefrance-mobilites.fr" value={cfg.primKey || ''} onChange={(e) => update({ primKey: e.target.value.trim() })} />
                 <span className="settings-hint">Active l’outil « transport » : « quand passe mon bus ? ». Dites d’abord « enregistre l’arrêt Mairie de Montreuil comme maison ».</span>
               </div>
+
+              <SatellitePanel cfg={cfg} />
+
+              <h4>Hermes — agent personnel (Nous Research)</h4>
+              <p className="settings-hint">
+                Hermes est installé à part (serveur d’API activé avec <code>API_SERVER_ENABLED=true</code> et un jeton <code>API_SERVER_KEY</code>, puis <code>hermes gateway</code>). Jarvis lui confie les demandes longues et en rapporte les réponses ; c’est Hermes qui choisit ses outils. Les accords se donnent directement dans Hermes. Adresse en https, ou http sur cette machine uniquement.
+              </p>
+              <label className="settings-field" style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <input type="checkbox" checked={cfg.hermesEnabled === true} onChange={(e) => update({ hermesEnabled: e.target.checked })} />
+                <span>Autoriser Jarvis à contacter Hermes</span>
+              </label>
+              <div className="settings-grid-fields">
+                <div className="settings-field">
+                  <label>Adresse de Hermes</label>
+                  <input type="text" value={cfg.hermesUrl || ''} onChange={(e) => update({ hermesUrl: e.target.value.trim() })} />
+                </div>
+                <div className="settings-field">
+                  <label>Jeton de connexion</label>
+                  <input type="password" value={cfg.hermesToken || ''} onChange={(e) => update({ hermesToken: e.target.value.trim() })} />
+                </div>
+              </div>
+              <div className="settings-field">
+                <label>À quoi sert cet agent ? (facultatif)</label>
+                <input type="text" placeholder="Mon agenda, mes recherches et l’organisation des voyages" value={cfg.hermesRole || ''} onChange={(e) => update({ hermesRole: e.target.value })} />
+              </div>
+
+              <h4>Ragator — recherche citée sur des vidéos YouTube</h4>
+              <div className="settings-grid-fields">
+                <div className="settings-field">
+                  <label>Adresse de Ragator</label>
+                  <input type="text" value={cfg.ragatorUrl || ''} onChange={(e) => update({ ragatorUrl: e.target.value.trim() })} />
+                </div>
+                <div className="settings-field">
+                  <label>Collection (vide : tout le corpus)</label>
+                  <input type="text" value={cfg.ragatorCollection || ''} onChange={(e) => update({ ragatorCollection: e.target.value.trim() })} />
+                </div>
+              </div>
+              <label className="settings-field" style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <input type="checkbox" checked={cfg.ragatorDetailed === true} onChange={(e) => update({ ragatorDetailed: e.target.checked })} />
+                <span>Réponses détaillées (plus longues et plus lentes ; les réponses courtes conviennent mieux à la voix)</span>
+              </label>
 
               <h4>Voix hors Gemini (locale ou ElevenLabs)</h4>
               <p className="settings-hint">

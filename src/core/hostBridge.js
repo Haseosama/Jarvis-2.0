@@ -623,7 +623,7 @@ export const hostBridge = {
       typeof urlOrPayload === 'string'
         ? { url: urlOrPayload, ...options }
         : { ...(urlOrPayload || {}) };
-    const { url, method = 'GET', headers = {}, body = null, bodyBase64 = null, responseType = 'text', timeoutMs = 12000 } = payload;
+    const { url, method = 'GET', headers = {}, body = null, bodyBase64 = null, responseType = 'text', timeoutMs = 12000, maxBytes, maxRedirects } = payload;
 
     try {
       if (hasElectron() && typeof window.jarvisHost.httpFetch === 'function') {
@@ -635,6 +635,8 @@ export const hostBridge = {
           bodyBase64,
           responseType,
           timeoutMs,
+          maxBytes,
+          maxRedirects,
         });
         const text = res?.text || '';
         return {
@@ -720,6 +722,22 @@ export const hostBridge = {
     } catch (e) {
       return { ok: false, text: `Le navigateur n'a pas pu le faire : ${e.message || e}` };
     }
+  },
+
+  // ── Satellites audio (electron/satellites.cjs) ──
+
+  async satellites(action, payload) {
+    if (!hasElectron() || typeof window.jarvisHost.satellites !== 'function') return { ok: false, error: 'Les satellites audio n’existent que dans l’application de bureau Jarvis 2.0.' };
+    try {
+      return await window.jarvisHost.satellites(action, payload);
+    } catch (e) {
+      return { ok: false, error: e.message || String(e) };
+    }
+  },
+
+  onSatelliteUtterance(cb) {
+    if (!hasElectron() || typeof window.jarvisHost.onSatelliteUtterance !== 'function') return () => {};
+    return window.jarvisHost.onSatelliteUtterance(cb);
   },
 
   // ── REA : rétro-ingénierie locale (electron/reaBridge.cjs) ──

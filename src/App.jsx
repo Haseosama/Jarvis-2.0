@@ -25,6 +25,8 @@ import { clampMiniAvatarPosition } from './ui/miniAvatarPosition.js';
 import { formatTraceValue } from './ui/executionTrace.js';
 import { confirmGate } from './core/safety.js';
 import ClipboardPanel from './ui/ClipboardPanel.jsx';
+import { SatelliteBridge } from './core/SatelliteBridge.js';
+import { pollTasks } from './integrations/hermes.js';
 import { alertText, checkTopics } from './core/topicWatch.js';
 import { dataStore } from './core/DataStore.js';
 import { AUDIO_SPECTRUM_BAND_COUNT } from './audio/AudioSpectrum.js';
@@ -339,6 +341,22 @@ export default function App() {
     const topicTimer = setTimeout(runTopicCheck, 8000);
     const topicInterval = setInterval(runTopicCheck, 3600 * 1000);
 
+    // Satellites audio : les phrases captées dans les autres pièces arrivent ici pour être comprises et traitées.
+    const satelliteBridge = new SatelliteBridge(engine);
+    satelliteBridge.attach();
+
+    // Hermes : suivi des demandes en cours toutes les 2,5 s ; une annonce par changement d'état (fin, accord attendu).
+    let hermesBusy = false;
+    const hermesTimer = setInterval(async () => {
+      const c = configStore.get();
+      const store = { get: () => dataStore.get().hermesTasks || [], set: (list) => dataStore.update({ hermesTasks: list }) };
+      if (hermesBusy || c.hermesEnabled !== true || !c.hermesToken || !store.get().some((t) => t.runId && !['completed', 'failed', 'interrupted', 'stopped', 'cancelled', 'unknown'].includes(t.status))) return;
+      hermesBusy = true;
+      try {
+        for (const line of await pollTasks({ url: c.hermesUrl, token: c.hermesToken }, store, (req) => hostBridge.httpFetch(req))) engine._deliverAssistantReply(line, false);
+      } catch { /* Hermes injoignable : on réessaiera */ } finally { hermesBusy = false; }
+    }, 2500);
+
     // Mot d'éveil local (« Hey Jarvis ») : actif seulement si l'utilisateur l'a activé dans les réglages.
     const syncWake = (c) => {
       if (c.wakeListenEnabled) engine.localVoice.startWake();
@@ -364,6 +382,8 @@ export default function App() {
       unsub();
       unsubPtt?.();
       unsubWake?.();
+      satelliteBridge.detach();
+      clearInterval(hermesTimer);
       clearTimeout(topicTimer);
       clearInterval(topicInterval);
       engine.localVoice.stopWake();

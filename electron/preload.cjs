@@ -24,6 +24,12 @@ contextBridge.exposeInMainWorld('jarvisHost', {
   googleAuthorize: (payload) => ipcRenderer.invoke('jarvis:google-authorize', payload),
   skillRun: (payload) => ipcRenderer.invoke('jarvis:skill-run', payload),
   browser: (payload) => ipcRenderer.invoke('jarvis:browser', payload),
+  satellites: (action, payload) => ipcRenderer.invoke('jarvis:satellites', { action, payload }),
+  onSatelliteUtterance: (cb) => {
+    const handler = (_e, req) => cb(req);
+    ipcRenderer.on('jarvis:satellite-utterance', handler);
+    return () => ipcRenderer.removeListener('jarvis:satellite-utterance', handler);
+  },
   reaStatus: () => ipcRenderer.invoke('jarvis:rea-status'),
   reaInstall: () => ipcRenderer.invoke('jarvis:rea-install'),
   reaRun: (payload) => ipcRenderer.invoke('jarvis:rea-run', payload),

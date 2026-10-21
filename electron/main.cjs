@@ -258,6 +258,49 @@ function getBrowserControl() {
 
 ipcMain.handle('jarvis:browser', (_e, payload) => getBrowserControl().run(payload || {}));
 
+// ── Satellites audio (electron/satellites.cjs) ───────────────────────────────────
+let satelliteServer = null;
+const satelliteWaiters = new Map();
+const getSatelliteServer = () => {
+  if (satelliteServer) return satelliteServer;
+  satelliteServer = require('./satellites.cjs').createSatelliteServer({
+    dataDir: app.getPath('userData'),
+    onUtterance: ({ satelliteId, name, pcm, conversation }) => new Promise((resolve) => {
+      if (!mainWindow || mainWindow.isDestroyed()) { resolve({}); return; }
+      const requestId = `sat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const timer = setTimeout(() => { satelliteWaiters.delete(requestId); resolve({}); }, 90_000);
+      satelliteWaiters.set(requestId, (result) => { clearTimeout(timer); resolve({ ...result, reply: result.reply ? Buffer.from(result.reply, 'base64') : undefined }); });
+      mainWindow.webContents.send('jarvis:satellite-utterance', { requestId, satelliteId, name, conversation, pcm: pcm.toString('base64') });
+    }),
+    onEvent: (event) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('jarvis:satellite-event', event); },
+  });
+  return satelliteServer;
+};
+ipcMain.handle('jarvis:satellites', async (_e, { action, payload = {} } = {}) => {
+  const srv = getSatelliteServer();
+  try {
+    switch (action) {
+      case 'status': return { ok: true, ...srv.info() };
+      case 'enable': {
+        srv.setSettings({ enabled: payload.enabled === true });
+        if (payload.enabled === true) await srv.start(); else await srv.stop();
+        return { ok: true, ...srv.info() };
+      }
+      case 'create': return { ok: true, ...srv.create(payload.name) };
+      case 'pair': srv.pair(String(payload.device), payload.name); return { ok: true };
+      case 'identify': return { ok: srv.identify(String(payload.device)) };
+      case 'update': srv.updateSatellite(String(payload.id), payload.patch || {}); return { ok: true };
+      case 'remove': srv.remove(String(payload.id)); return { ok: true };
+      case 'settings': srv.setSettings(payload); return { ok: true };
+      case 'wake': srv.setWakeAvailable(payload.available === true); return { ok: true };
+      case 'result': satelliteWaiters.get(payload.requestId)?.(payload.result || {}); satelliteWaiters.delete(payload.requestId); return { ok: true };
+      default: return { ok: false, error: 'Action inconnue.' };
+    }
+  } catch (e) {
+    return { ok: false, error: e.message || String(e) };
+  }
+});
+
 // ── REA : rétro-ingénierie locale (electron/reaBridge.cjs) ──────────────────────
 let reaBridge = null;
 const getReaBridge = () => {
@@ -436,6 +479,7 @@ ipcMain.on('jarvis:remote-say', (_e, msg) => {
 app.whenReady().then(() => {
   createWindow();
   if (readStore().remoteEnabled) setRemoteEnabled(true).catch(() => {});
+  try { const sat = getSatelliteServer(); if (sat.info().settings.enabled) sat.start().catch(() => {}); } catch { /* satellites indisponibles */ }
 
   // Register global Push-to-Talk shortcut (Ctrl+Space)
   try {
@@ -458,6 +502,7 @@ app.on('will-quit', () => {
   if (imageInstaller) imageInstaller.stop();
   try {
     remoteServer?.stop();
+    satelliteServer?.stop();
   } catch {}
   try {
     browserControl?.close();
@@ -1316,7 +1361,7 @@ ipcMain.handle('jarvis:save-document', async (_e, { fileName, base64, openAfter 
 });
 
 // CORS-free HTTP fetch from Electron main process
-ipcMain.handle('jarvis:http-fetch', async (_e, { url, method = 'GET', headers = {}, body = null, bodyBase64 = null, responseType = 'text', timeoutMs = 15000 }) => {
+ipcMain.handle('jarvis:http-fetch', async (_e, { url, method = 'GET', headers = {}, body = null, bodyBase64 = null, responseType = 'text', timeoutMs = 15000, maxBytes, maxRedirects }) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -1327,6 +1372,8 @@ ipcMain.handle('jarvis:http-fetch', async (_e, { url, method = 'GET', headers = 
       headers: { 'User-Agent': 'Jarvis-PC/2.0', ...headers },
       body: method !== 'GET' && method !== 'HEAD' ? (bodyBase64 ? Buffer.from(String(bodyBase64), 'base64') : body) : undefined,
       signal: controller.signal,
+      ...(Number.isFinite(maxBytes) ? { maxBytes: Math.min(maxBytes, 32 * 1024 * 1024) } : {}),
+      ...(Number.isInteger(maxRedirects) ? { maxRedirects: Math.max(0, Math.min(3, maxRedirects)) } : {}),
     });
     if (got.error) return { ok: false, status: got.res?.status || 0, error: got.error, text: '' };
     const res = got.res;

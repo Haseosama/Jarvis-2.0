@@ -191,6 +191,13 @@ const DEFAULT_CONFIG = {
   ttsLocalVoice: 'alloy',
   elevenVoiceId: '',
   elevenModel: 'eleven_multilingual_v2',
+  hermesEnabled: false, // autorise Jarvis à confier des demandes à Hermes
+  hermesUrl: 'http://127.0.0.1:8642',
+  hermesToken: '', // jeton Hermes : stockage chiffré uniquement
+  hermesRole: '', // à quoi sert cet agent
+  ragatorUrl: 'http://127.0.0.1:3210',
+  ragatorCollection: '',
+  ragatorDetailed: false,
   primKey: '', // jeton PRIM (Île-de-France Mobilités) pour l'outil transport : stockage chiffré uniquement
   speechKey: '', // clé ElevenLabs / serveur vocal : stockage chiffré uniquement
   imageAdult: false, // images créées sur ce PC : contenu adulte (18+) autorisé ; jamais de mineur
@@ -198,7 +205,7 @@ const DEFAULT_CONFIG = {
 
 /** Copie de la configuration sans secrets : c'est elle qui est écrite en clair (localStorage, jarvis-store.json). */
 export function scrubSecrets(state) {
-  return { ...state, apiKeys: (state.apiKeys || []).map(() => ''), haToken: '', speechKey: '', primKey: '' };
+  return { ...state, apiKeys: (state.apiKeys || []).map(() => ''), haToken: '', speechKey: '', primKey: '', hermesToken: '' };
 }
 
 class ConfigStore {
@@ -265,6 +272,12 @@ class ConfigStore {
       } else if (this.state.haToken) {
         if (!(await hostBridge.setSecret('haToken', this.state.haToken))) this._secretsFailed = true;
       }
+      const hermesToken = await hostBridge.getSecret('hermesToken', '');
+      if (hermesToken) {
+        this.state.hermesToken = hermesToken;
+      } else if (this.state.hermesToken) {
+        if (!(await hostBridge.setSecret('hermesToken', this.state.hermesToken))) this._secretsFailed = true;
+      }
       const primKey = await hostBridge.getSecret('primKey', '');
       if (primKey) {
         this.state.primKey = primKey;
@@ -320,6 +333,7 @@ class ConfigStore {
     };
     if (patch.apiKeys) saveSecret('apiKeys', this.state.apiKeys);
     if (patch.haToken !== undefined) saveSecret('haToken', this.state.haToken);
+    if (patch.hermesToken !== undefined) saveSecret('hermesToken', this.state.hermesToken);
     if (patch.primKey !== undefined) saveSecret('primKey', this.state.primKey);
     if (patch.speechKey !== undefined) saveSecret('speechKey', this.state.speechKey);
     this._notify();

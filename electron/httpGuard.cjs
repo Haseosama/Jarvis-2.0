@@ -44,14 +44,14 @@ async function readCapped(res, maxBytes) {
   return { buffer: Buffer.concat(chunks.map((c) => Buffer.from(c))), truncated };
 }
 
-async function guardedFetch(url, { method = 'GET', headers = {}, body, signal, maxBytes = MAX_BYTES, fetchImpl = fetch } = {}) {
+async function guardedFetch(url, { method = 'GET', headers = {}, body, signal, maxBytes = MAX_BYTES, maxRedirects = MAX_REDIRECTS, fetchImpl = fetch } = {}) {
   let current = new URL(url);
   let hdrs = headers;
-  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+  for (let hop = 0; hop <= maxRedirects; hop++) {
     const res = await fetchImpl(current.toString(), { method, headers: hdrs, body: method === 'GET' || method === 'HEAD' ? undefined : body, signal, redirect: 'manual' });
     if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
       if (method !== 'GET' && method !== 'HEAD') return { res, buffer: Buffer.alloc(0), truncated: false, error: 'La source renvoie vers une autre adresse : utiliser son adresse finale.' };
-      if (hop === MAX_REDIRECTS) return { res, buffer: Buffer.alloc(0), truncated: false, error: 'Trop de redirections.' };
+      if (hop === maxRedirects) return { res, buffer: Buffer.alloc(0), truncated: false, error: 'Trop de redirections.' };
       const hopped = nextHop(current, res.headers.get('location'), hdrs);
       if (hopped.error) return { res, buffer: Buffer.alloc(0), truncated: false, error: hopped.error };
       current = hopped.url;

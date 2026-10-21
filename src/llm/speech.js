@@ -67,7 +67,7 @@ export async function transcribe({ baseUrl, apiKey = '', model, bytes, filename 
 }
 
 /** Texte → audio. engine = 'openai' (tout serveur compatible) | 'elevenlabs'. Retourne { ok, bytes, mime, error }. */
-export async function synthesize({ engine = 'openai', baseUrl, apiKey = '', model, voice, input, language = '' }, fetcher = defaultFetch) {
+export async function synthesize({ engine = 'openai', baseUrl, apiKey = '', model, voice, input, language = '', format = 'mp3' }, fetcher = defaultFetch) {
   try {
     const text = String(input || '').trim();
     if (!text) return { ok: false, error: 'Texte vide.' };
@@ -76,7 +76,7 @@ export async function synthesize({ engine = 'openai', baseUrl, apiKey = '', mode
       if (!apiKey) return { ok: false, error: 'Clé ElevenLabs manquante.' };
       if (!/^[A-Za-z0-9]{10,40}$/.test(String(voice || ''))) return { ok: false, error: 'Identifiant de voix ElevenLabs invalide.' };
       req = {
-        url: `https://api.elevenlabs.io/v1/text-to-speech/${voice}?output_format=mp3_44100_128`,
+        url: `https://api.elevenlabs.io/v1/text-to-speech/${voice}?output_format=${format === 'pcm' ? 'pcm_16000' : 'mp3_44100_128'}`,
         method: 'POST',
         headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
         body: JSON.stringify({ text, model_id: model || 'eleven_multilingual_v2', ...(language ? { language_code: language } : {}) }),
@@ -87,11 +87,13 @@ export async function synthesize({ engine = 'openai', baseUrl, apiKey = '', mode
         url: `${base}/audio/speech`,
         method: 'POST',
         headers: { ...authHeaders(apiKey), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: model || SPEECH_DEFAULTS.ttsModel, voice: voice || SPEECH_DEFAULTS.ttsVoice, input: text, response_format: 'mp3' }),
+        body: JSON.stringify({ model: model || SPEECH_DEFAULTS.ttsModel, voice: voice || SPEECH_DEFAULTS.ttsVoice, input: text, response_format: format === 'pcm' ? 'pcm' : 'mp3' }),
       };
     }
     const res = await fetcher({ ...req, responseType: 'base64', timeoutMs: 60000 });
     if (!res.ok || !res.base64) return { ok: false, error: `Synthèse vocale : HTTP ${res.status || 0} ${String(res.error || '').slice(0, 160)}` };
+    // PCM : ElevenLabs renvoie du 16 kHz, les serveurs compatibles OpenAI du 24 kHz (16 bits, mono).
+    if (format === 'pcm') return { ok: true, bytes: fromBase64(res.base64), mime: 'audio/pcm', rate: engine === 'elevenlabs' ? 16000 : 24000 };
     return { ok: true, bytes: fromBase64(res.base64), mime: 'audio/mpeg' };
   } catch (err) {
     return { ok: false, error: String(err?.message || err) };
@@ -100,3 +102,39 @@ export async function synthesize({ engine = 'openai', baseUrl, apiKey = '', mode
 
 /** Les modèles de raisonnement écrivent <think>…</think> : jamais lu à voix haute. */
 export { stripThink } from '../audio/voiceGuards.js';
+
+// ── Gemini (REST) : transcription et synthèse, pour les satellites audio sans serveur vocal local ─────────
+
+const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
+
+/** PCM 16 kHz (déjà enveloppé en WAV) → texte. */
+export async function geminiTranscribe({ apiKey, model = 'gemini-2.5-flash', wav, language = 'français' }, fetcher = defaultFetch) {
+  if (!apiKey) return { ok: false, text: '', error: 'Clé Gemini manquante.' };
+  const res = await fetcher({
+    url: `${GEMINI}/models/${model}:generateContent`, method: 'POST', timeoutMs: 30000,
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    body: JSON.stringify({ contents: [{ parts: [{ text: `Transcris exactement cet enregistrement (${language}). Réponds uniquement par la transcription, sans commentaire. S'il n'y a pas de parole, réponds par un texte vide.` }, { inline_data: { mime_type: 'audio/wav', data: toBase64(wav) } }] }] }),
+  });
+  if (!res.ok) return { ok: false, text: '', error: `Transcription Gemini : HTTP ${res.status || 0}` };
+  const json = res.json || (() => { try { return JSON.parse(res.text); } catch { return null; } })();
+  const text = String(json?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '').trim();
+  return { ok: true, text };
+}
+
+/** Texte → PCM 24 kHz 16 bits mono. */
+export async function geminiSpeak({ apiKey, model = 'gemini-2.5-flash-preview-tts', voice = 'Aoede', input }, fetcher = defaultFetch) {
+  if (!apiKey) return { ok: false, error: 'Clé Gemini manquante.' };
+  const text = String(input || '').trim();
+  if (!text) return { ok: false, error: 'Texte vide.' };
+  const res = await fetcher({
+    url: `${GEMINI}/models/${String(model).replace(/^models\//, '')}:generateContent`, method: 'POST', timeoutMs: 60000,
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    body: JSON.stringify({ contents: [{ parts: [{ text }] }], generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } }),
+  });
+  if (!res.ok) return { ok: false, error: `Synthèse Gemini : HTTP ${res.status || 0}` };
+  const json = res.json || (() => { try { return JSON.parse(res.text); } catch { return null; } })();
+  const data = json?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData || p.inline_data);
+  const b64 = data?.inlineData?.data || data?.inline_data?.data;
+  if (!b64) return { ok: false, error: 'Synthèse Gemini : aucun audio reçu.' };
+  return { ok: true, bytes: fromBase64(b64), rate: 24000 };
+}
